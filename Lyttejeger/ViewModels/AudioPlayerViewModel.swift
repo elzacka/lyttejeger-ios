@@ -1,0 +1,202 @@
+import Foundation
+import SwiftData
+
+@Observable
+@MainActor
+final class AudioPlayerViewModel {
+    private let audioService = AudioService.shared
+    private var modelContext: ModelContext?
+    private var saveTask: Task<Void, Never>?
+
+    // MARK: - State
+
+    var currentEpisode: Episode? { audioService.currentEpisode }
+    var podcastTitle: String? { audioService.currentPodcastTitle }
+    var podcastImage: String? { audioService.currentPodcastImage }
+    var isPlaying: Bool { audioService.isPlaying }
+    var currentTime: TimeInterval { audioService.currentTime }
+    var duration: TimeInterval { audioService.duration }
+    var isLoading: Bool { audioService.isLoading }
+    var hasError: Bool { audioService.hasError }
+    var playbackSpeed: Float { audioService.playbackSpeed }
+
+    var isExpanded = false
+
+    // Sleep timer
+    var sleepTimerMinutes: Int = 0
+    var sleepTimerEndTime: Date?
+    var sleepTimerRemaining: TimeInterval = 0
+
+    // Chapters
+    var chapters: [Chapter] = []
+    var currentChapter: Chapter?
+
+    // Transcript
+    var transcript: Transcript?
+
+    func setup(_ context: ModelContext) {
+        self.modelContext = context
+    }
+
+    // MARK: - Playback
+
+    func play(episode: Episode, podcastTitle: String?, podcastImage: String?) {
+        // Load saved position
+        var savedPosition: TimeInterval? = nil
+        if let modelContext {
+            let episodeId = episode.id
+            let descriptor = FetchDescriptor<PlaybackPosition>(predicate: #Predicate { $0.episodeId == episodeId })
+            if let saved = try? modelContext.fetch(descriptor).first, !saved.completed {
+                savedPosition = saved.position
+            }
+        }
+
+        audioService.play(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
+
+        // Seek to saved position after player is ready
+        if let savedPosition {
+            Task { @MainActor in
+                // Wait for player to be ready (check duration is valid)
+                for _ in 0..<20 { // Try for up to 2 seconds
+                    if audioService.duration > 0 {
+                        audioService.seekToPosition(savedPosition)
+                        break
+                    }
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+            }
+        }
+
+        startSaveTimer()
+
+        // Load chapters and transcript
+        Task { @MainActor in
+            if let chaptersUrl = episode.chaptersUrl {
+                chapters = await ChapterService.shared.fetchChapters(from: chaptersUrl)
+            } else {
+                chapters = []
+            }
+        }
+        Task { @MainActor in
+            if let transcriptUrl = episode.transcriptUrl {
+                transcript = await TranscriptService.shared.fetchTranscript(from: transcriptUrl)
+            } else {
+                transcript = nil
+            }
+        }
+    }
+
+    func togglePlayPause() {
+        audioService.togglePlayPause()
+    }
+
+    func skipBackward() {
+        audioService.skipBackward()
+    }
+
+    func skipForward() {
+        audioService.skipForward()
+    }
+
+    func seek(to time: TimeInterval) {
+        audioService.seek(to: time)
+    }
+
+    func cycleSpeed() {
+        let speeds = AppConstants.playbackSpeeds
+        let currentIndex = speeds.firstIndex(of: playbackSpeed) ?? 2
+        let nextIndex = (currentIndex + 1) % speeds.count
+        audioService.setSpeed(speeds[nextIndex])
+    }
+
+    func seekToChapter(_ chapter: Chapter) {
+        audioService.seek(to: chapter.startTime)
+    }
+
+    // MARK: - Chapter tracking
+
+    func updateCurrentChapter() {
+        guard !chapters.isEmpty else {
+            currentChapter = nil
+            return
+        }
+        currentChapter = ChapterService.getCurrentChapter(chapters, at: currentTime)
+    }
+
+    // MARK: - Sleep Timer
+
+    func setSleepTimer(_ minutes: Int) {
+        sleepTimerMinutes = minutes
+        if minutes > 0 {
+            sleepTimerEndTime = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        } else if minutes == -1 {
+            // End of episode - handled in timer check
+            sleepTimerEndTime = nil
+        } else {
+            sleepTimerEndTime = nil
+        }
+    }
+
+    func checkSleepTimer() {
+        guard sleepTimerMinutes != 0 else { return }
+
+        if sleepTimerMinutes == -1 {
+            // End of episode
+            if duration > 0 && currentTime >= duration - 1 {
+                audioService.togglePlayPause()
+                sleepTimerMinutes = 0
+            }
+        } else if let endTime = sleepTimerEndTime {
+            sleepTimerRemaining = endTime.timeIntervalSince(Date())
+            if sleepTimerRemaining <= 0 {
+                audioService.togglePlayPause()
+                sleepTimerMinutes = 0
+                sleepTimerEndTime = nil
+            }
+        }
+    }
+
+    // MARK: - Position Saving
+
+    private func startSaveTimer() {
+        saveTask?.cancel()
+        saveTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(AppConstants.playbackSaveInterval))
+                guard !Task.isCancelled else { break }
+                savePosition()
+                updateCurrentChapter()
+                checkSleepTimer()
+            }
+        }
+    }
+
+    func savePosition() {
+        guard let modelContext, let episode = currentEpisode else { return }
+        let time = currentTime
+        let dur = duration
+        guard dur > 0 else { return }
+
+        let completed = time / dur > 0.9
+        let episodeId = episode.id
+
+        let descriptor = FetchDescriptor<PlaybackPosition>(predicate: #Predicate { $0.episodeId == episodeId })
+
+        if let existing = try? modelContext.fetch(descriptor).first {
+            existing.position = time
+            existing.duration = dur
+            existing.updatedAt = Date()
+            existing.completed = completed
+        } else {
+            let pos = PlaybackPosition(
+                episodeId: episodeId,
+                position: time,
+                duration: dur,
+                completed: completed
+            )
+            modelContext.insert(pos)
+        }
+
+        try? modelContext.save()
+    }
+}
