@@ -128,10 +128,11 @@ struct PodcastDetailView: View {
                 } else {
                     LazyVStack(spacing: AppSpacing.sm) {
                         ForEach(episodes) { episode in
-                            EpisodeRow(
+                            EpisodeCard(
                                 episode: episode,
                                 podcastTitle: pod.title,
-                                podcastImage: nrkImageUrl ?? pod.imageUrl
+                                podcastImage: nrkImageUrl ?? pod.imageUrl,
+                                showArtwork: false
                             )
                         }
                     }

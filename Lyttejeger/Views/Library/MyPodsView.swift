@@ -29,20 +29,7 @@ struct MyPodsView: View {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: AppSpacing.md) {
                         ForEach(subscriptionVM.subscriptions, id: \.podcastId) { sub in
-                            NavigationLink(value: Podcast(
-                                id: sub.podcastId,
-                                title: sub.title,
-                                author: sub.author,
-                                description: "",
-                                imageUrl: sub.imageUrl,
-                                feedUrl: sub.feedUrl,
-                                categories: [],
-                                language: "",
-                                episodeCount: 0,
-                                lastUpdated: "",
-                                rating: 0,
-                                explicit: false
-                            )) {
+                            NavigationLink(value: Podcast(subscription: sub)) {
                                 CachedAsyncImage(url: sub.imageUrl, size: 100)
                             }
                             .buttonStyle(CardButtonStyle())

@@ -4,6 +4,9 @@ struct EpisodeCard: View {
     let episode: Episode
     let podcastTitle: String
     let podcastImage: String
+    var showArtwork: Bool = true
+    var onPlay: (() -> Void)? = nil
+    var useDefaultContextMenu: Bool = true
 
     @Environment(AudioPlayerViewModel.self) private var playerVM
     @Environment(PlaybackProgressViewModel.self) private var progressVM
@@ -14,7 +17,9 @@ struct EpisodeCard: View {
 
     private var metadataLine: String {
         var parts: [String] = []
-        parts.append(formatRelativeDate(episode.publishedAt))
+        if !episode.publishedAt.isEmpty {
+            parts.append(formatRelativeDate(episode.publishedAt))
+        }
         if episode.duration > 0 {
             parts.append(formatDuration(episode.duration))
         }
@@ -29,9 +34,29 @@ struct EpisodeCard: View {
     }
 
     var body: some View {
+        let card = cardContent
+            .padding(AppSpacing.md)
+            .background(isNowPlaying ? Color.appAccent.opacity(0.08) : Color.appCard)
+            .clipShape(.rect(cornerRadius: AppRadius.md))
+            .overlay(
+                RoundedRectangle(cornerRadius: AppRadius.md)
+                    .stroke(isNowPlaying ? Color.appAccent.opacity(0.4) : Color.appBorder, lineWidth: isNowPlaying ? 1.5 : 1)
+            )
+            .animation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.2), value: isNowPlaying)
+
+        if useDefaultContextMenu {
+            card.episodeContextMenu(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
+        } else {
+            card
+        }
+    }
+
+    private var cardContent: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             HStack(alignment: .top, spacing: AppSpacing.md) {
-                CachedAsyncImage(url: episode.imageUrl ?? podcastImage, size: AppSize.artworkSmall)
+                if showArtwork {
+                    CachedAsyncImage(url: episode.imageUrl ?? podcastImage, size: AppSize.artworkSmall)
+                }
 
                 VStack(alignment: .leading, spacing: AppSpacing.xs) {
                     if let season = episode.season, let ep = episode.episode {
@@ -45,17 +70,19 @@ struct EpisodeCard: View {
                         .foregroundStyle(isNowPlaying ? Color.appAccent : Color.appForeground)
                         .lineLimit(2)
 
-                    HStack(spacing: AppSpacing.sm) {
-                        if isNowPlaying {
-                            Image(systemName: "speaker.wave.2.fill")
-                                .font(.caption2)
-                                .foregroundStyle(Color.appAccent)
-                        }
+                    if !metadataLine.isEmpty {
+                        HStack(spacing: AppSpacing.sm) {
+                            if isNowPlaying {
+                                Image(systemName: "speaker.wave.2.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.appAccent)
+                            }
 
-                        Text(metadataLine)
-                            .font(.caption2Text)
-                            .foregroundStyle(Color.appMutedForeground)
-                            .lineLimit(1)
+                            Text(metadataLine)
+                                .font(.caption2Text)
+                                .foregroundStyle(Color.appMutedForeground)
+                                .lineLimit(1)
+                        }
                     }
 
                     // Badges
@@ -93,7 +120,11 @@ struct EpisodeCard: View {
 
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    playerVM.play(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
+                    if let onPlay {
+                        onPlay()
+                    } else {
+                        playerVM.play(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
+                    }
                 } label: {
                     Image(systemName: isNowPlaying && playerVM.isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 24))
@@ -120,15 +151,6 @@ struct EpisodeCard: View {
                 ExpandableText(text: episode.description)
             }
         }
-        .padding(AppSpacing.md)
-        .background(isNowPlaying ? Color.appAccent.opacity(0.08) : Color.appCard)
-        .clipShape(.rect(cornerRadius: AppRadius.md))
-        .overlay(
-            RoundedRectangle(cornerRadius: AppRadius.md)
-                .stroke(isNowPlaying ? Color.appAccent.opacity(0.4) : Color.appBorder, lineWidth: isNowPlaying ? 1.5 : 1)
-        )
-        .animation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.2), value: isNowPlaying)
-        .episodeContextMenu(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
     }
 }
 
@@ -139,6 +161,18 @@ struct EpisodeCard: View {
             episode: .preview,
             podcastTitle: "Aftenpodden",
             podcastImage: ""
+        )
+        .padding()
+    }
+}
+
+#Preview("Uten bilde") {
+    PreviewWrapper {
+        EpisodeCard(
+            episode: .preview,
+            podcastTitle: "Aftenpodden",
+            podcastImage: "",
+            showArtwork: false
         )
         .padding()
     }

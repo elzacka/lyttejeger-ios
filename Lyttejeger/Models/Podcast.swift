@@ -30,6 +30,25 @@ struct Podcast: Identifiable, Hashable, Sendable {
     }
 }
 
+extension Podcast {
+    init(subscription: Subscription) {
+        self.init(
+            id: subscription.podcastId,
+            title: subscription.title,
+            author: subscription.author,
+            description: "",
+            imageUrl: subscription.imageUrl,
+            feedUrl: subscription.feedUrl,
+            categories: [],
+            language: "",
+            episodeCount: 0,
+            lastUpdated: "",
+            rating: 0,
+            explicit: false
+        )
+    }
+}
+
 // MARK: - Episode
 
 struct Episode: Identifiable, Hashable, Sendable {

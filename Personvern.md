@@ -4,7 +4,7 @@
 
 ## Kort oppsummert
 
-Lyttejeger samler ikke inn personopplysninger. All data lagres lokalt på din enhet og forlater aldri telefonen din.
+Lyttejeger samler ikke inn personopplysninger. All data lagres lokalt på din iPhone og forlater aldri telefonen din.
 
 ## Hva appen lagrer
 
@@ -24,7 +24,7 @@ Når du søker etter podkaster, sendes søketeksten til Podcast Index sine serve
 
 ### NRK-podkaster
 
-Lyttejeger henter NRK-podkastkatalogen fra et offentlig GitHub-repositorium. Ingen brukerdata sendes i disse forespørslene.
+Lyttejeger henter NRK-podkastkatalogen fra et offentlig GitHub-repo. Ingen brukerdata sendes i disse forespørslene.
 
 ## Hva appen ikke gjør
 
@@ -38,13 +38,13 @@ Lyttejeger henter NRK-podkastkatalogen fra et offentlig GitHub-repositorium. Ing
 
 ## Dine rettigheter
 
-Ettersom Lyttejeger ikke samler inn personopplysninger sentralt, er det ingen data hos oss å be om innsyn i, rette eller slette.
+Ettersom Lyttejeger ikke samler inn personopplysninger sentralt, er det ingen data å be om innsyn i, rette eller slette.
 
-Du kan når som helst slette all lokalt lagret data via innstillingene i appen (Mine podder > Personvern), eller ved å slette appen fra enheten.
+Du kan når som helst slette all lokalt lagret data via innstillingene i appen (Meny > Personvern), eller ved å slette appen fra enheten.
 
 ## Eksport av data
 
-Du kan eksportere all lokalt lagret data som en JSON-fil via innstillingene i appen. Denne filen inneholder abonnementer, spillekø og avspillingsposisjoner.
+Du kan eksportere all lokalt lagret data som en JSON-fil i appen (Meny > Personvern). Denne filen inneholder abonnementer, spillekø og avspillingsposisjoner.
 
 ## Sikkerhet
 
@@ -55,7 +55,7 @@ Du kan eksportere all lokalt lagret data som en JSON-fil via innstillingene i ap
 
 ## Kontakt
 
-Har du spørsmål om personvern, kan du opprette en sak på [GitHub](https://github.com/elzacka/lyttejeger-ios/issues).
+Har du spørsmål om personvern, kan du opprette en sak på [GitHub](https://github.com/elzacka/lyttejeger-ios/issues) eller kontakte meg på hei@tazk.no
 
 ## Åpen kildekode
 

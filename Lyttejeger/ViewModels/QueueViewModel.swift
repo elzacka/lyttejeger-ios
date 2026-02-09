@@ -52,6 +52,13 @@ final class QueueViewModel {
     func playNext(episode: Episode, podcastTitle: String, podcastImage: String?) {
         guard let modelContext else { return }
 
+        // Remove existing instance if already in queue
+        let episodeId = episode.id
+        let existingDescriptor = FetchDescriptor<QueueItem>(predicate: #Predicate { $0.episodeId == episodeId })
+        if let existing = try? modelContext.fetch(existingDescriptor).first {
+            modelContext.delete(existing)
+        }
+
         // Shift all positions
         for item in items {
             item.position += 1

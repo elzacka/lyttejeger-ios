@@ -11,10 +11,9 @@ final class PlaybackProgressViewModel {
         cleanupOldPositions()
     }
 
-    /// Remove completed playback positions older than 90 days
     private func cleanupOldPositions() {
         guard let modelContext else { return }
-        let cutoff = Date().addingTimeInterval(-90 * 24 * 3600)
+        let cutoff = Date().addingTimeInterval(TimeInterval(-AppConstants.completedPositionRetentionDays * 24 * 3600))
         let descriptor = FetchDescriptor<PlaybackPosition>(
             predicate: #Predicate { $0.completed == true && $0.updatedAt < cutoff }
         )

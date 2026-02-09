@@ -1,6 +1,6 @@
 # Security Policy
 
-## Reporting a Vulnerability
+## Reporting a vulnerability
 
 If you discover a security vulnerability in Lyttejeger, please report it responsibly.
 
@@ -11,7 +11,7 @@ Please include:
 - Steps to reproduce
 - Potential impact
 
-We will acknowledge receipt within 48 hours and aim to provide a fix or mitigation plan within 7 days.
+I will acknowledge receipt within 48 hours and aim to provide a fix or mitigation plan within 7 days.
 
 ## Scope
 

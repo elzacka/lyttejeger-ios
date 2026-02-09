@@ -22,8 +22,7 @@ actor TranscriptService {
         do {
             let (data, response) = try await URLSession.shared.data(from: requestUrl)
 
-            // Reject excessively large transcripts (> 5 MB)
-            guard data.count <= 5 * 1024 * 1024 else { return nil }
+            guard data.count <= AppConstants.maxTranscriptSize else { return nil }
 
             let contentType = (response as? HTTPURLResponse)?
                 .value(forHTTPHeaderField: "Content-Type") ?? ""
@@ -187,18 +186,30 @@ actor TranscriptService {
             return nil
         }
 
-        func extractTime(hourGroup: Int, minGroup: Int, secGroup: Int, msGroup: Int) -> TimeInterval {
-            let hourStr = match.range(at: hourGroup).location != NSNotFound
-                ? String(line[Range(match.range(at: hourGroup), in: line)!]).replacingOccurrences(of: ":", with: "")
-                : "0"
-            let minStr = String(line[Range(match.range(at: minGroup), in: line)!])
-            let secStr = String(line[Range(match.range(at: secGroup), in: line)!])
-            let msStr = String(line[Range(match.range(at: msGroup), in: line)!])
-            return Double(hourStr)! * 3600 + Double(minStr)! * 60 + Double(secStr)! + Double(msStr)! / 1000
+        func extractTime(hourGroup: Int, minGroup: Int, secGroup: Int, msGroup: Int) -> TimeInterval? {
+            let hourStr: String
+            if match.range(at: hourGroup).location != NSNotFound,
+               let hourRange = Range(match.range(at: hourGroup), in: line) {
+                hourStr = String(line[hourRange]).replacingOccurrences(of: ":", with: "")
+            } else {
+                hourStr = "0"
+            }
+            guard let minRange = Range(match.range(at: minGroup), in: line),
+                  let secRange = Range(match.range(at: secGroup), in: line),
+                  let msRange = Range(match.range(at: msGroup), in: line),
+                  let hours = Double(hourStr),
+                  let mins = Double(String(line[minRange])),
+                  let secs = Double(String(line[secRange])),
+                  let ms = Double(String(line[msRange])) else {
+                return nil
+            }
+            return hours * 3600 + mins * 60 + secs + ms / 1000
         }
 
-        let start = extractTime(hourGroup: 1, minGroup: 2, secGroup: 3, msGroup: 4)
-        let end = extractTime(hourGroup: 5, minGroup: 6, secGroup: 7, msGroup: 8)
+        guard let start = extractTime(hourGroup: 1, minGroup: 2, secGroup: 3, msGroup: 4),
+              let end = extractTime(hourGroup: 5, minGroup: 6, secGroup: 7, msGroup: 8) else {
+            return nil
+        }
         return (start, end)
     }
 

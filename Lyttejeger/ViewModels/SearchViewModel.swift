@@ -103,7 +103,7 @@ final class SearchViewModel {
     }
 
     private func performSearch() async {
-        let query = String(filters.query.trimmingCharacters(in: .whitespaces).prefix(500))
+        let query = String(filters.query.trimmingCharacters(in: .whitespaces).prefix(AppConstants.maxSearchQueryLength))
 
         // Empty query with active filters -> browse
         if query.isEmpty {
@@ -117,7 +117,7 @@ final class SearchViewModel {
             return
         }
 
-        guard query.count >= 2 else { return }
+        guard query.count >= AppConstants.minSearchQueryLength else { return }
 
         if activeTab == .episodes {
             await searchEpisodes(query)
@@ -147,7 +147,7 @@ final class SearchViewModel {
             let hasCategory = !filters.categories.isEmpty
 
             var options = SearchOptions()
-            options.max = hasCategory ? 400 : 200
+            options.max = hasCategory ? AppConstants.searchResultsWithCategory : AppConstants.searchResultsDefault
             options.fulltext = true
             options.clean = filters.explicit == false
             options.lang = hasCategory ? nil : (getApiLanguageCodes(filters.languages) ?? AppConstants.allowedLanguagesAPI)
@@ -201,15 +201,8 @@ final class SearchViewModel {
                 }
             }
 
-            // Title boost
-            if FeatureFlags.titleBoost {
-                results = boostTitleMatches(results, query: apiQuery)
-            }
-
-            // Freshness signal
-            if FeatureFlags.freshnessSignal {
-                results = applyFreshnessSignal(results)
-            }
+            results = boostTitleMatches(results, query: apiQuery)
+            results = applyFreshnessSignal(results)
 
             // Apply local filters
             results = applyLocalFilters(results)
@@ -286,8 +279,7 @@ final class SearchViewModel {
 
         // Strategy 2: episodes from matching podcasts
         if !podcasts.isEmpty {
-            let limit = FeatureFlags.expandedEpisodeSearch ? 50 : 20
-            let topPodcasts = Array(podcasts.prefix(limit))
+            let topPodcasts = Array(podcasts.prefix(AppConstants.episodeSearchPodcastLimit))
             let feedIds = topPodcasts.compactMap { Int($0.id) }
             let podcastMap = Dictionary(uniqueKeysWithValues: topPodcasts.map { ($0.id, $0) })
 

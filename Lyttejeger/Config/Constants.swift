@@ -55,6 +55,23 @@ enum AppConstants {
         (-1, "Slutten"),
     ]
 
+    // MARK: - Search
+
+    /// Min characters before search triggers
+    static let minSearchQueryLength = 2
+
+    /// Max search query length
+    static let maxSearchQueryLength = 500
+
+    /// Default search result limit
+    static let searchResultsDefault = 200
+
+    /// Search result limit when category filter is active
+    static let searchResultsWithCategory = 400
+
+    /// Max podcasts to check for episode search
+    static let episodeSearchPodcastLimit = 50
+
     // MARK: - UI
 
     /// Episodes per page
@@ -62,6 +79,24 @@ enum AppConstants {
 
     /// Max description length before truncation
     static let maxDescriptionLength = 300
+
+    // MARK: - Image Cache
+
+    /// Max images in memory cache
+    static let imageCacheCountLimit = 100
+
+    /// Max memory for image cache (bytes)
+    static let imageCacheMemoryLimit = 30 * 1024 * 1024
+
+    // MARK: - Data Retention
+
+    /// Days to keep completed playback positions
+    static let completedPositionRetentionDays = 90
+
+    // MARK: - Transcript
+
+    /// Max transcript download size (bytes)
+    static let maxTranscriptSize = 5 * 1024 * 1024
 
     // MARK: - API
 

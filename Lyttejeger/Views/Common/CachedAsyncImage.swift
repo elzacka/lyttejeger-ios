@@ -11,8 +11,8 @@ struct CachedAsyncImage: View {
 
     private static let cache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 100
-        cache.totalCostLimit = 30 * 1024 * 1024 // 30 MB (downscaled images)
+        cache.countLimit = AppConstants.imageCacheCountLimit
+        cache.totalCostLimit = AppConstants.imageCacheMemoryLimit
         return cache
     }()
 
