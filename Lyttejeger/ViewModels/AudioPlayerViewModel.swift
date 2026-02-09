@@ -1,6 +1,43 @@
 import Foundation
 import SwiftData
 
+// MARK: - Last Played Info
+
+struct LastPlayedInfo: Codable, Sendable {
+    let episodeId: String
+    let podcastId: String
+    let title: String
+    let audioUrl: String
+    let duration: TimeInterval
+    let imageUrl: String?
+    let podcastTitle: String
+    let podcastImage: String
+
+    func toEpisode() -> Episode {
+        Episode(
+            id: episodeId,
+            podcastId: podcastId,
+            title: title,
+            description: "",
+            audioUrl: audioUrl,
+            duration: duration,
+            publishedAt: "",
+            imageUrl: imageUrl
+        )
+    }
+
+    static func load() -> LastPlayedInfo? {
+        guard let data = UserDefaults.standard.data(forKey: "lastPlayedInfo") else { return nil }
+        return try? JSONDecoder().decode(LastPlayedInfo.self, from: data)
+    }
+
+    func save() {
+        if let data = try? JSONEncoder().encode(self) {
+            UserDefaults.standard.set(data, forKey: "lastPlayedInfo")
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class AudioPlayerViewModel {
@@ -52,6 +89,18 @@ final class AudioPlayerViewModel {
         }
 
         audioService.play(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
+
+        // Save last-played info for Home screen
+        LastPlayedInfo(
+            episodeId: episode.id,
+            podcastId: episode.podcastId,
+            title: episode.title,
+            audioUrl: episode.audioUrl,
+            duration: episode.duration,
+            imageUrl: episode.imageUrl,
+            podcastTitle: podcastTitle ?? "",
+            podcastImage: podcastImage ?? ""
+        ).save()
 
         // Seek to saved position after player is ready
         if let savedPosition {

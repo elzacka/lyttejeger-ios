@@ -103,7 +103,7 @@ final class SearchViewModel {
     }
 
     private func performSearch() async {
-        let query = filters.query.trimmingCharacters(in: .whitespaces)
+        let query = String(filters.query.trimmingCharacters(in: .whitespaces).prefix(500))
 
         // Empty query with active filters -> browse
         if query.isEmpty {

@@ -46,6 +46,10 @@ struct AudioPlayerBar: View {
 
                     Spacer()
 
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.appBorder)
+
                     Button {
                         playerVM.togglePlayPause()
                     } label: {

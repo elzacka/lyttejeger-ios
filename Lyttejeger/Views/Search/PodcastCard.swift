@@ -31,6 +31,17 @@ struct PodcastCard: View {
                             .clipShape(.rect(cornerRadius: AppRadius.sm))
                     }
 
+                    if podcast.explicit {
+                        Text("E")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.appMutedForeground)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.appBorder.opacity(0.4))
+                            .clipShape(.rect(cornerRadius: 3))
+                            .accessibilityLabel("Eksplisitt innhold")
+                    }
+
                     if podcast.episodeCount > 0 {
                         Text("\(podcast.episodeCount) ep.")
                             .font(.caption2Text)

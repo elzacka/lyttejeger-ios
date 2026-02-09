@@ -41,6 +41,8 @@ targets:
       properties:
         UILaunchScreen:
           UIColorName: LaunchBackground
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsForMedia: true
         UIBackgroundModes: [audio]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIAppFonts:

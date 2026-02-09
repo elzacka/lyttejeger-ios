@@ -12,23 +12,39 @@ struct EpisodeCard: View {
         playerVM.currentEpisode?.id == episode.id
     }
 
+    private var metadataLine: String {
+        var parts: [String] = []
+        parts.append(formatRelativeDate(episode.publishedAt))
+        if episode.duration > 0 {
+            parts.append(formatDuration(episode.duration))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var hasBadges: Bool {
+        progressVM.isCompleted(episode.id)
+            || (progressVM.progressFraction(for: episode.id) ?? 0) > 0.01
+            || episode.chaptersUrl != nil
+            || episode.transcriptUrl != nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             HStack(alignment: .top, spacing: AppSpacing.md) {
                 CachedAsyncImage(url: episode.imageUrl ?? podcastImage, size: AppSize.artworkSmall)
 
                 VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                    if let season = episode.season, let ep = episode.episode {
+                        Text("S\(season) E\(ep)")
+                            .font(.caption2Text)
+                            .foregroundStyle(Color.appAccent)
+                    }
+
                     Text(episode.title)
                         .font(.cardTitle)
                         .foregroundStyle(isNowPlaying ? Color.appAccent : Color.appForeground)
                         .lineLimit(2)
 
-                    Text(podcastTitle)
-                        .font(.smallText)
-                        .foregroundStyle(Color.appMutedForeground)
-                        .lineLimit(1)
-
-                    // Row 1: core info
                     HStack(spacing: AppSpacing.sm) {
                         if isNowPlaying {
                             Image(systemName: "speaker.wave.2.fill")
@@ -36,37 +52,20 @@ struct EpisodeCard: View {
                                 .foregroundStyle(Color.appAccent)
                         }
 
-                        if let season = episode.season, let ep = episode.episode {
-                            Text("S\(season) E\(ep)")
-                                .font(.caption2Text)
-                                .foregroundStyle(Color.appAccent)
-                        }
-
-                        Text(formatRelativeDate(episode.publishedAt))
+                        Text(metadataLine)
                             .font(.caption2Text)
                             .foregroundStyle(Color.appMutedForeground)
-
-                        if episode.duration > 0 {
-                            Text(formatDuration(episode.duration))
-                                .font(.caption2Text)
-                                .foregroundStyle(Color.appMutedForeground)
-                        }
+                            .lineLimit(1)
                     }
 
-                    // Row 2: badges (progress, chapters, transcript)
-                    if progressVM.isCompleted(episode.id)
-                        || (progressVM.progressFraction(for: episode.id) ?? 0) > 0.01
-                        || episode.chaptersUrl != nil
-                        || episode.transcriptUrl != nil {
+                    // Badges
+                    if hasBadges {
                         HStack(spacing: AppSpacing.sm) {
                             if progressVM.isCompleted(episode.id) {
-                                HStack(spacing: 2) {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 10))
-                                    Text("Hørt")
-                                        .font(.caption2Text)
-                                }
-                                .foregroundStyle(Color.appSuccess)
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color.appSuccess)
+                                    .accessibilityLabel("Hørt")
                             } else if let fraction = progressVM.progressFraction(for: episode.id), fraction > 0.01 {
                                 Text("\(Int(fraction * 100))%")
                                     .font(.caption2Text)
@@ -74,23 +73,17 @@ struct EpisodeCard: View {
                             }
 
                             if episode.chaptersUrl != nil {
-                                HStack(spacing: 2) {
-                                    Image(systemName: "list.number")
-                                        .font(.caption2)
-                                    Text("Kapitler")
-                                        .font(.caption2Text)
-                                }
-                                .foregroundStyle(Color.appAccent)
+                                Image(systemName: "list.number")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.appAccent)
+                                    .accessibilityLabel("Kapitler")
                             }
 
                             if episode.transcriptUrl != nil {
-                                HStack(spacing: 2) {
-                                    Image(systemName: "text.quote")
-                                        .font(.caption2)
-                                    Text("Tekst")
-                                        .font(.caption2Text)
-                                }
-                                .foregroundStyle(Color.appAccent)
+                                Image(systemName: "text.quote")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.appAccent)
+                                    .accessibilityLabel("Tekst")
                             }
                         }
                     }
@@ -102,8 +95,8 @@ struct EpisodeCard: View {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     playerVM.play(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
                 } label: {
-                    Image(systemName: isNowPlaying && playerVM.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 32))
+                    Image(systemName: isNowPlaying && playerVM.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 24))
                         .foregroundStyle(Color.appAccent)
                 }
                 .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
@@ -121,6 +114,11 @@ struct EpisodeCard: View {
                 .background(Color.appBorder)
                 .clipShape(.rect(cornerRadius: 1.5))
             }
+
+            // Description — collapsed by default
+            if !episode.description.isEmpty {
+                ExpandableText(text: episode.description)
+            }
         }
         .padding(AppSpacing.md)
         .background(isNowPlaying ? Color.appAccent.opacity(0.08) : Color.appCard)
@@ -129,6 +127,7 @@ struct EpisodeCard: View {
             RoundedRectangle(cornerRadius: AppRadius.md)
                 .stroke(isNowPlaying ? Color.appAccent.opacity(0.4) : Color.appBorder, lineWidth: isNowPlaying ? 1.5 : 1)
         )
+        .animation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.2), value: isNowPlaying)
         .episodeContextMenu(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
     }
 }

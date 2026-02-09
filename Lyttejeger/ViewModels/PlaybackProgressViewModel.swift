@@ -8,6 +8,22 @@ final class PlaybackProgressViewModel {
 
     func setup(_ context: ModelContext) {
         self.modelContext = context
+        cleanupOldPositions()
+    }
+
+    /// Remove completed playback positions older than 90 days
+    private func cleanupOldPositions() {
+        guard let modelContext else { return }
+        let cutoff = Date().addingTimeInterval(-90 * 24 * 3600)
+        let descriptor = FetchDescriptor<PlaybackPosition>(
+            predicate: #Predicate { $0.completed == true && $0.updatedAt < cutoff }
+        )
+        if let old = try? modelContext.fetch(descriptor), !old.isEmpty {
+            for pos in old {
+                modelContext.delete(pos)
+            }
+            try? modelContext.save()
+        }
     }
 
     func getProgress(for episodeId: String) -> PlaybackPosition? {

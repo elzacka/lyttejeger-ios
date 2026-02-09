@@ -8,6 +8,28 @@ struct FilterPanel: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.xl) {
+                    // Active filters summary
+                    if searchVM.activeFilterCount > 0 {
+                        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                            Text("Aktive filter")
+                                .font(.caption2Text)
+                                .foregroundStyle(Color.appMutedForeground)
+                                .textCase(.uppercase)
+
+                            FlowLayout(spacing: AppSpacing.sm) {
+                                ForEach(searchVM.filters.languages.sorted(), id: \.self) { lang in
+                                    activeChip(lang) { searchVM.toggleLanguage(lang) }
+                                }
+                                ForEach(searchVM.filters.categories.sorted(), id: \.self) { cat in
+                                    activeChip(translateCategory(cat)) { searchVM.toggleCategory(cat) }
+                                }
+                                if searchVM.filters.sortBy != .relevance {
+                                    activeChip(searchVM.filters.sortBy.label) { searchVM.setSortBy(.relevance) }
+                                }
+                            }
+                        }
+                    }
+
                     // Languages
                     VStack(alignment: .leading, spacing: AppSpacing.sm) {
                         Text("Språk")
@@ -84,6 +106,22 @@ struct FilterPanel: View {
                     .foregroundStyle(Color.appAccent)
                 }
             }
+        }
+    }
+
+    private func activeChip(_ label: String, remove: @escaping () -> Void) -> some View {
+        Button(action: remove) {
+            HStack(spacing: AppSpacing.xs) {
+                Text(label)
+                    .font(.badgeText)
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, AppSpacing.sm)
+            .background(Color.appAccent)
+            .clipShape(.rect(cornerRadius: AppRadius.full))
         }
     }
 }

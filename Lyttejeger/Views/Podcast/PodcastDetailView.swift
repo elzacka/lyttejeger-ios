@@ -6,31 +6,51 @@ struct PodcastDetailView: View {
     @Environment(SubscriptionViewModel.self) private var subscriptionVM
     @Environment(AudioPlayerViewModel.self) private var playerVM
     @Environment(QueueViewModel.self) private var queueVM
+    @State private var podcastInfo: Podcast?
     @State private var episodes: [Episode] = []
     @State private var isLoading = true
     @State private var error: String?
-    @State private var isDescriptionExpanded = false
     @State private var nrkImageUrl: String?
     @State private var nrkDescription: String?
+    @State private var toastMessage: String?
+
+    /// Enriched podcast data (fetched from API when initial data is incomplete)
+    private var pod: Podcast { podcastInfo ?? podcast }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AppSpacing.lg) {
                 // Header
-                HStack(alignment: .top, spacing: AppSpacing.lg) {
-                    CachedAsyncImage(url: nrkImageUrl ?? podcast.imageUrl, size: AppSize.artworkMedium)
+                VStack(alignment: .leading, spacing: AppSpacing.md) {
+                    HStack(alignment: .top, spacing: AppSpacing.lg) {
+                        CachedAsyncImage(url: nrkImageUrl ?? pod.imageUrl, size: AppSize.artworkMedium)
 
-                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                        Text(podcast.title)
-                            .font(.sectionTitle)
-                            .foregroundStyle(Color.appForeground)
+                        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                            Text(pod.title)
+                                .font(.sectionTitle)
+                                .foregroundStyle(Color.appForeground)
 
-                        Text(podcast.author)
-                            .font(.bodyText)
-                            .foregroundStyle(Color.appMutedForeground)
+                            Text(pod.author)
+                                .font(.bodyText)
+                                .foregroundStyle(Color.appMutedForeground)
+                        }
+                    }
 
+                    // Categories & explicit
+                    if !pod.categories.isEmpty || pod.explicit {
                         HStack(spacing: AppSpacing.xs) {
-                            ForEach(podcast.categories.prefix(3), id: \.self) { category in
+                            if pod.explicit {
+                                Text("E")
+                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(Color.appMutedForeground)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
+                                    .background(Color.appBorder.opacity(0.4))
+                                    .clipShape(.rect(cornerRadius: 3))
+                                    .accessibilityLabel("Eksplisitt innhold")
+                            }
+
+                            ForEach(pod.categories.prefix(3), id: \.self) { category in
                                 Text(translateCategory(category))
                                     .font(.caption2Text)
                                     .foregroundStyle(Color.appAccent)
@@ -38,71 +58,62 @@ struct PodcastDetailView: View {
                                     .padding(.vertical, 2)
                                     .background(Color.appAccent.opacity(0.1))
                                     .clipShape(.rect(cornerRadius: AppRadius.sm))
+                                    .lineLimit(1)
                             }
                         }
-
-                        // Subscribe button
-                        Button {
-                            UINotificationFeedbackGenerator().notificationOccurred(
-                                subscriptionVM.isSubscribed(podcast.id) ? .warning : .success
-                            )
-                            subscriptionVM.toggleSubscription(podcast: podcast)
-                        } label: {
-                            Text(subscriptionVM.isSubscribed(podcast.id) ? "Slutt å følge" : "Følg")
-                                .font(.buttonText)
-                                .foregroundStyle(subscriptionVM.isSubscribed(podcast.id) ? Color.appMutedForeground : .white)
-                                .padding(.horizontal, AppSpacing.lg)
-                                .padding(.vertical, AppSpacing.sm)
-                                .background(subscriptionVM.isSubscribed(podcast.id) ? Color.appMuted : Color.appAccent)
-                                .clipShape(.rect(cornerRadius: AppRadius.md))
-                        }
-                        .frame(minHeight: AppSize.touchTarget)
                     }
+
+                    // Subscribe button
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        let wasSubscribed = subscriptionVM.isSubscribed(podcast.id)
+                        subscriptionVM.toggleSubscription(podcast: podcast)
+                        toastMessage = wasSubscribed ? "Fjernet fra Mine podder" : "Lagt til Mine podder"
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            withAnimation { toastMessage = nil }
+                        }
+                    } label: {
+                        Text(subscriptionVM.isSubscribed(podcast.id) ? "Slutt å følge" : "Følg")
+                            .font(.buttonText)
+                            .foregroundStyle(subscriptionVM.isSubscribed(podcast.id) ? Color.appMutedForeground : .white)
+                            .padding(.horizontal, AppSpacing.lg)
+                            .padding(.vertical, AppSpacing.sm)
+                            .background(subscriptionVM.isSubscribed(podcast.id) ? Color.appMuted : Color.appAccent)
+                            .clipShape(.rect(cornerRadius: AppRadius.md))
+                    }
+                    .frame(minHeight: AppSize.touchTarget)
                 }
                 .padding(.horizontal, AppSpacing.lg)
 
                 // Description
-                if let desc = nrkDescription ?? (podcast.description.isEmpty ? nil : podcast.description) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(desc)
-                            .font(.bodyText)
-                            .foregroundStyle(Color.appForeground)
-                            .lineLimit(isDescriptionExpanded ? nil : 4)
-
-                        Text(isDescriptionExpanded ? "Vis mindre" : "Vis mer")
-                            .font(.caption2Text)
-                            .foregroundStyle(Color.appAccent)
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if UIAccessibility.isReduceMotionEnabled {
-                            isDescriptionExpanded.toggle()
-                        } else {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                isDescriptionExpanded.toggle()
-                            }
-                        }
-                    }
-                    .accessibilityHint(isDescriptionExpanded ? "Trykk for å skjule beskrivelse" : "Trykk for å vise hele beskrivelsen")
-                    .padding(.horizontal, AppSpacing.lg)
+                if let desc = nrkDescription ?? (pod.description.isEmpty ? nil : pod.description) {
+                    ExpandableText(text: desc, textFont: .bodyText, textColor: .appForeground)
+                        .padding(.horizontal, AppSpacing.lg)
                 }
 
                 Divider().background(Color.appBorder)
 
                 // Episodes
                 if isLoading {
-                    HStack {
-                        Spacer()
-                        ProgressView("Laster episoder...")
-                            .font(.bodyText)
-                        Spacer()
+                    // Skeleton placeholders
+                    LazyVStack(spacing: AppSpacing.sm) {
+                        ForEach(0..<4, id: \.self) { _ in
+                            SkeletonEpisodeRow()
+                        }
                     }
-                    .padding(.top, AppSpacing.xl)
+                    .padding(.horizontal, AppSpacing.lg)
                 } else if let error {
-                    VStack(spacing: AppSpacing.sm) {
+                    VStack(spacing: AppSpacing.md) {
+                        Image(systemName: "wifi.exclamationmark")
+                            .font(.system(size: 24))
+                            .foregroundStyle(Color.appBorder)
+
                         Text(error)
                             .font(.bodyText)
                             .foregroundStyle(Color.appError)
+                            .multilineTextAlignment(.center)
+
                         Button("Prøv igjen") {
                             self.error = nil
                             isLoading = true
@@ -110,15 +121,17 @@ struct PodcastDetailView: View {
                         }
                         .font(.buttonText)
                         .foregroundStyle(Color.appAccent)
+                        .frame(minHeight: AppSize.touchTarget)
                     }
-                    .padding(.horizontal, AppSpacing.lg)
+                    .frame(maxWidth: .infinity)
+                    .padding(AppSpacing.xl)
                 } else {
                     LazyVStack(spacing: AppSpacing.sm) {
                         ForEach(episodes) { episode in
                             EpisodeRow(
                                 episode: episode,
-                                podcastTitle: podcast.title,
-                                podcastImage: nrkImageUrl ?? podcast.imageUrl
+                                podcastTitle: pod.title,
+                                podcastImage: nrkImageUrl ?? pod.imageUrl
                             )
                         }
                     }
@@ -128,6 +141,19 @@ struct PodcastDetailView: View {
             .padding(.bottom, 100)
         }
         .background(Color.appBackground)
+        .overlay(alignment: .bottom) {
+            if let message = toastMessage {
+                Text(message)
+                    .font(.smallText)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, AppSpacing.lg)
+                    .padding(.vertical, AppSpacing.sm)
+                    .background(Color.appAccent)
+                    .clipShape(.rect(cornerRadius: AppRadius.md))
+                    .padding(.bottom, AppSpacing.xxxl)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .task {
             #if DEBUG
@@ -137,7 +163,20 @@ struct PodcastDetailView: View {
                 return
             }
             #endif
-            await loadEpisodes()
+            async let episodesTask: () = loadEpisodes()
+            async let enrichTask: () = enrichPodcastIfNeeded()
+            _ = await (episodesTask, enrichTask)
+        }
+    }
+
+    /// Fetches full podcast data from API when initial data is incomplete
+    /// (e.g. navigating from MyPodsView where Subscription only stores basic fields)
+    private func enrichPodcastIfNeeded() async {
+        guard podcast.description.isEmpty, !podcast.isNRKFeed,
+              let feedId = Int(podcast.id) else { return }
+        if let response = try? await PodcastIndexAPI.shared.podcastByFeedId(feedId),
+           let feed = response.feed {
+            podcastInfo = PodcastTransform.transformFeed(feed)
         }
     }
 
@@ -170,8 +209,11 @@ struct PodcastDetailView: View {
             let response = try await PodcastIndexAPI.shared.episodesByFeedId(feedId, max: 100)
             episodes = PodcastTransform.transformEpisodes(response.items ?? [])
             isLoading = false
+        } catch is URLError {
+            self.error = "Ingen nettverkstilkobling.\nSjekk tilkoblingen og prøv igjen."
+            isLoading = false
         } catch {
-            self.error = "Kunne ikke laste episoder"
+            self.error = "Kunne ikke laste episoder.\nPrøv igjen senere."
             isLoading = false
         }
     }
@@ -190,10 +232,43 @@ struct PodcastDetailView: View {
             }
 
             isLoading = false
+        } catch is URLError {
+            self.error = "Ingen nettverkstilkobling.\nSjekk tilkoblingen og prøv igjen."
+            isLoading = false
         } catch {
-            self.error = "Kunne ikke laste NRK-episoder"
+            self.error = "Kunne ikke laste NRK-episoder.\nPrøv igjen senere."
             isLoading = false
         }
+    }
+}
+
+// MARK: - Skeleton Loading
+
+private struct SkeletonEpisodeRow: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            HStack {
+                VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.appBorder.opacity(0.4))
+                        .frame(height: 14)
+                        .frame(maxWidth: 200)
+
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.appBorder.opacity(0.3))
+                        .frame(height: 11)
+                        .frame(maxWidth: 120)
+                }
+                Spacer()
+            }
+        }
+        .padding(AppSpacing.md)
+        .background(Color.appCard)
+        .clipShape(.rect(cornerRadius: AppRadius.md))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppRadius.md)
+                .stroke(Color.appBorder, lineWidth: 1)
+        )
     }
 }
 

@@ -161,15 +161,45 @@ enum PodcastTransform {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private static let entityRegex = try! NSRegularExpression(pattern: "&#(x[0-9a-fA-F]+|\\d+);")
+
+    private static let namedEntities: [String: String] = [
+        "&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">",
+        "&quot;": "\"", "&#39;": "'", "&apos;": "'",
+        "&mdash;": "\u{2014}", "&ndash;": "\u{2013}", "&hellip;": "\u{2026}",
+        "&lsquo;": "\u{2018}", "&rsquo;": "\u{2019}",
+        "&ldquo;": "\u{201C}", "&rdquo;": "\u{201D}",
+        "&bull;": "\u{2022}", "&middot;": "\u{00B7}",
+        "&copy;": "\u{00A9}", "&reg;": "\u{00AE}", "&trade;": "\u{2122}",
+        "&eacute;": "\u{00E9}", "&egrave;": "\u{00E8}",
+        "&aring;": "\u{00E5}", "&oslash;": "\u{00F8}", "&aelig;": "\u{00E6}",
+        "&Aring;": "\u{00C5}", "&Oslash;": "\u{00D8}", "&AElig;": "\u{00C6}",
+        "&uuml;": "\u{00FC}", "&ouml;": "\u{00F6}", "&auml;": "\u{00E4}",
+    ]
+
     private static func decodeHTMLEntities(_ text: String) -> String {
-        text.replacingOccurrences(of: "&nbsp;", with: " ")
-            .replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
-            .replacingOccurrences(of: "&quot;", with: "\"")
-            .replacingOccurrences(of: "&#39;", with: "'")
-            .replacingOccurrences(of: "&mdash;", with: "—")
-            .replacingOccurrences(of: "&ndash;", with: "–")
-            .replacingOccurrences(of: "&hellip;", with: "...")
+        guard text.contains("&") else { return text }
+        var result = text
+        for (entity, replacement) in namedEntities {
+            result = result.replacingOccurrences(of: entity, with: replacement)
+        }
+        // Decode numeric entities (&#123; and &#xAB;)
+        let nsRange = NSRange(result.startIndex..., in: result)
+        let matches = entityRegex.matches(in: result, range: nsRange).reversed()
+        for match in matches {
+            guard let codeRange = Range(match.range(at: 1), in: result) else { continue }
+            let codeStr = String(result[codeRange])
+            let codePoint: UInt32?
+            if codeStr.hasPrefix("x") {
+                codePoint = UInt32(codeStr.dropFirst(), radix: 16)
+            } else {
+                codePoint = UInt32(codeStr)
+            }
+            if let cp = codePoint, let scalar = Unicode.Scalar(cp) {
+                let fullRange = Range(match.range, in: result)!
+                result.replaceSubrange(fullRange, with: String(scalar))
+            }
+        }
+        return result
     }
 }

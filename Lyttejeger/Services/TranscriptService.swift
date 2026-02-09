@@ -21,6 +21,10 @@ actor TranscriptService {
 
         do {
             let (data, response) = try await URLSession.shared.data(from: requestUrl)
+
+            // Reject excessively large transcripts (> 5 MB)
+            guard data.count <= 5 * 1024 * 1024 else { return nil }
+
             let contentType = (response as? HTTPURLResponse)?
                 .value(forHTTPHeaderField: "Content-Type") ?? ""
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -31,7 +35,7 @@ actor TranscriptService {
             } else if url.hasSuffix(".vtt") || contentType.contains("vtt") || text.contains("WEBVTT") {
                 let result = parseVTT(text)
                 if !result.segments.isEmpty { return result }
-            } else if url.hasSuffix(".srt") || text.range(of: "\\d+\\n\\d{2}:\\d{2}:\\d{2}", options: .regularExpression) != nil {
+            } else if url.hasSuffix(".srt") || String(text.prefix(500)).range(of: "\\d+\\n\\d{2}:\\d{2}:\\d{2}", options: .regularExpression) != nil {
                 let result = parseSRT(text)
                 if !result.segments.isEmpty { return result }
             }

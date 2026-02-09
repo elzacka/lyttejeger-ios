@@ -6,9 +6,21 @@ struct PlayerControls: View {
     @State private var showSleepTimer = false
     @State private var isSeeking = false
     @State private var seekPosition: TimeInterval = 0
+    @State private var skipOverlay: String?
 
     private var displayTime: TimeInterval {
         isSeeking ? seekPosition : playerVM.currentTime
+    }
+
+    private var sleepTimerLabel: String? {
+        guard playerVM.sleepTimerMinutes != 0 else { return nil }
+        if playerVM.sleepTimerMinutes == -1 { return "Ep. slutt" }
+        let remaining = playerVM.sleepTimerRemaining
+        if remaining > 0 {
+            let mins = Int(remaining) / 60
+            return "\(mins) min"
+        }
+        return nil
     }
 
     var body: some View {
@@ -44,73 +56,98 @@ struct PlayerControls: View {
             }
 
             // Main controls
-            HStack(spacing: AppSpacing.xxl) {
-                // Speed
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    playerVM.cycleSpeed()
-                } label: {
-                    Text(String(format: "%.2gx", playerVM.playbackSpeed))
-                        .font(.speedText)
-                        .foregroundStyle(Color.appMutedForeground)
-                        .frame(width: 44)
-                }
-                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                .accessibilityLabel("Hastighet \(String(format: "%.2g", playerVM.playbackSpeed)) ganger")
-                .accessibilityHint("Trykk for å endre avspillingshastighet")
+            ZStack {
+                HStack(spacing: AppSpacing.xxl) {
+                    // Speed
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        playerVM.cycleSpeed()
+                    } label: {
+                        Text(String(format: "%.2gx", playerVM.playbackSpeed))
+                            .font(.speedText)
+                            .foregroundStyle(Color.appMutedForeground)
+                            .frame(width: 44)
+                    }
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                    .accessibilityLabel("Hastighet \(String(format: "%.2g", playerVM.playbackSpeed)) ganger")
+                    .accessibilityHint("Trykk for å endre avspillingshastighet")
 
-                // Skip back
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    playerVM.skipBackward()
-                } label: {
-                    Image(systemName: "gobackward.10")
-                        .font(.system(size: 28))
-                        .foregroundStyle(Color.appForeground)
-                }
-                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                .accessibilityLabel("Spol 10 sekunder tilbake")
+                    // Skip back
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        playerVM.skipBackward()
+                        showSkipOverlay("-10s")
+                    } label: {
+                        Image(systemName: "gobackward.10")
+                            .font(.system(size: 28))
+                            .foregroundStyle(Color.appForeground)
+                    }
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                    .accessibilityLabel("Spol 10 sekunder tilbake")
 
-                // Play/Pause
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    playerVM.togglePlayPause()
-                } label: {
-                    Image(systemName: playerVM.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: AppSize.playerMainButton))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [Color.appAccent, Color.appAccentHover],
-                                startPoint: .top,
-                                endPoint: .bottom
+                    // Play/Pause
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        playerVM.togglePlayPause()
+                    } label: {
+                        Image(systemName: playerVM.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: AppSize.playerMainButton))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [Color.appAccent, Color.appAccentHover],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
                             )
-                        )
-                }
-                .accessibilityLabel(playerVM.isPlaying ? "Pause" : "Spill av")
+                    }
+                    .accessibilityLabel(playerVM.isPlaying ? "Pause" : "Spill av")
 
-                // Skip forward
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    playerVM.skipForward()
-                } label: {
-                    Image(systemName: "goforward.30")
-                        .font(.system(size: 28))
-                        .foregroundStyle(Color.appForeground)
-                }
-                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                .accessibilityLabel("Spol 30 sekunder frem")
+                    // Skip forward
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        playerVM.skipForward()
+                        showSkipOverlay("+30s")
+                    } label: {
+                        Image(systemName: "goforward.30")
+                            .font(.system(size: 28))
+                            .foregroundStyle(Color.appForeground)
+                    }
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                    .accessibilityLabel("Spol 30 sekunder frem")
 
-                // Sleep timer
-                Button {
-                    showSleepTimer = true
-                } label: {
-                    Image(systemName: playerVM.sleepTimerMinutes != 0 ? "moon.fill" : "moon")
-                        .font(.system(size: 20))
-                        .foregroundStyle(playerVM.sleepTimerMinutes != 0 ? Color.appAccent : Color.appMutedForeground)
+                    // Sleep timer
+                    Button {
+                        showSleepTimer = true
+                    } label: {
+                        VStack(spacing: 1) {
+                            Image(systemName: playerVM.sleepTimerMinutes != 0 ? "moon.fill" : "moon")
+                                .font(.system(size: 20))
+                                .foregroundStyle(playerVM.sleepTimerMinutes != 0 ? Color.appAccent : Color.appMutedForeground)
+
+                            if let label = sleepTimerLabel {
+                                Text(label)
+                                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(Color.appAccent)
+                            }
+                        }
+                    }
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                    .accessibilityLabel(playerVM.sleepTimerMinutes != 0 ? "Søvntimer aktiv" : "Søvntimer")
+                    .accessibilityHint("Trykk for å stille søvntimer")
                 }
-                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                .accessibilityLabel(playerVM.sleepTimerMinutes != 0 ? "Søvntimer aktiv" : "Søvntimer")
-                .accessibilityHint("Trykk for å stille søvntimer")
+
+                // Skip overlay
+                if let overlay = skipOverlay {
+                    Text(overlay)
+                        .font(.caption2Text)
+                        .foregroundStyle(Color.appAccent)
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.vertical, AppSpacing.xs)
+                        .background(Color.appAccent.opacity(0.12))
+                        .clipShape(.rect(cornerRadius: AppRadius.sm))
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                }
             }
 
             // Chapter info
@@ -127,6 +164,14 @@ struct PlayerControls: View {
                     playerVM.setSleepTimer(option.value)
                 }
             }
+        }
+    }
+
+    private func showSkipOverlay(_ text: String) {
+        withAnimation(.easeOut(duration: 0.15)) { skipOverlay = text }
+        Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            withAnimation(.easeOut(duration: 0.2)) { skipOverlay = nil }
         }
     }
 }

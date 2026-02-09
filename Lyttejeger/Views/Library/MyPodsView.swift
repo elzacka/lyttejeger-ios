@@ -13,9 +13,11 @@ struct MyPodsView: View {
                 Spacer()
 
                 VStack(spacing: AppSpacing.lg) {
-                    Image(systemName: "heart")
-                        .font(.system(size: 36, weight: .light))
-                        .foregroundStyle(Color.appBorder)
+                    Image("LaunchLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 48, height: 48)
+                        .opacity(0.4)
 
                     Text("Ingen podkaster ennå")
                         .font(.bodyText)
@@ -41,15 +43,7 @@ struct MyPodsView: View {
                                 rating: 0,
                                 explicit: false
                             )) {
-                                VStack(spacing: AppSpacing.sm) {
-                                    CachedAsyncImage(url: sub.imageUrl, size: 100)
-
-                                    Text(sub.title)
-                                        .font(.smallText)
-                                        .foregroundStyle(Color.appForeground)
-                                        .lineLimit(2)
-                                        .multilineTextAlignment(.center)
-                                }
+                                CachedAsyncImage(url: sub.imageUrl, size: 100)
                             }
                             .buttonStyle(CardButtonStyle())
                             .accessibilityLabel(sub.title)

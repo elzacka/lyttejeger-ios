@@ -68,6 +68,19 @@ struct AudioPlayerSheet: View {
                 }
 
                 Spacer()
+
+                // Brand watermark
+                HStack(spacing: AppSpacing.xs) {
+                    Image("LaunchLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 14, height: 14)
+                        .opacity(0.3)
+                    Text("Lyttejeger")
+                        .font(.caption2Text)
+                        .foregroundStyle(Color.appBorder)
+                }
+                .padding(.bottom, AppSpacing.sm)
             }
             .padding(AppSpacing.lg)
             .background(Color.appBackground)

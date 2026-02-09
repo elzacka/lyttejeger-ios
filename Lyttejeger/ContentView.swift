@@ -9,11 +9,15 @@ struct ContentView: View {
     @State private var playerVM = AudioPlayerViewModel()
     @State private var progressVM = PlaybackProgressViewModel()
     @State private var selectedTab = 0
+    @State private var showMenu = false
+    @State private var showPersonvern = false
+    @State private var showInnstillinger = false
+    @State private var showOmLyttejeger = false
 
-    private let tabs: [(icon: String, iconFilled: String)] = [
-        ("magnifyingglass", "magnifyingglass"),
-        ("heart", "heart.fill"),
-        ("list.number", "list.number"),
+    private let tabs: [(icon: String, iconFilled: String, label: String)] = [
+        ("house", "house.fill", "Hjem"),
+        ("heart", "heart.fill", "Podder"),
+        ("list.number", "list.number", "Kø"),
     ]
 
     var body: some View {
@@ -50,29 +54,65 @@ struct ContentView: View {
                     Button {
                         selectedTab = index
                     } label: {
-                        VStack(spacing: 4) {
+                        VStack(spacing: 2) {
                             Image(systemName: selectedTab == index ? tabs[index].iconFilled : tabs[index].icon)
-                                .font(.system(size: 20, weight: selectedTab == index ? .semibold : .regular))
+                                .font(.system(size: 18, weight: selectedTab == index ? .semibold : .regular))
                                 .foregroundStyle(Color.appAccent)
 
-                            // Subtle dot indicator for selected tab
-                            Circle()
-                                .fill(selectedTab == index ? Color.appAccent : .clear)
-                                .frame(width: 4, height: 4)
+                            Text(tabs[index].label)
+                                .font(.system(size: 10, weight: selectedTab == index ? .medium : .regular, design: .monospaced))
+                                .foregroundStyle(selectedTab == index ? Color.appAccent : Color.appMutedForeground)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
                         .contentShape(Rectangle())
                     }
-                    .accessibilityLabel(["Søk", "Mine podder", "Kø"][index])
+                    .accessibilityLabel(["Hjem", "Mine podder", "Kø"][index])
                     .accessibilityAddTraits(selectedTab == index ? .isSelected : [])
                 }
+
+                // Menu divider
+                Rectangle()
+                    .fill(Color.appBorder.opacity(0.4))
+                    .frame(width: 1, height: 24)
+
+                // Menu button
+                Button {
+                    showMenu = true
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Color.appMutedForeground)
+
+                        Text("Mer")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Color.appMutedForeground)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Meny")
             }
             .padding(.top, AppSpacing.sm)
             .padding(.bottom, AppSpacing.sm)
             .background(Color.appBackground)
         }
         .background(Color.appBackground)
+        .sheet(isPresented: $showMenu) {
+            MenuSheet(showPersonvern: $showPersonvern, showInnstillinger: $showInnstillinger, showOmLyttejeger: $showOmLyttejeger)
+                .presentationDetents([.height(250)])
+        }
+        .sheet(isPresented: $showPersonvern) {
+            PersonvernView()
+        }
+        .sheet(isPresented: $showInnstillinger) {
+            InnstillingerView()
+        }
+        .sheet(isPresented: $showOmLyttejeger) {
+            OmLyttejegerView()
+        }
         .environment(searchVM)
         .environment(queueVM)
         .environment(subscriptionVM)
@@ -101,6 +141,77 @@ struct ContentView: View {
             UINavigationBar.appearance().standardAppearance = navAppearance
             UINavigationBar.appearance().scrollEdgeAppearance = navAppearance
             UINavigationBar.appearance().compactAppearance = navAppearance
+        }
+    }
+}
+
+// MARK: - Menu Sheet
+
+private struct MenuSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var showPersonvern: Bool
+    @Binding var showInnstillinger: Bool
+    @Binding var showOmLyttejeger: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Drag indicator
+            Capsule()
+                .fill(Color.appBorder)
+                .frame(width: 36, height: 5)
+                .padding(.top, AppSpacing.sm)
+                .padding(.bottom, AppSpacing.lg)
+
+            VStack(spacing: 0) {
+                menuRow("Innstillinger", icon: "gearshape") {
+                    dismiss()
+                    showInnstillinger = true
+                }
+
+                menuDivider
+
+                menuRow("Personvern", icon: "shield.checkered") {
+                    dismiss()
+                    showPersonvern = true
+                }
+
+                menuDivider
+
+                menuRow("Om Lyttejeger", icon: "headphones") {
+                    dismiss()
+                    showOmLyttejeger = true
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .background(Color.appBackground)
+    }
+
+    private var menuDivider: some View {
+        Rectangle()
+            .fill(Color.appBorder.opacity(0.3))
+            .frame(height: 1)
+            .padding(.horizontal, AppSpacing.lg)
+    }
+
+    private func menuRow(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: AppSpacing.md) {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color.appAccent)
+                    .frame(width: 24)
+                Text(title)
+                    .font(.bodyText)
+                    .foregroundStyle(Color.appForeground)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.appBorder)
+            }
+            .padding(.horizontal, AppSpacing.xl)
+            .frame(height: AppSize.touchTarget)
+            .contentShape(Rectangle())
         }
     }
 }
