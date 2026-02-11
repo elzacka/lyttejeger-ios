@@ -207,6 +207,10 @@ final class AudioService {
         currentTime = 0
         duration = 0
         isLoading = false
+        currentEpisode = nil
+        currentPodcastTitle = nil
+        currentPodcastImage = nil
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     // MARK: - Now Playing

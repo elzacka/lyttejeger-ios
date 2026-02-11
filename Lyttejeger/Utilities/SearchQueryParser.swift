@@ -18,7 +18,14 @@ enum SearchQueryParser {
 
     static func parse(_ query: String) -> ParsedQuery {
         var result = ParsedQuery()
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        // Normalize iOS smart punctuation to ASCII equivalents —
+        // iOS keyboard silently replaces `-` with `–` and `"` with `""`
+        let normalized = query
+            .replacingOccurrences(of: "\u{2013}", with: "-")
+            .replacingOccurrences(of: "\u{2014}", with: "-")
+            .replacingOccurrences(of: "\u{201C}", with: "\"")
+            .replacingOccurrences(of: "\u{201D}", with: "\"")
+        let trimmed = normalized.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return result }
 
         // Extract quoted phrases first

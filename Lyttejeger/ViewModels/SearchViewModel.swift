@@ -25,15 +25,20 @@ final class SearchViewModel {
     var activeFilterCount: Int {
         var count = 0
         if !filters.categories.isEmpty { count += 1 }
-        if !filters.excludeCategories.isEmpty { count += 1 }
         if !filters.languages.isEmpty { count += 1 }
-        if filters.explicit != nil { count += 1 }
         if filters.dateFrom != nil || filters.dateTo != nil { count += 1 }
+        if filters.sortBy != .relevance { count += 1 }
+        if filters.durationFilter != nil { count += 1 }
         return count
     }
 
     var hasActiveFilters: Bool {
-        !filters.categories.isEmpty || !filters.languages.isEmpty || filters.dateFrom != nil
+        !filters.categories.isEmpty
+        || !filters.languages.isEmpty
+        || filters.dateFrom != nil
+        || filters.dateTo != nil
+        || filters.sortBy != .relevance
+        || filters.durationFilter != nil
     }
 
     // MARK: - Search
@@ -76,8 +81,13 @@ final class SearchViewModel {
         debounceSearch()
     }
 
-    func setExplicit(_ explicit: Bool?) {
-        filters.explicit = explicit
+    func setDurationFilter(_ duration: DurationFilter?) {
+        filters.durationFilter = duration
+        debounceSearch()
+    }
+
+    func toggleDurationFilter(_ duration: DurationFilter) {
+        filters.durationFilter = filters.durationFilter == duration ? nil : duration
         debounceSearch()
     }
 
@@ -126,6 +136,158 @@ final class SearchViewModel {
         }
     }
 
+    // MARK: - API Query Builder
+
+    /// Builds the query string for the Podcast Index API from parsed operators.
+    /// Re-wraps exact phrases in quotes, includes exclude terms with `-` prefix.
+    /// Returns nil if no positive search terms exist.
+    private func buildApiQuery(from parsed: ParsedQuery) -> String? {
+        var parts: [String] = []
+
+        for phrase in parsed.exactPhrases {
+            parts.append("\"\(phrase)\"")
+        }
+        parts.append(contentsOf: parsed.mustInclude.filter { $0.count >= 2 })
+        parts.append(contentsOf: parsed.shouldInclude.filter { $0.count >= 2 })
+
+        // No positive terms → nothing useful to search for
+        guard !parts.isEmpty else { return nil }
+
+        // Exclude terms are NOT sent to API — Podcast Index doesn't support
+        // them and treats "-term" as a literal search string, causing zero results.
+        // Exclusions are enforced client-side in applyQueryOperators().
+
+        return parts.joined(separator: " ")
+    }
+
+    // MARK: - Query Operator Enforcement
+
+    /// Apply parsed query operators as client-side post-filters on podcast results.
+    private func applyQueryOperators(_ results: [Podcast], parsed: ParsedQuery) -> [Podcast] {
+        guard !parsed.mustExclude.isEmpty
+            || !parsed.exactPhrases.isEmpty
+            || !parsed.shouldInclude.isEmpty else {
+            return results
+        }
+
+        return results.filter { podcast in
+            let text = "\(podcast.title) \(podcast.description) \(podcast.author)".lowercased()
+
+            // Exclude: remove results containing ANY mustExclude term
+            for term in parsed.mustExclude where term.count >= 2 {
+                if text.contains(term.lowercased()) { return false }
+            }
+
+            // Exact phrases: require ALL present
+            for phrase in parsed.exactPhrases {
+                if !text.contains(phrase.lowercased()) { return false }
+            }
+
+            // OR: require at least ONE shouldInclude term present
+            if !parsed.shouldInclude.isEmpty {
+                let hasMatch = parsed.shouldInclude.contains { text.contains($0.lowercased()) }
+                if !hasMatch { return false }
+            }
+
+            return true
+        }
+    }
+
+    /// Apply parsed query operators as client-side post-filters on episode results.
+    private func applyQueryOperators(_ results: [EpisodeWithPodcast], parsed: ParsedQuery) -> [EpisodeWithPodcast] {
+        guard !parsed.mustExclude.isEmpty
+            || !parsed.exactPhrases.isEmpty
+            || !parsed.shouldInclude.isEmpty else {
+            return results
+        }
+
+        return results.filter { item in
+            let text = "\(item.episode.title) \(item.episode.description) \(item.podcastTitle)".lowercased()
+
+            for term in parsed.mustExclude where term.count >= 2 {
+                if text.contains(term.lowercased()) { return false }
+            }
+
+            for phrase in parsed.exactPhrases {
+                if !text.contains(phrase.lowercased()) { return false }
+            }
+
+            if !parsed.shouldInclude.isEmpty {
+                let hasMatch = parsed.shouldInclude.contains { text.contains($0.lowercased()) }
+                if !hasMatch { return false }
+            }
+
+            return true
+        }
+    }
+
+    // MARK: - Composite Ranking
+
+    /// Compute a composite relevance score for each podcast and sort descending.
+    /// Replaces the old sequential boostTitleMatches + applyFreshnessSignal.
+    private func rankResults(_ podcasts: [Podcast], query: String, parsed: ParsedQuery) -> [Podcast] {
+        let queryLower = query.lowercased()
+        let terms = (parsed.mustInclude + parsed.shouldInclude + parsed.exactPhrases).map { $0.lowercased() }
+        let now = Date()
+        let daySeconds: TimeInterval = 86400
+
+        let scored = podcasts.map { podcast -> (Podcast, Double) in
+            var score: Double = 0
+            let titleLower = podcast.title.lowercased()
+            let authorLower = podcast.author.lowercased()
+
+            // Title match (highest weight)
+            if titleLower == queryLower {
+                score += 100
+            } else if titleLower.hasPrefix(queryLower) {
+                score += 80
+            } else if titleLower.contains(queryLower) {
+                score += 60
+            }
+
+            // Individual term matches in title
+            for term in terms where titleLower.contains(term) {
+                score += 20
+            }
+
+            // Author match
+            if authorLower.contains(queryLower) {
+                score += 15
+            }
+
+            // Freshness signal
+            let lastUpdated = Self.isoFormatter.date(from: podcast.lastUpdated) ?? .distantPast
+            let daysSinceUpdate = now.timeIntervalSince(lastUpdated) / daySeconds
+            if daysSinceUpdate < 7 {
+                score += 15
+            } else if daysSinceUpdate < 30 {
+                score += 10
+            } else if daysSinceUpdate < 180 {
+                score += 5
+            } else if daysSinceUpdate > 365 {
+                score -= 5
+            }
+
+            // Popularity bonus
+            if podcast.episodeCount > 100 {
+                score += 5
+            } else if podcast.episodeCount > 20 {
+                score += 3
+            }
+
+            // Dead feed penalty
+            if podcast.episodeCount == 0 {
+                score -= 10
+            }
+
+            return (podcast, score)
+        }
+
+        return scored
+            .sorted { $0.1 > $1.1 }
+            .map(\.0)
+    }
+
     // MARK: - Podcast Search
 
     private func searchPodcasts(_ query: String) async {
@@ -137,19 +299,16 @@ final class SearchViewModel {
 
         do {
             let parsed = SearchQueryParser.parse(query)
-            let completeTerms = (parsed.mustInclude + parsed.shouldInclude).filter { $0.count >= 2 } + parsed.exactPhrases
-            guard !completeTerms.isEmpty else {
+            guard let apiQuery = buildApiQuery(from: parsed) else {
                 isLoading = false
                 return
             }
 
-            let apiQuery = completeTerms.joined(separator: " ")
             let hasCategory = !filters.categories.isEmpty
 
             var options = SearchOptions()
             options.max = hasCategory ? AppConstants.searchResultsWithCategory : AppConstants.searchResultsDefault
             options.fulltext = true
-            options.clean = filters.explicit == false
             options.lang = hasCategory ? nil : (getApiLanguageCodes(filters.languages) ?? AppConstants.allowedLanguagesAPI)
             if hasCategory { options.cat = filters.categories.joined(separator: ",") }
 
@@ -201,17 +360,21 @@ final class SearchViewModel {
                 }
             }
 
-            results = boostTitleMatches(results, query: apiQuery)
-            results = applyFreshnessSignal(results)
+            // Apply query operators (exclude, exact phrase, OR)
+            results = applyQueryOperators(results, parsed: parsed)
 
-            // Apply local filters
+            // Composite ranking
+            results = rankResults(results, query: apiQuery, parsed: parsed)
+
+            // Apply local filters (date, sort override)
             results = applyLocalFilters(results)
 
             // Merge NRK results (local, instant)
             let nrkResults = await NRKPodcastService.shared.searchCatalog(query: apiQuery)
             if !nrkResults.isEmpty {
                 let piTitles = Set(results.map { $0.title.lowercased() })
-                let unique = nrkResults.filter { !piTitles.contains($0.title.lowercased()) }
+                var unique = nrkResults.filter { !piTitles.contains($0.title.lowercased()) }
+                unique = applyQueryOperators(unique, parsed: parsed)
                 results.append(contentsOf: unique)
             }
 
@@ -239,13 +402,12 @@ final class SearchViewModel {
         let api = PodcastIndexAPI.shared
 
         let parsed = SearchQueryParser.parse(query)
-        let completeTerms = (parsed.mustInclude + parsed.shouldInclude).filter { $0.count >= 2 } + parsed.exactPhrases
-        guard !completeTerms.isEmpty else {
+        guard let apiQuery = buildApiQuery(from: parsed) else {
             isLoading = false
             return
         }
 
-        let apiQuery = completeTerms.joined(separator: " ")
+        let completeTerms = (parsed.mustInclude + parsed.shouldInclude).filter { $0.count >= 2 } + parsed.exactPhrases
         var allEpisodes: [EpisodeWithPodcast] = []
         var existingIds = Set<String>()
 
@@ -291,8 +453,13 @@ final class SearchViewModel {
                     let podcast = podcastMap[String(apiEp?.feedId ?? 0)]
 
                     let text = "\(ep.title) \(ep.description)".lowercased()
-                    let matchesTerm = completeTerms.isEmpty || completeTerms.contains { text.contains($0.lowercased()) }
-                    guard matchesTerm else { continue }
+                    // AND: all mustInclude terms must be present
+                    let hasAllRequired = parsed.mustInclude.filter { $0.count >= 2 }.allSatisfy { text.contains($0.lowercased()) }
+                    // OR: at least one shouldInclude term (if any)
+                    let hasAnyShouldInclude = parsed.shouldInclude.isEmpty || parsed.shouldInclude.contains { text.contains($0.lowercased()) }
+                    // Exact phrases
+                    let hasAllPhrases = parsed.exactPhrases.allSatisfy { text.contains($0.lowercased()) }
+                    guard hasAllRequired && hasAnyShouldInclude && hasAllPhrases else { continue }
 
                     allEpisodes.append(EpisodeWithPodcast(
                         episode: ep,
@@ -304,6 +471,28 @@ final class SearchViewModel {
                     ))
                     existingIds.insert(ep.id)
                 }
+            }
+        }
+
+        // Apply query operators (exclude, exact phrase, OR)
+        allEpisodes = applyQueryOperators(allEpisodes, parsed: parsed)
+
+        // Apply duration filter
+        if let durationFilter = filters.durationFilter {
+            allEpisodes = allEpisodes.filter { durationFilter.matches(duration: $0.episode.duration) }
+        }
+
+        // Apply date filter
+        if let dateFrom = filters.dateFrom {
+            let fromDate = dateFrom.date
+            allEpisodes = allEpisodes.filter {
+                (Self.isoFormatter.date(from: $0.episode.publishedAt) ?? .distantPast) >= fromDate
+            }
+        }
+        if let dateTo = filters.dateTo {
+            let toDate = dateTo.date
+            allEpisodes = allEpisodes.filter {
+                (Self.isoFormatter.date(from: $0.episode.publishedAt) ?? .distantFuture) <= toDate
             }
         }
 
@@ -397,10 +586,6 @@ final class SearchViewModel {
             }
         }
 
-        if let explicit = filters.explicit {
-            filtered = filtered.filter { $0.explicit == explicit }
-        }
-
         switch filters.sortBy {
         case .newest:
             filtered.sort { $0.lastUpdated > $1.lastUpdated }
@@ -417,37 +602,5 @@ final class SearchViewModel {
 
     private func isAllowedLanguage(_ lang: String) -> Bool {
         allLanguages.contains { matchesLanguageFilter(lang, filterLabel: $0) }
-    }
-
-    private func boostTitleMatches(_ podcasts: [Podcast], query: String) -> [Podcast] {
-        let queryNorm = query.lowercased()
-        return podcasts.sorted { a, b in
-            let aTitle = a.title.lowercased()
-            let bTitle = b.title.lowercased()
-            let scoreA = aTitle == queryNorm ? 3 : aTitle.hasPrefix(queryNorm) ? 2 : aTitle.contains(queryNorm) ? 1 : 0
-            let scoreB = bTitle == queryNorm ? 3 : bTitle.hasPrefix(queryNorm) ? 2 : bTitle.contains(queryNorm) ? 1 : 0
-            return scoreA > scoreB
-        }
-    }
-
-    private func applyFreshnessSignal(_ podcasts: [Podcast]) -> [Podcast] {
-        let now = Date()
-        let daySeconds: TimeInterval = 86400
-
-        return podcasts.sorted { a, b in
-            let aDate = Self.isoFormatter.date(from: a.lastUpdated) ?? .distantPast
-            let bDate = Self.isoFormatter.date(from: b.lastUpdated) ?? .distantPast
-            let aDays = now.timeIntervalSince(aDate) / daySeconds
-            let bDays = now.timeIntervalSince(bDate) / daySeconds
-
-            func score(_ days: TimeInterval) -> Int {
-                if days < 30 { return 2 }
-                if days < 180 { return 1 }
-                if days < 365 { return 0 }
-                return -1
-            }
-
-            return score(aDays) > score(bDays)
-        }
     }
 }

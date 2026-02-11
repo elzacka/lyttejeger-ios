@@ -5,7 +5,27 @@ struct ChapterPanel: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            // Custom header
+            HStack {
+                Spacer()
+
+                Text("Kapitler")
+                    .font(.sectionTitle)
+                    .foregroundStyle(Color.appForeground)
+
+                Spacer()
+            }
+            .overlay(alignment: .trailing) {
+                Button("Ferdig") { dismiss() }
+                    .font(.buttonText)
+                    .foregroundStyle(Color.appAccent)
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.md)
+
+            // Chapter list
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(playerVM.chapters) { chapter in
@@ -60,17 +80,8 @@ struct ChapterPanel: View {
                     }
                 }
             }
-            .background(Color.appBackground)
-            .navigationTitle("Kapitler")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Ferdig") { dismiss() }
-                        .font(.buttonText)
-                        .foregroundStyle(Color.appAccent)
-                }
-            }
         }
+        .background(Color.appBackground)
     }
 }
 

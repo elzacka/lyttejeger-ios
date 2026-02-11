@@ -9,7 +9,28 @@ struct PersonvernView: View {
     @State private var exportURL: URL?
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text("Personvern")
+                    .font(.sectionTitle)
+                    .foregroundStyle(Color.appForeground)
+
+                Spacer()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .overlay(alignment: .trailing) {
+                        Button("Lukk") { dismiss() }
+                            .font(.buttonText)
+                            .foregroundStyle(Color.appAccent)
+                            .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                    }
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.md)
+
             ScrollView {
                 VStack(spacing: AppSpacing.lg) {
                     // Hero
@@ -57,12 +78,12 @@ struct PersonvernView: View {
                                 detail: "Henter podkastkatalog, ingen brukerdata sendes"
                             )
                             trafficRow(
-                                service: "Podkastverter",
+                                service: "Podkaster",
                                 detail: "Lyd og bilder hentes direkte fra podkastens egen server"
                             )
                         }
 
-                        Text("All nettverkstrafikk går direkte fra din enhet. Ingen data sendes via våre servere.")
+                        Text("All nettverkstrafikk går direkte fra din enhet. Ingen data sendes via appens servere eller andre eksterne servere.")
                             .font(.caption2Text)
                             .foregroundStyle(Color.appMutedForeground)
                             .padding(.top, AppSpacing.xs)
@@ -145,30 +166,19 @@ struct PersonvernView: View {
                 }
                 .padding(.horizontal, AppSpacing.lg)
             }
-            .background(Color.appBackground)
-            .navigationTitle("Personvern")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Lukk") {
-                        dismiss()
-                    }
-                    .font(.buttonText)
-                    .foregroundStyle(Color.appAccent)
-                }
+        }
+        .background(Color.appBackground)
+        .alert("Slett alle data?", isPresented: $showDeleteConfirmation) {
+            Button("Avbryt", role: .cancel) {}
+            Button("Slett", role: .destructive) {
+                deleteAllData()
             }
-            .alert("Slett alle data?", isPresented: $showDeleteConfirmation) {
-                Button("Avbryt", role: .cancel) {}
-                Button("Slett", role: .destructive) {
-                    deleteAllData()
-                }
-            } message: {
-                Text("Dette sletter alle abonnementer, spillekøen og avspillingsposisjoner. Handlingen kan ikke angres.")
-            }
-            .sheet(isPresented: $showExportSheet) {
-                if let exportURL {
-                    ShareSheet(items: [exportURL])
-                }
+        } message: {
+            Text("Dette sletter alle abonnementer, spillekøen og avspillingsposisjoner. Handlingen kan ikke angres.")
+        }
+        .sheet(isPresented: $showExportSheet) {
+            if let exportURL {
+                ShareSheet(items: [exportURL])
             }
         }
     }

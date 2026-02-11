@@ -6,7 +6,28 @@ struct InnstillingerView: View {
     @AppStorage("showNewFromSubscriptions") private var showNewFromSubscriptions = true
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text("Innstillinger")
+                    .font(.sectionTitle)
+                    .foregroundStyle(Color.appForeground)
+
+                Spacer()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .overlay(alignment: .trailing) {
+                        Button("Lukk") { dismiss() }
+                            .font(.buttonText)
+                            .foregroundStyle(Color.appAccent)
+                            .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                    }
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.md)
+
             ScrollView {
                 VStack(spacing: AppSpacing.lg) {
                     // Section header
@@ -51,19 +72,8 @@ struct InnstillingerView: View {
                 .padding(.horizontal, AppSpacing.lg)
                 .padding(.top, AppSpacing.lg)
             }
-            .background(Color.appBackground)
-            .navigationTitle("Innstillinger")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Lukk") {
-                        dismiss()
-                    }
-                    .font(.buttonText)
-                    .foregroundStyle(Color.appAccent)
-                }
-            }
         }
+        .background(Color.appBackground)
     }
 
     private func toggleRow(title: String, subtitle: String, isOn: Binding<Bool>) -> some View {

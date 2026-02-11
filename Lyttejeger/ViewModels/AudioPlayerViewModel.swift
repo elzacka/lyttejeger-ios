@@ -135,6 +135,19 @@ final class AudioPlayerViewModel {
         }
     }
 
+    func stop() {
+        savePosition()
+        saveTask?.cancel()
+        saveTask = nil
+        isExpanded = false
+        chapters = []
+        currentChapter = nil
+        transcript = nil
+        sleepTimerMinutes = 0
+        sleepTimerEndTime = nil
+        audioService.stop()
+    }
+
     func togglePlayPause() {
         audioService.togglePlayPause()
     }

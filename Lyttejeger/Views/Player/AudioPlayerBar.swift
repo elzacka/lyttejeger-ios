@@ -30,25 +30,20 @@ struct AudioPlayerBar: View {
                 MiniProgressBar()
 
                 HStack(spacing: AppSpacing.md) {
-                    CachedAsyncImage(url: playerVM.podcastImage ?? episode.imageUrl, size: 48)
+                    Button {
+                        playerVM.isExpanded = true
+                    } label: {
+                        HStack(spacing: AppSpacing.md) {
+                            CachedAsyncImage(url: playerVM.podcastImage ?? episode.imageUrl, size: 48)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(episode.title)
-                            .font(.cardTitle)
-                            .foregroundStyle(Color.appForeground)
-                            .lineLimit(1)
-
-                        Text(playerVM.podcastTitle ?? "")
-                            .font(.caption2Text)
-                            .foregroundStyle(Color.appMutedForeground)
-                            .lineLimit(1)
+                            Text(episode.title)
+                                .font(.cardTitle)
+                                .foregroundStyle(Color.appForeground)
+                                .lineLimit(2)
+                        }
+                        .contentShape(Rectangle())
                     }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.up")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color.appBorder)
+                    .buttonStyle(.plain)
 
                     Button {
                         playerVM.togglePlayPause()
@@ -69,22 +64,24 @@ struct AudioPlayerBar: View {
                     }
                     .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                     .accessibilityLabel("Spol 30 sekunder frem")
+
+                    Button {
+                        playerVM.stop()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.appMutedForeground)
+                    }
+                    .frame(minWidth: 36, minHeight: AppSize.touchTarget)
+                    .accessibilityLabel("Stopp avspilling")
                 }
                 .padding(.horizontal, AppSpacing.lg)
                 .padding(.vertical, AppSpacing.sm)
             }
-            .frame(height: AppSize.miniPlayerHeight)
+            .frame(height: AppSize.miniPlayerHeight, alignment: .top)
             .background(Color.appCard)
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(Color.appBorder.opacity(0.4))
-                    .frame(height: 1)
-            }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Spiller: \(episode.title)")
-            .onTapGesture {
-                playerVM.isExpanded = true
-            }
             .fullScreenCover(isPresented: Binding(
                 get: { playerVM.isExpanded },
                 set: { playerVM.isExpanded = $0 }

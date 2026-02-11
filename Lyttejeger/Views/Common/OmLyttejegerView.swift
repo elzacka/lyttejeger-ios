@@ -4,7 +4,18 @@ struct OmLyttejegerView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Spacer()
+                Button("Lukk") { dismiss() }
+                    .font(.buttonText)
+                    .foregroundStyle(Color.appAccent)
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.sm)
+
             ScrollView {
                 VStack(spacing: AppSpacing.xl) {
                     // Hero
@@ -17,13 +28,8 @@ struct OmLyttejegerView: View {
                         Text("Lyttejeger")
                             .font(.pageTitle)
                             .foregroundStyle(Color.appForeground)
-
-                        Text("Versjon \(AppConstants.appVersion)")
-                            .font(.caption2Text)
-                            .foregroundStyle(Color.appMutedForeground)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.top, AppSpacing.xl)
 
                     // Description
                     VStack(alignment: .leading, spacing: AppSpacing.md) {
@@ -54,7 +60,6 @@ struct OmLyttejegerView: View {
 
                         creditRow("Swift & SwiftUI", detail: "Apples rammeverk for iOS")
                         creditRow("Podcast Index", detail: "Åpen podkast-katalog")
-                        creditRow("NRK", detail: "Norsk rikskringkasting")
                         creditRow("sindrel/nrk-pod-feeds", detail: "NRK-podkaster via åpne RSS-feeder")
                         creditRow("DM Mono", detail: "Typografi av Colophon Foundry")
                     }
@@ -100,19 +105,8 @@ struct OmLyttejegerView: View {
                 }
                 .padding(.horizontal, AppSpacing.lg)
             }
-            .background(Color.appBackground)
-            .navigationTitle("Om Lyttejeger")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Lukk") {
-                        dismiss()
-                    }
-                    .font(.buttonText)
-                    .foregroundStyle(Color.appAccent)
-                }
-            }
         }
+        .background(Color.appBackground)
     }
 
     private func creditRow(_ title: String, detail: String) -> some View {

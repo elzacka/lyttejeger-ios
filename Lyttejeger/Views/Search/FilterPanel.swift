@@ -5,7 +5,35 @@ struct FilterPanel: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                if searchVM.activeFilterCount > 0 {
+                    Button("Nullstill") { searchVM.clearFilters() }
+                        .font(.buttonText)
+                        .foregroundStyle(Color.appAccent)
+                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                } else {
+                    Spacer()
+                        .frame(width: AppSize.touchTarget)
+                }
+
+                Spacer()
+
+                Text("Filter")
+                    .font(.sectionTitle)
+                    .foregroundStyle(Color.appForeground)
+
+                Spacer()
+
+                Button("Ferdig") { dismiss() }
+                    .font(.buttonText)
+                    .foregroundStyle(Color.appAccent)
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.md)
+
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.xl) {
                     // Active filters summary
@@ -25,6 +53,15 @@ struct FilterPanel: View {
                                 }
                                 if searchVM.filters.sortBy != .relevance {
                                     activeChip(searchVM.filters.sortBy.label) { searchVM.setSortBy(.relevance) }
+                                }
+                                if let duration = searchVM.filters.durationFilter {
+                                    activeChip(duration.label) { searchVM.setDurationFilter(nil) }
+                                }
+                                if searchVM.filters.dateFrom != nil || searchVM.filters.dateTo != nil {
+                                    activeChip("Datofilter") {
+                                        searchVM.setDateFrom(nil)
+                                        searchVM.setDateTo(nil)
+                                    }
                                 }
                             }
                         }
@@ -65,6 +102,26 @@ struct FilterPanel: View {
                         .pickerStyle(.segmented)
                     }
 
+                    // Duration (episode search only)
+                    if searchVM.activeTab == .episodes {
+                        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                            Text("Varighet")
+                                .font(.sectionTitle)
+                                .foregroundStyle(Color.appForeground)
+
+                            FlowLayout(spacing: AppSpacing.sm) {
+                                ForEach(DurationFilter.allCases, id: \.self) { duration in
+                                    FilterChip(
+                                        label: duration.label,
+                                        isSelected: searchVM.filters.durationFilter == duration
+                                    ) {
+                                        searchVM.toggleDurationFilter(duration)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Categories
                     VStack(alignment: .leading, spacing: AppSpacing.sm) {
                         Text("Kategorier")
@@ -85,28 +142,8 @@ struct FilterPanel: View {
                 }
                 .padding(AppSpacing.lg)
             }
-            .background(Color.appBackground)
-            .navigationTitle("Filter")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    if searchVM.activeFilterCount > 0 {
-                        Button("Nullstill") {
-                            searchVM.clearFilters()
-                        }
-                        .font(.buttonText)
-                        .foregroundStyle(Color.appAccent)
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Ferdig") {
-                        dismiss()
-                    }
-                    .font(.buttonText)
-                    .foregroundStyle(Color.appAccent)
-                }
-            }
         }
+        .background(Color.appBackground)
     }
 
     private func activeChip(_ label: String, remove: @escaping () -> Void) -> some View {

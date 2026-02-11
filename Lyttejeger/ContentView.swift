@@ -9,28 +9,30 @@ struct ContentView: View {
     @State private var playerVM = AudioPlayerViewModel()
     @State private var progressVM = PlaybackProgressViewModel()
     @State private var selectedTab = 0
+    @State private var homePath = NavigationPath()
+    @State private var myPodsPath = NavigationPath()
     @State private var showMenu = false
     @State private var showPersonvern = false
     @State private var showInnstillinger = false
     @State private var showOmLyttejeger = false
 
-    private let tabs: [(icon: String, iconFilled: String, label: String)] = [
-        ("house", "house.fill", "Hjem"),
-        ("heart", "heart.fill", "Podder"),
-        ("list.number", "list.number", "Kø"),
+    private let tabs: [(icon: String, iconFilled: String)] = [
+        ("house", "house.fill"),
+        ("heart", "heart.fill"),
+        ("list.number", "list.number"),
     ]
 
     var body: some View {
         VStack(spacing: 0) {
             // Tab content
             ZStack {
-                NavigationStack {
+                NavigationStack(path: $homePath) {
                     HomeView()
                 }
                 .opacity(selectedTab == 0 ? 1 : 0)
                 .zIndex(selectedTab == 0 ? 1 : 0)
 
-                NavigationStack {
+                NavigationStack(path: $myPodsPath) {
                     MyPodsView()
                 }
                 .opacity(selectedTab == 1 ? 1 : 0)
@@ -52,20 +54,23 @@ struct ContentView: View {
             HStack(spacing: 0) {
                 ForEach(0..<3) { index in
                     Button {
-                        selectedTab = index
-                    } label: {
-                        VStack(spacing: 2) {
-                            Image(systemName: selectedTab == index ? tabs[index].iconFilled : tabs[index].icon)
-                                .font(.system(size: 18, weight: selectedTab == index ? .semibold : .regular))
-                                .foregroundStyle(Color.appAccent)
-
-                            Text(tabs[index].label)
-                                .font(.system(size: 10, weight: selectedTab == index ? .medium : .regular, design: .monospaced))
-                                .foregroundStyle(selectedTab == index ? Color.appAccent : Color.appMutedForeground)
+                        if selectedTab == index {
+                            // Pop to root on re-tap
+                            switch index {
+                            case 0: homePath = NavigationPath()
+                            case 1: myPodsPath = NavigationPath()
+                            default: break
+                            }
+                        } else {
+                            selectedTab = index
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .contentShape(Rectangle())
+                    } label: {
+                        Image(systemName: selectedTab == index ? tabs[index].iconFilled : tabs[index].icon)
+                            .font(.system(size: 20, weight: selectedTab == index ? .semibold : .regular))
+                            .foregroundStyle(selectedTab == index ? Color.appAccent : Color.appMutedForeground)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel(["Hjem", "Mine podder", "Kø"][index])
                     .accessibilityAddTraits(selectedTab == index ? .isSelected : [])
@@ -80,18 +85,12 @@ struct ContentView: View {
                 Button {
                     showMenu = true
                 } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: "line.3.horizontal")
-                            .font(.system(size: 18))
-                            .foregroundStyle(Color.appMutedForeground)
-
-                        Text("Mer")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(Color.appMutedForeground)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .contentShape(Rectangle())
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Color.appMutedForeground)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Meny")
             }

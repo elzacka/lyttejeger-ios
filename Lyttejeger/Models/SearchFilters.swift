@@ -14,14 +14,37 @@ struct DateFilter: Equatable, Sendable {
     }
 }
 
+enum DurationFilter: String, CaseIterable, Sendable {
+    case under15 = "under15"
+    case from15to30 = "15to30"
+    case from30to60 = "30to60"
+    case over60 = "over60"
+
+    var label: String {
+        switch self {
+        case .under15: "Under 15 min"
+        case .from15to30: "15–30 min"
+        case .from30to60: "30–60 min"
+        case .over60: "Over 60 min"
+        }
+    }
+
+    func matches(duration: TimeInterval) -> Bool {
+        switch self {
+        case .under15: duration > 0 && duration < 900
+        case .from15to30: duration >= 900 && duration < 1800
+        case .from30to60: duration >= 1800 && duration < 3600
+        case .over60: duration >= 3600
+        }
+    }
+}
+
 struct SearchFilters: Equatable, Sendable {
     var query: String = ""
     var categories: [String] = []
-    var excludeCategories: [String] = []
     var languages: [String] = []
-    var maxDuration: TimeInterval? = nil
+    var durationFilter: DurationFilter? = nil
     var sortBy: SortOption = .relevance
-    var explicit: Bool? = nil
     var dateFrom: DateFilter? = nil
     var dateTo: DateFilter? = nil
 }

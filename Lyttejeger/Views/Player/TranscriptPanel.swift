@@ -7,7 +7,36 @@ struct TranscriptPanel: View {
     @State private var lastScrolledSegmentId: String?
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            // Custom header
+            HStack {
+                Button {
+                    autoScroll.toggle()
+                } label: {
+                    Image(systemName: autoScroll ? "arrow.up.arrow.down.circle.fill" : "arrow.up.arrow.down.circle")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(Color.appAccent)
+                }
+                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                .accessibilityLabel(autoScroll ? "Automatisk rulling på" : "Automatisk rulling av")
+
+                Spacer()
+
+                Text("Transkripsjon")
+                    .font(.sectionTitle)
+                    .foregroundStyle(Color.appForeground)
+
+                Spacer()
+
+                Button("Ferdig") { dismiss() }
+                    .font(.buttonText)
+                    .foregroundStyle(Color.appAccent)
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.md)
+
+            // Transcript content
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: AppSpacing.sm) {
@@ -68,25 +97,8 @@ struct TranscriptPanel: View {
                     }
                 }
             }
-            .background(Color.appBackground)
-            .navigationTitle("Transkripsjon")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Toggle(isOn: $autoScroll) {
-                        Image(systemName: autoScroll ? "arrow.up.arrow.down.circle.fill" : "arrow.up.arrow.down.circle")
-                    }
-                    .toggleStyle(.button)
-                    .tint(Color.appAccent)
-                    .accessibilityLabel(autoScroll ? "Automatisk rulling på" : "Automatisk rulling av")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Ferdig") { dismiss() }
-                        .font(.buttonText)
-                        .foregroundStyle(Color.appAccent)
-                }
-            }
         }
+        .background(Color.appBackground)
     }
 
     private func isCurrentSegment(_ segment: TranscriptSegment) -> Bool {

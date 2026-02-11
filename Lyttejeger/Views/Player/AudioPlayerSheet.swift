@@ -2,19 +2,25 @@ import SwiftUI
 
 struct AudioPlayerSheet: View {
     @Environment(AudioPlayerViewModel.self) private var playerVM
-    @Environment(\.dismiss) private var dismiss
     @State private var showChapters = false
     @State private var showTranscript = false
+    @State private var showPodcastDetail = false
 
     var body: some View {
-        NavigationStack {
+        ZStack(alignment: .top) {
             VStack(spacing: AppSpacing.xl) {
                 Spacer()
 
-                // Artwork
+                // Artwork (tap to view podcast)
                 if let imageUrl = playerVM.podcastImage ?? playerVM.currentEpisode?.imageUrl {
-                    CachedAsyncImage(url: imageUrl, size: AppSize.artworkLarge)
-                        .shadow(color: .black.opacity(0.15), radius: 20, y: 10)
+                    Button {
+                        showPodcastDetail = true
+                    } label: {
+                        CachedAsyncImage(url: imageUrl, size: AppSize.artworkLarge)
+                            .shadow(color: .black.opacity(0.15), radius: 20, y: 10)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Vis podcast")
                 }
 
                 // Title & podcast
@@ -22,12 +28,17 @@ struct AudioPlayerSheet: View {
                     Text(playerVM.currentEpisode?.title ?? "")
                         .font(.sectionTitle)
                         .foregroundStyle(Color.appForeground)
-                        .lineLimit(2)
+                        .lineLimit(3)
                         .multilineTextAlignment(.center)
 
-                    Text(playerVM.podcastTitle ?? "")
-                        .font(.bodyText)
-                        .foregroundStyle(Color.appMutedForeground)
+                    Button {
+                        showPodcastDetail = true
+                    } label: {
+                        Text(playerVM.podcastTitle ?? "")
+                            .font(.bodyText)
+                            .foregroundStyle(Color.appMutedForeground)
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, AppSpacing.lg)
 
@@ -83,24 +94,69 @@ struct AudioPlayerSheet: View {
                 .padding(.bottom, AppSpacing.sm)
             }
             .padding(AppSpacing.lg)
-            .background(Color.appBackground)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 18, weight: .medium))
+
+            // Top bar buttons (no toolbar to avoid iOS 26 circular backgrounds)
+            HStack {
+                Button {
+                    playerVM.isExpanded = false
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(Color.appMutedForeground)
+                }
+                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                .accessibilityLabel("Lukk spiller")
+
+                Spacer()
+
+                if let episode = playerVM.currentEpisode,
+                   let url = URL(string: episode.audioUrl) {
+                    ShareLink(item: url) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(Color.appMutedForeground)
                     }
-                    .accessibilityLabel("Lukk spiller")
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                    .accessibilityLabel("Del episode")
                 }
             }
-            .sheet(isPresented: $showChapters) {
-                ChapterPanel()
-            }
-            .sheet(isPresented: $showTranscript) {
-                TranscriptPanel()
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.top, AppSpacing.sm)
+        }
+        .background(Color.appBackground)
+        .sheet(isPresented: $showChapters) {
+            ChapterPanel()
+        }
+        .sheet(isPresented: $showTranscript) {
+            TranscriptPanel()
+        }
+        .sheet(isPresented: $showPodcastDetail) {
+            if let episode = playerVM.currentEpisode {
+                ZStack(alignment: .topTrailing) {
+                    NavigationStack {
+                        PodcastDetailView(podcast: Podcast(
+                            id: episode.podcastId,
+                            title: playerVM.podcastTitle ?? "",
+                            author: "",
+                            description: "",
+                            imageUrl: playerVM.podcastImage ?? episode.imageUrl ?? "",
+                            feedUrl: "",
+                            categories: [],
+                            language: "",
+                            episodeCount: 0,
+                            lastUpdated: "",
+                            rating: 0,
+                            explicit: false
+                        ))
+                    }
+
+                    Button("Lukk") { showPodcastDetail = false }
+                        .font(.buttonText)
+                        .foregroundStyle(Color.appAccent)
+                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.top, AppSpacing.sm)
+                }
             }
         }
     }

@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var lastPlayedInfo: LastPlayedInfo?
     @State private var recentEpisodes: [RecentEpisodeData] = []
     @State private var isLoadingRecent = false
+    @State private var hasLoadedRecent = false
 
     private var isHomeState: Bool {
         !searchVM.isLoading && searchVM.error == nil && searchVM.filters.query.isEmpty && searchVM.podcasts.isEmpty && !searchVM.hasActiveFilters
@@ -37,8 +38,8 @@ struct HomeView: View {
         @Bindable var vm = searchVM
 
         VStack(spacing: 0) {
-            // Search + tabs toolbar
-            VStack(spacing: AppSpacing.md) {
+            // Header
+            VStack(spacing: 0) {
                 // Brand wordmark
                 HStack(spacing: AppSpacing.sm) {
                     Image("LaunchLogo")
@@ -51,10 +52,10 @@ struct HomeView: View {
                         .foregroundStyle(Color.appForeground)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, AppSpacing.md)
+                .padding(.bottom, AppSpacing.lg)
 
-                // Search field — warm, understated, belongs to the beige world
-                HStack(spacing: AppSpacing.sm) {
+                // Search field
+                HStack(spacing: AppSpacing.md) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(Color.appAccent.opacity(0.6))
                         .font(.system(size: 16))
@@ -94,13 +95,13 @@ struct HomeView: View {
                     .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                     .accessibilityLabel(searchVM.activeFilterCount > 0 ? "Filter, \(searchVM.activeFilterCount) aktive" : "Filter")
                 }
-                .padding(.horizontal, AppSpacing.md)
-                .frame(height: 44)
+                .padding(.vertical, AppSpacing.md)
                 .overlay(alignment: .bottom) {
                     Rectangle()
                         .fill(Color.appBorder.opacity(0.4))
                         .frame(height: 1)
                 }
+                .padding(.bottom, AppSpacing.sm)
 
                 // Tab switcher
                 HStack(spacing: 0) {
@@ -118,7 +119,7 @@ struct HomeView: View {
                                 .font(.buttonText)
                                 .foregroundStyle(vm.activeTab == tab ? Color.appAccent : Color.appMutedForeground)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, AppSpacing.xs)
+                                .padding(.vertical, AppSpacing.sm)
                         }
                         .accessibilityAddTraits(vm.activeTab == tab ? .isSelected : [])
                     }
@@ -165,19 +166,12 @@ struct HomeView: View {
                                     }
                                 }
                             }
-
-                            if isLoadingRecent {
-                                ProgressView()
-                                    .tint(Color.appAccent)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.top, AppSpacing.md)
-                            }
                         }
                         .padding(.horizontal, AppSpacing.lg)
                         .padding(.top, AppSpacing.lg)
                         .padding(.bottom, 100)
                     }
-                } else if isLoadingRecent {
+                } else if !hasLoadedRecent && !subscriptionVM.subscriptions.isEmpty {
                     Spacer()
                     ProgressView()
                         .tint(Color.appAccent)
@@ -192,16 +186,9 @@ struct HomeView: View {
                             .frame(width: 48, height: 48)
                             .opacity(0.4)
 
-                        VStack(spacing: AppSpacing.sm) {
-                            Text("Finn din neste favoritt")
-                                .font(.bodyText)
-                                .foregroundStyle(Color.appMutedForeground)
-
-                            Text("Prøv å søke etter NRK, Aftenpodden\neller et tema du liker")
-                                .font(.caption2Text)
-                                .foregroundStyle(Color.appBorder)
-                                .multilineTextAlignment(.center)
-                        }
+                        Text("Finn din neste favoritt")
+                            .font(.bodyText)
+                            .foregroundStyle(Color.appMutedForeground)
                     }
 
                     Spacer()
@@ -266,9 +253,18 @@ struct HomeView: View {
         .navigationDestination(for: Podcast.self) { podcast in
             PodcastDetailView(podcast: podcast)
         }
-        .task {
+        .task(id: subscriptionVM.subscriptions.count) {
             loadLastPlayed()
+            hasLoadedRecent = false
             await loadRecentEpisodes()
+        }
+        .onChange(of: showNewFromSubscriptions) { _, newValue in
+            if newValue {
+                Task { await loadRecentEpisodes() }
+            }
+        }
+        .onChange(of: playerVM.currentEpisode?.id) { _, _ in
+            loadLastPlayed()
         }
     }
 
@@ -299,10 +295,13 @@ struct HomeView: View {
 
     private func loadRecentEpisodes() async {
         let subs = subscriptionVM.subscriptions
-        guard !subs.isEmpty else { return }
+        guard !subs.isEmpty else {
+            hasLoadedRecent = true
+            return
+        }
 
         isLoadingRecent = true
-        defer { isLoadingRecent = false }
+        defer { isLoadingRecent = false; hasLoadedRecent = true }
 
         let piSubs = subs.filter { !$0.podcastId.hasPrefix("nrk:") }
         let nrkSubs = subs.filter { $0.podcastId.hasPrefix("nrk:") }
@@ -335,6 +334,7 @@ struct HomeView: View {
         let formatter = ISO8601DateFormatter()
 
         for sub in nrkSubs {
+            guard !Task.isCancelled else { break }
             let slug = String(sub.podcastId.dropFirst(4))
             if let result = try? await NRKPodcastService.shared.fetchEpisodes(nrkSlug: slug) {
                 for ep in result.episodes {

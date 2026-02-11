@@ -55,7 +55,10 @@ struct EpisodeCard: View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             HStack(alignment: .top, spacing: AppSpacing.md) {
                 if showArtwork {
-                    CachedAsyncImage(url: episode.imageUrl ?? podcastImage, size: AppSize.artworkSmall)
+                    CachedAsyncImage(
+                        url: episode.imageUrl.flatMap { $0.isEmpty ? nil : $0 } ?? podcastImage,
+                        size: AppSize.artworkSmall
+                    )
                 }
 
                 VStack(alignment: .leading, spacing: AppSpacing.xs) {
@@ -120,7 +123,9 @@ struct EpisodeCard: View {
 
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    if let onPlay {
+                    if isNowPlaying {
+                        playerVM.togglePlayPause()
+                    } else if let onPlay {
                         onPlay()
                     } else {
                         playerVM.play(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)

@@ -1,9 +1,10 @@
 name: Lyttejeger
 options:
-  bundleIdPrefix: no.lene
+  bundleIdPrefix: com.Tazk
   deploymentTarget:
     iOS: "26.0"
   xcodeVersion: "26.2"
+  developmentLanguage: nb
   generateEmptyDirectories: true
 settings:
   base:
@@ -11,9 +12,9 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     INFOPLIST_FILE: Lyttejeger/Info.plist
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-    PRODUCT_BUNDLE_IDENTIFIER: no.lene.lyttejeger
-    MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "1"
+    PRODUCT_BUNDLE_IDENTIFIER: com.Tazk.Lyttejeger
+    MARKETING_VERSION: "1.0.1"
+    CURRENT_PROJECT_VERSION: "5"
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_USER_SCRIPT_SANDBOXING: true
 targets:
@@ -28,23 +29,32 @@ targets:
       - path: Lyttejeger/Resources/Assets.xcassets
       - path: Lyttejeger/Resources/Fonts
         buildPhase: resources
+      - path: Lyttejeger/Resources/nb.lproj
     settings:
       base:
         INFOPLIST_FILE: Lyttejeger/Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: no.lene.lyttejeger
+        PRODUCT_BUNDLE_IDENTIFIER: com.Tazk.Lyttejeger
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 8NW62A7PRA
+        TARGETED_DEVICE_FAMILY: "1"
         SUPPORTED_PLATFORMS: "iphonesimulator iphoneos"
         SUPPORTS_MACCATALYST: false
     info:
       path: Lyttejeger/Info.plist
       properties:
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UILaunchScreen:
           UIColorName: LaunchBackground
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsForMedia: true
         UIBackgroundModes: [audio]
-        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        ITSAppUsesNonExemptEncryption: false
         UIAppFonts:
           - DMMono-Light.ttf
           - DMMono-Regular.ttf
