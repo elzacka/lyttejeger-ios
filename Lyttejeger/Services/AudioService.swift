@@ -186,10 +186,6 @@ final class AudioService {
         updateNowPlaying()
     }
 
-    func seekToPosition(_ position: TimeInterval) {
-        seek(to: position)
-    }
-
     func stop() {
         if let endOfPlaybackObserver {
             NotificationCenter.default.removeObserver(endOfPlaybackObserver)

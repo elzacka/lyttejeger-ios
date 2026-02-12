@@ -72,14 +72,6 @@ enum AppConstants {
     /// Max podcasts to check for episode search
     static let episodeSearchPodcastLimit = 50
 
-    // MARK: - UI
-
-    /// Episodes per page
-    static let episodesPerPage = 100
-
-    /// Max description length before truncation
-    static let maxDescriptionLength = 300
-
     // MARK: - Image Cache
 
     /// Max images in memory cache
@@ -102,7 +94,7 @@ enum AppConstants {
 
     static let apiBase = "https://api.podcastindex.org/api/1.0"
     static let appName = "Lyttejeger"
-    static let appVersion = "1.0.1"
+    static let appVersion = "1.0.2"
 
     /// Default allowed language codes
     static let allowedLanguagesAPI = "no,nb,nn,da,sv,en"

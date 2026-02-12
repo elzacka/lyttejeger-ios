@@ -69,5 +69,4 @@ struct FilterOption: Identifiable, Hashable, Sendable {
     var id: String { value }
     var value: String
     var label: String
-    var count: Int?
 }

@@ -25,6 +25,10 @@ struct Podcast: Identifiable, Hashable, Sendable {
     /// The NRK RSS slug (e.g. "abels_taarn"), or nil if not an NRK podcast.
     var nrkSlug: String? { isNRKFeed ? String(id.dropFirst(4)) : nil }
 
+    static func == (lhs: Podcast, rhs: Podcast) -> Bool {
+        lhs.id == rhs.id
+    }
+
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }

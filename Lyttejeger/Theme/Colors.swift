@@ -24,17 +24,11 @@ extension Color {
     /// Border color - #D4D0C6
     static let appBorder = Color(red: 0.831, green: 0.816, blue: 0.776)
 
-    /// Hover state - #E2DED4
-    static let appHover = Color(red: 0.886, green: 0.871, blue: 0.831)
-
     /// Error - #9B2915
     static let appError = Color(red: 0.608, green: 0.161, blue: 0.082)
 
     /// Success - #3D6649
     static let appSuccess = Color(red: 0.239, green: 0.400, blue: 0.286)
-
-    /// Warning - #7B6D4D
-    static let appWarning = Color(red: 0.482, green: 0.427, blue: 0.302)
 
     /// Card background - white with slight warmth
     static let appCard = Color.white

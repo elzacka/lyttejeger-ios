@@ -108,7 +108,7 @@ final class AudioPlayerViewModel {
                 // Wait for player to be ready (check duration is valid)
                 for _ in 0..<20 { // Try for up to 2 seconds
                     if audioService.duration > 0 {
-                        audioService.seekToPosition(savedPosition)
+                        audioService.seek(to: savedPosition)
                         break
                     }
                     try? await Task.sleep(for: .milliseconds(100))

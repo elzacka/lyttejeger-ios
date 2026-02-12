@@ -47,16 +47,6 @@ private let languageToNorwegian: [String: String] = [
     "is": "Islandsk",
 ]
 
-func toNorwegianLanguage(_ language: String?) -> String {
-    guard let language, !language.isEmpty else { return "" }
-    let normalized = language.lowercased()
-    if let match = languageToNorwegian.first(where: { $0.key.lowercased() == normalized }) {
-        return match.value
-    }
-    if allLanguages.contains(language) { return language }
-    return language
-}
-
 // Language filter mapping for search
 let languageFilterMap: [String: [String]] = [
     "Norsk": ["Norsk", "Nynorsk", "no", "nb", "nn", "no-no", "nb-no", "nn-no"],

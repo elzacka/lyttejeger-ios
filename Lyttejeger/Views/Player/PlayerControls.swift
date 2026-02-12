@@ -2,7 +2,6 @@ import SwiftUI
 
 struct PlayerControls: View {
     @Environment(AudioPlayerViewModel.self) private var playerVM
-    @State private var showSpeedPicker = false
     @State private var showSleepTimer = false
     @State private var isSeeking = false
     @State private var seekPosition: TimeInterval = 0

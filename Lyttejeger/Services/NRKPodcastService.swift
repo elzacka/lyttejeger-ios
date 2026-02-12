@@ -163,7 +163,7 @@ actor NRKPodcastService {
 // MARK: - RSS Parser
 
 /// Lightweight RSS 2.0 parser for NRK podcast feeds.
-final class NRKRSSParser: NSObject, XMLParserDelegate, @unchecked Sendable {
+final class NRKRSSParser: NSObject, XMLParserDelegate {
     private let data: Data
     private let podcastId: String
 
