@@ -28,18 +28,11 @@ final class SearchViewModel {
         if !filters.languages.isEmpty { count += 1 }
         if filters.dateFrom != nil || filters.dateTo != nil { count += 1 }
         if filters.sortBy != .relevance { count += 1 }
-        if filters.durationFilter != nil { count += 1 }
+        if activeTab == .episodes && filters.durationFilter != nil { count += 1 }
         return count
     }
 
-    var hasActiveFilters: Bool {
-        !filters.categories.isEmpty
-        || !filters.languages.isEmpty
-        || filters.dateFrom != nil
-        || filters.dateTo != nil
-        || filters.sortBy != .relevance
-        || filters.durationFilter != nil
-    }
+    var hasActiveFilters: Bool { activeFilterCount > 0 }
 
     // MARK: - Search
 
@@ -162,62 +155,51 @@ final class SearchViewModel {
 
     // MARK: - Query Operator Enforcement
 
-    /// Apply parsed query operators as client-side post-filters on podcast results.
+    private func matchesQueryOperators(_ text: String, parsed: ParsedQuery) -> Bool {
+        for term in parsed.mustExclude where term.count >= 2 {
+            if text.contains(term.lowercased()) { return false }
+        }
+        for phrase in parsed.exactPhrases {
+            if !text.contains(phrase.lowercased()) { return false }
+        }
+        if !parsed.shouldInclude.isEmpty {
+            if !parsed.shouldInclude.contains(where: { text.contains($0.lowercased()) }) { return false }
+        }
+        return true
+    }
+
     private func applyQueryOperators(_ results: [Podcast], parsed: ParsedQuery) -> [Podcast] {
-        guard !parsed.mustExclude.isEmpty
-            || !parsed.exactPhrases.isEmpty
-            || !parsed.shouldInclude.isEmpty else {
+        guard !parsed.mustExclude.isEmpty || !parsed.exactPhrases.isEmpty || !parsed.shouldInclude.isEmpty else {
             return results
         }
+        return results.filter { matchesQueryOperators("\($0.title) \($0.description) \($0.author)".lowercased(), parsed: parsed) }
+    }
 
-        return results.filter { podcast in
-            let text = "\(podcast.title) \(podcast.description) \(podcast.author)".lowercased()
+    private func applyQueryOperators(_ results: [EpisodeWithPodcast], parsed: ParsedQuery) -> [EpisodeWithPodcast] {
+        guard !parsed.mustExclude.isEmpty || !parsed.exactPhrases.isEmpty || !parsed.shouldInclude.isEmpty else {
+            return results
+        }
+        return results.filter { matchesQueryOperators("\($0.episode.title) \($0.episode.description) \($0.podcastTitle)".lowercased(), parsed: parsed) }
+    }
 
-            // Exclude: remove results containing ANY mustExclude term
-            for term in parsed.mustExclude where term.count >= 2 {
-                if text.contains(term.lowercased()) { return false }
-            }
+    // MARK: - Shared Filters
 
-            // Exact phrases: require ALL present
-            for phrase in parsed.exactPhrases {
-                if !text.contains(phrase.lowercased()) { return false }
-            }
-
-            // OR: require at least ONE shouldInclude term present
-            if !parsed.shouldInclude.isEmpty {
-                let hasMatch = parsed.shouldInclude.contains { text.contains($0.lowercased()) }
-                if !hasMatch { return false }
-            }
-
-            return true
+    private func filterByLanguage(_ podcasts: [Podcast]) -> [Podcast] {
+        if !filters.languages.isEmpty {
+            podcasts.filter { p in filters.languages.contains { matchesLanguageFilter(p.language, filterLabel: $0) } }
+        } else {
+            podcasts.filter { isAllowedLanguage($0.language) }
         }
     }
 
-    /// Apply parsed query operators as client-side post-filters on episode results.
-    private func applyQueryOperators(_ results: [EpisodeWithPodcast], parsed: ParsedQuery) -> [EpisodeWithPodcast] {
-        guard !parsed.mustExclude.isEmpty
-            || !parsed.exactPhrases.isEmpty
-            || !parsed.shouldInclude.isEmpty else {
-            return results
-        }
-
-        return results.filter { item in
-            let text = "\(item.episode.title) \(item.episode.description) \(item.podcastTitle)".lowercased()
-
-            for term in parsed.mustExclude where term.count >= 2 {
-                if text.contains(term.lowercased()) { return false }
+    private func filterByCategory(_ podcasts: [Podcast]) -> [Podcast] {
+        guard !filters.categories.isEmpty else { return podcasts }
+        let lowerFilters = filters.categories.map { $0.lowercased() }
+        return podcasts.filter { p in
+            p.categories.contains { cat in
+                let lowerCat = cat.lowercased()
+                return lowerFilters.contains { lowerCat.contains($0) || $0.contains(lowerCat) }
             }
-
-            for phrase in parsed.exactPhrases {
-                if !text.contains(phrase.lowercased()) { return false }
-            }
-
-            if !parsed.shouldInclude.isEmpty {
-                let hasMatch = parsed.shouldInclude.contains { text.contains($0.lowercased()) }
-                if !hasMatch { return false }
-            }
-
-            return true
         }
     }
 
@@ -309,7 +291,7 @@ final class SearchViewModel {
             var options = SearchOptions()
             options.max = hasCategory ? AppConstants.searchResultsWithCategory : AppConstants.searchResultsDefault
             options.fulltext = true
-            options.lang = hasCategory ? nil : (getApiLanguageCodes(filters.languages) ?? AppConstants.allowedLanguagesAPI)
+            options.lang = getApiLanguageCodes(filters.languages) ?? AppConstants.allowedLanguagesAPI
             if hasCategory { options.cat = filters.categories.joined(separator: ",") }
 
             // Hybrid: title search + term search, deduplicated
@@ -338,27 +320,8 @@ final class SearchViewModel {
             guard !Task.isCancelled else { return }
 
             var results = PodcastTransform.transformFeeds(allFeeds)
-
-            // Language filter
-            if !filters.languages.isEmpty {
-                results = results.filter { p in
-                    filters.languages.contains { matchesLanguageFilter(p.language, filterLabel: $0) }
-                }
-            } else {
-                results = results.filter { isAllowedLanguage($0.language) }
-            }
-
-            // Category filter
-            if hasCategory {
-                results = results.filter { p in
-                    p.categories.contains { cat in
-                        filters.categories.contains { filter in
-                            cat.lowercased().contains(filter.lowercased()) ||
-                            filter.lowercased().contains(cat.lowercased())
-                        }
-                    }
-                }
-            }
+            results = filterByLanguage(results)
+            results = filterByCategory(results)
 
             // Apply query operators (exclude, exact phrase, OR)
             results = applyQueryOperators(results, parsed: parsed)
@@ -407,9 +370,27 @@ final class SearchViewModel {
             return
         }
 
-        let completeTerms = (parsed.mustInclude + parsed.shouldInclude).filter { $0.count >= 2 } + parsed.exactPhrases
         var allEpisodes: [EpisodeWithPodcast] = []
         var existingIds = Set<String>()
+
+        // When categories active, find matching podcasts for episode filtering
+        let hasCategory = !filters.categories.isEmpty
+        var categoryMatchedPodcasts: [Podcast]?
+        if hasCategory {
+            var catOptions = SearchOptions()
+            catOptions.max = AppConstants.searchResultsWithCategory
+            catOptions.fulltext = true
+            catOptions.lang = getApiLanguageCodes(filters.languages) ?? AppConstants.allowedLanguagesAPI
+            catOptions.cat = filters.categories.joined(separator: ",")
+            if let termRes = try? await api.searchByTerm(apiQuery, options: catOptions) {
+                var results = PodcastTransform.transformFeeds(termRes.feeds ?? [])
+                results = filterByCategory(results)
+                results = filterByLanguage(results)
+                categoryMatchedPodcasts = results
+            }
+            guard !Task.isCancelled else { return }
+        }
+        let categoryFeedIds: Set<String>? = categoryMatchedPodcasts.map { Set($0.map(\.id)) }
 
         // Strategy 1: byperson search
         if let personRes = try? await api.searchByPerson(apiQuery, max: 50) {
@@ -417,6 +398,12 @@ final class SearchViewModel {
             for (idx, ep) in eps.enumerated() {
                 guard !existingIds.contains(ep.id) else { continue }
                 let apiEp = personRes.items?[idx]
+
+                // Category filter: only include episodes from matching feeds
+                if let feedIds = categoryFeedIds {
+                    guard let feedId = apiEp?.feedId,
+                          feedIds.contains(String(feedId)) else { continue }
+                }
 
                 let feedLang = apiEp?.feedLanguage ?? ""
                 if !filters.languages.isEmpty {
@@ -440,8 +427,9 @@ final class SearchViewModel {
         guard !Task.isCancelled else { return }
 
         // Strategy 2: episodes from matching podcasts
-        if !podcasts.isEmpty {
-            let topPodcasts = Array(podcasts.prefix(AppConstants.episodeSearchPodcastLimit))
+        let episodeSourcePodcasts = categoryMatchedPodcasts ?? Array(podcasts.prefix(AppConstants.episodeSearchPodcastLimit))
+        if !episodeSourcePodcasts.isEmpty {
+            let topPodcasts = Array(episodeSourcePodcasts.prefix(AppConstants.episodeSearchPodcastLimit))
             let feedIds = topPodcasts.compactMap { Int($0.id) }
             let podcastMap = Dictionary(uniqueKeysWithValues: topPodcasts.map { ($0.id, $0) })
 
@@ -543,15 +531,7 @@ final class SearchViewModel {
             )
 
             var results = PodcastTransform.transformFeeds(res.feeds ?? [])
-
-            if !filters.languages.isEmpty {
-                results = results.filter { p in
-                    filters.languages.contains { matchesLanguageFilter(p.language, filterLabel: $0) }
-                }
-            } else {
-                results = results.filter { isAllowedLanguage($0.language) }
-            }
-
+            results = filterByLanguage(results)
             results = applyLocalFilters(results)
             podcasts = results
             episodes = []

@@ -28,8 +28,11 @@ This policy covers:
 
 ## Security Practices
 
-- No third-party dependencies (zero supply chain risk)
-- API keys are excluded from version control via `.gitignore`
-- Certificate pinning for API connections
-- All data stored locally on device (no cloud sync)
-- Privacy manifest declares all accessed APIs
+- **Zero dependencies:** No third-party libraries (zero supply chain risk)
+- **API key protection:** Keys are XOR-obfuscated as byte arrays in `Config/Secrets.swift` (gitignored), decoded at runtime via computed properties — never stored as plaintext in source
+- **Certificate pinning:** SHA-256 public key pins for Podcast Index API connections (leaf + intermediate CA) via custom `URLSessionDelegate`
+- **Local-only data:** All user data (subscriptions, queue, playback positions) stored on-device via SwiftData — no cloud sync, no analytics, no tracking
+- **Network security:** HTTPS enforced for all API calls; `NSAllowsArbitraryLoadsForMedia` enabled only for podcast audio stream URLs
+- **Strict concurrency:** Full Swift 6 strict concurrency checking (`SWIFT_STRICT_CONCURRENCY: complete`) eliminates data races at compile time
+- **Input normalization:** Search query parser normalizes smart punctuation (curly quotes, em/en dashes) to prevent injection of unexpected Unicode
+- **Background tasks:** Background refresh uses a fresh `ModelContainer` isolated from the main app context

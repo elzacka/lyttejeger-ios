@@ -2,51 +2,6 @@ import Foundation
 
 let allLanguages = ["Norsk", "Engelsk", "Svensk", "Dansk"]
 
-private let languageToNorwegian: [String: String] = [
-    // English names
-    "English": "Engelsk",
-    "Norwegian": "Norsk",
-    "Swedish": "Svensk",
-    "Danish": "Dansk",
-    "German": "Tysk",
-    "French": "Fransk",
-    "Spanish": "Spansk",
-    "Italian": "Italiensk",
-    "Portuguese": "Portugisisk",
-    "Dutch": "Nederlandsk",
-    "Polish": "Polsk",
-    "Russian": "Russisk",
-    "Japanese": "Japansk",
-    "Chinese": "Kinesisk",
-    "Korean": "Koreansk",
-    "Arabic": "Arabisk",
-    "Hindi": "Hindi",
-    "Finnish": "Finsk",
-    "Icelandic": "Islandsk",
-    // ISO 639-1 codes
-    "en": "Engelsk",
-    "no": "Norsk",
-    "nb": "Norsk",
-    "nn": "Norsk",
-    "sv": "Svensk",
-    "da": "Dansk",
-    "de": "Tysk",
-    "fr": "Fransk",
-    "es": "Spansk",
-    "it": "Italiensk",
-    "pt": "Portugisisk",
-    "nl": "Nederlandsk",
-    "pl": "Polsk",
-    "ru": "Russisk",
-    "ja": "Japansk",
-    "zh": "Kinesisk",
-    "ko": "Koreansk",
-    "ar": "Arabisk",
-    "hi": "Hindi",
-    "fi": "Finsk",
-    "is": "Islandsk",
-]
-
 // Language filter mapping for search
 let languageFilterMap: [String: [String]] = [
     "Norsk": ["Norsk", "Nynorsk", "no", "nb", "nn", "no-no", "nb-no", "nn-no"],

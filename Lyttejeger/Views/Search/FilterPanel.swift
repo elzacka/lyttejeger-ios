@@ -13,16 +13,7 @@ struct FilterPanel: View {
                         .font(.buttonText)
                         .foregroundStyle(Color.appAccent)
                         .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                } else {
-                    Spacer()
-                        .frame(width: AppSize.touchTarget)
                 }
-
-                Spacer()
-
-                Text("Filter")
-                    .font(.sectionTitle)
-                    .foregroundStyle(Color.appForeground)
 
                 Spacer()
 
@@ -31,8 +22,8 @@ struct FilterPanel: View {
                     .foregroundStyle(Color.appAccent)
                     .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
             }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.top, AppSpacing.md)
+            .padding(.horizontal, AppSpacing.xl)
+            .padding(.top, AppSpacing.sm)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.xl) {
@@ -54,7 +45,7 @@ struct FilterPanel: View {
                                 if searchVM.filters.sortBy != .relevance {
                                     activeChip(searchVM.filters.sortBy.label) { searchVM.setSortBy(.relevance) }
                                 }
-                                if let duration = searchVM.filters.durationFilter {
+                                if searchVM.activeTab == .episodes, let duration = searchVM.filters.durationFilter {
                                     activeChip(duration.label) { searchVM.setDurationFilter(nil) }
                                 }
                                 if searchVM.filters.dateFrom != nil || searchVM.filters.dateTo != nil {

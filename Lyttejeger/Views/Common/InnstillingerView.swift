@@ -10,23 +10,13 @@ struct InnstillingerView: View {
             // Header
             HStack {
                 Spacer()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Text("Innstillinger")
-                    .font(.sectionTitle)
-                    .foregroundStyle(Color.appForeground)
-
-                Spacer()
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .overlay(alignment: .trailing) {
-                        Button("Lukk") { dismiss() }
-                            .font(.buttonText)
-                            .foregroundStyle(Color.appAccent)
-                            .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                    }
+                Button("Lukk") { dismiss() }
+                    .font(.buttonText)
+                    .foregroundStyle(Color.appAccent)
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
             }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.top, AppSpacing.md)
+            .padding(.horizontal, AppSpacing.xl)
+            .padding(.top, AppSpacing.sm)
 
             ScrollView {
                 VStack(spacing: AppSpacing.lg) {

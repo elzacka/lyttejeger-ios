@@ -151,7 +151,6 @@ extension Podcast {
         language: "no",
         episodeCount: 342,
         lastUpdated: "2026-02-07T10:00:00Z",
-        rating: 4.5,
         explicit: false
     )
 
@@ -168,7 +167,6 @@ extension Podcast {
             language: "no",
             episodeCount: 87,
             lastUpdated: "2026-02-06T08:00:00Z",
-            rating: 4.8,
             explicit: false
         ),
         Podcast(
@@ -182,7 +180,6 @@ extension Podcast {
             language: "no",
             episodeCount: 1200,
             lastUpdated: "2026-02-07T16:00:00Z",
-            rating: 4.2,
             explicit: false
         ),
         Podcast(
@@ -196,7 +193,6 @@ extension Podcast {
             language: "no",
             episodeCount: 56,
             lastUpdated: "2026-01-20T12:00:00Z",
-            rating: 4.6,
             explicit: false
         ),
     ]

@@ -134,19 +134,10 @@ struct AudioPlayerSheet: View {
             if let episode = playerVM.currentEpisode {
                 ZStack(alignment: .topTrailing) {
                     NavigationStack {
-                        PodcastDetailView(podcast: Podcast(
+                        PodcastDetailView(podcast: .minimal(
                             id: episode.podcastId,
                             title: playerVM.podcastTitle ?? "",
-                            author: "",
-                            description: "",
-                            imageUrl: playerVM.podcastImage ?? episode.imageUrl ?? "",
-                            feedUrl: "",
-                            categories: [],
-                            language: "",
-                            episodeCount: 0,
-                            lastUpdated: "",
-                            rating: 0,
-                            explicit: false
+                            imageUrl: playerVM.podcastImage ?? episode.imageUrl ?? ""
                         ))
                     }
 

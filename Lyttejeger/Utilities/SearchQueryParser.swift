@@ -25,6 +25,8 @@ enum SearchQueryParser {
             .replacingOccurrences(of: "\u{2014}", with: "-")
             .replacingOccurrences(of: "\u{201C}", with: "\"")
             .replacingOccurrences(of: "\u{201D}", with: "\"")
+            .replacingOccurrences(of: "\u{2018}", with: "'")
+            .replacingOccurrences(of: "\u{2019}", with: "'")
         let trimmed = normalized.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return result }
 

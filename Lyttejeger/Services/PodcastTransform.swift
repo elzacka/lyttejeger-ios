@@ -16,20 +16,16 @@ enum PodcastTransform {
     static func transformFeed(_ feed: PodcastIndexFeed) -> Podcast {
         Podcast(
             id: String(feed.id),
-            guid: feed.podcastGuid,
             title: feed.title ?? "Untitled",
             author: feed.author ?? feed.ownerName ?? "Ukjent",
             description: htmlToText(feed.description ?? ""),
             imageUrl: feed.artwork ?? feed.image ?? "",
             feedUrl: feed.url ?? feed.originalUrl ?? "",
-            websiteUrl: feed.link,
             categories: Array((feed.categories ?? [:]).values),
             language: normalizeLanguage(feed.language ?? ""),
             episodeCount: feed.episodeCount ?? 0,
             lastUpdated: safeTimestampToISO(feed.lastUpdateTime),
-            rating: calculateRating(feed),
-            explicit: feed.explicit ?? false,
-            itunesId: feed.itunesId
+            explicit: feed.explicit ?? false
         )
     }
 
@@ -82,8 +78,9 @@ enum PodcastTransform {
             "sv": "Svenska", "da": "Dansk", "de": "Deutsch",
             "fr": "Français", "es": "Español", "fi": "Suomi", "is": "Íslenska",
         ]
-        let normalized = lang.lowercased().split(separator: "-").first.map(String.init) ?? lang.lowercased()
-        return langMap[lang.lowercased()] ?? langMap[normalized] ?? lang.uppercased()
+        let lower = lang.lowercased()
+        let normalized = lower.split(separator: "-").first.map(String.init) ?? lower
+        return langMap[lower] ?? langMap[normalized] ?? lang.uppercased()
     }
 
     private static func normalizeEpisodeType(_ type: String?) -> EpisodeType? {
@@ -94,28 +91,6 @@ enum PodcastTransform {
         case "full": return .full
         default: return nil
         }
-    }
-
-    private static func calculateRating(_ feed: PodcastIndexFeed) -> Double {
-        var score = 3.0
-
-        let episodeCount = feed.episodeCount ?? 0
-        if episodeCount > 100 { score += 0.5 }
-        else if episodeCount > 50 { score += 0.3 }
-        else if episodeCount > 20 { score += 0.1 }
-
-        if let lastUpdate = feed.lastUpdateTime {
-            let daysSinceUpdate = (Date().timeIntervalSince1970 - Double(lastUpdate)) / 86400
-            if daysSinceUpdate < 7 { score += 0.5 }
-            else if daysSinceUpdate < 30 { score += 0.3 }
-            else if daysSinceUpdate < 90 { score += 0.1 }
-        }
-
-        if (feed.crawlErrors ?? 0) > 0 || (feed.parseErrors ?? 0) > 0 {
-            score -= 0.3
-        }
-
-        return min(5, max(1, (score * 10).rounded() / 10))
     }
 
     private static func transformSoundbites(

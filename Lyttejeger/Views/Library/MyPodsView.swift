@@ -34,6 +34,13 @@ struct MyPodsView: View {
                             }
                             .buttonStyle(CardButtonStyle())
                             .accessibilityLabel(sub.title)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    subscriptionVM.toggleSubscription(podcast: Podcast(subscription: sub))
+                                } label: {
+                                    Label("Slutt å følge", systemImage: "heart.slash")
+                                }
+                            }
                         }
                     }
                     .padding(AppSpacing.lg)

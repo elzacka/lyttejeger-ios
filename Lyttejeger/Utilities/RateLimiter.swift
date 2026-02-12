@@ -16,11 +16,8 @@ actor RateLimiter {
 
         if elapsed < interval {
             let waitTime = interval - elapsed
-            let nextTime = lastRequestTime.addingTimeInterval(interval)
             try? await Task.sleep(for: .seconds(waitTime))
-            lastRequestTime = nextTime
-        } else {
-            lastRequestTime = now
         }
+        lastRequestTime = Date()
     }
 }

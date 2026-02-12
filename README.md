@@ -10,9 +10,12 @@ En podkastspiller for iOS, skrevet i SwiftUI. Rolig, retro design uten sporing e
 - Abonnementer med nytt-fra-mine-podder-visning
 - Fullskjermspiller med kapitler, transkripsjoner og sovetimer
 - Eksplisitt-merking per Apple og Podcast Index sine retningslinjer
-- Sortering og filtrering: språk, kategori, dato, popularitet
+- Sortering og filtrering: språk, kategori, dato, popularitet, varighet
 - Avansert søk med eksakte fraser (`"..."`), ekskludering (`-ord`) og OR-operator
+- Bakgrunnsoppdatering av abonnementer via Background App Refresh
 - All data lagres lokalt — ingen sky, ingen kontoer
+
+Se [brukerveiledningen](Brukerveiledning.md) for detaljer om søk og filtrering.
 
 ## Teknologi
 
@@ -50,14 +53,14 @@ API-nøkler er ikke inkludert i repoet. Opprett `Lyttejeger/Config/Secrets.swift
 ```
 Lyttejeger/
   Config/          Konstanter, hemmeligheter (gitignored)
-  Data/            Kategorier, språk (norske oversettelser)
+  Data/            Kategorier, språk
   Models/          Podcast, Episode, SwiftData-modeller
-  Services/        API-klienter (actor), lydtjeneste, transformasjoner
+  Services/        API-klienter (actor), lydtjeneste, bakgrunnsoppdatering
   Theme/           Farger, typografi, spacing
   Utilities/       Hastighetsbegrenser, søkeparser, tidsformatering
   ViewModels/      Søk, kø, abonnementer, spiller, fremdrift
   Views/
-    Common/        Gjenbrukbare komponenter (bildecache, meny, personvern)
+    Common/        Gjenbrukbare komponenter (bildecache, meny, om/personvern)
     Library/       Mine podder, kø
     Player/        Spiller, kontroller, kapitler, transkripsjoner
     Podcast/       Podkastdetaljer

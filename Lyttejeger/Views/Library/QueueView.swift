@@ -52,6 +52,9 @@ struct QueueView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.appBackground)
         .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(for: PodcastRoute.self) { route in
+            PodcastDetailView(podcast: route.podcast, focusEpisodeId: route.focusEpisodeId)
+        }
         .confirmationDialog("Tøm køen?", isPresented: $showClearConfirmation, titleVisibility: .visible) {
             Button("Tøm kø (\(queueVM.items.count))", role: .destructive) {
                 queueVM.clearQueue()

@@ -8,26 +8,32 @@ struct ExpandableText: View {
     @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.xs) {
-            Text(text)
-                .font(textFont)
-                .foregroundStyle(textColor)
-                .lineLimit(isExpanded ? nil : previewLines)
-
-            Text(isExpanded ? "Vis mindre" : "Vis mer")
-                .font(.caption2Text)
-                .foregroundStyle(Color.appAccent)
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if UIAccessibility.isReduceMotionEnabled {
-                isExpanded.toggle()
-            } else {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    isExpanded.toggle()
+        Text(text)
+            .font(textFont)
+            .foregroundStyle(textColor)
+            .lineLimit(isExpanded ? nil : previewLines)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .bottomTrailing) {
+                if !isExpanded {
+                    LinearGradient(
+                        colors: [textColor.opacity(0), textColor.opacity(0.15)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(height: 20)
+                    .allowsHitTesting(false)
                 }
             }
-        }
-        .accessibilityLabel(isExpanded ? "Skjul beskrivelse" : "Vis beskrivelse")
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if UIAccessibility.isReduceMotionEnabled {
+                    isExpanded.toggle()
+                } else {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                }
+            }
+            .accessibilityLabel(isExpanded ? "Skjul beskrivelse" : "Vis beskrivelse")
     }
 }

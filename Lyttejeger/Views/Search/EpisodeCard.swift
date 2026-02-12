@@ -26,6 +26,13 @@ struct EpisodeCard: View {
         return parts.joined(separator: " · ")
     }
 
+    private var podcastRoute: PodcastRoute {
+        PodcastRoute(
+            podcast: .minimal(id: episode.podcastId, title: podcastTitle, imageUrl: podcastImage),
+            focusEpisodeId: episode.id
+        )
+    }
+
     private var hasBadges: Bool {
         progressVM.isCompleted(episode.id)
             || (progressVM.progressFraction(for: episode.id) ?? 0) > 0.01
@@ -55,10 +62,13 @@ struct EpisodeCard: View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             HStack(alignment: .top, spacing: AppSpacing.md) {
                 if showArtwork {
-                    CachedAsyncImage(
-                        url: episode.imageUrl.flatMap { $0.isEmpty ? nil : $0 } ?? podcastImage,
-                        size: AppSize.artworkSmall
-                    )
+                    NavigationLink(value: podcastRoute) {
+                        CachedAsyncImage(
+                            url: episode.imageUrl.flatMap { $0.isEmpty ? nil : $0 } ?? podcastImage,
+                            size: AppSize.artworkSmall
+                        )
+                    }
+                    .buttonStyle(CardButtonStyle())
                 }
 
                 VStack(alignment: .leading, spacing: AppSpacing.xs) {
@@ -71,7 +81,6 @@ struct EpisodeCard: View {
                     Text(episode.title)
                         .font(.cardTitle)
                         .foregroundStyle(isNowPlaying ? Color.appAccent : Color.appForeground)
-                        .lineLimit(2)
 
                     if !metadataLine.isEmpty {
                         HStack(spacing: AppSpacing.sm) {
@@ -151,9 +160,9 @@ struct EpisodeCard: View {
                 .clipShape(.rect(cornerRadius: 1.5))
             }
 
-            // Description — collapsed by default
+            // Description — 1-line preview, tap to expand
             if !episode.description.isEmpty {
-                ExpandableText(text: episode.description)
+                ExpandableText(text: episode.description, previewLines: 1)
             }
         }
     }

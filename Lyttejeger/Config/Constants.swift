@@ -90,6 +90,14 @@ enum AppConstants {
     /// Max transcript download size (bytes)
     static let maxTranscriptSize = 5 * 1024 * 1024
 
+    // MARK: - Background Refresh
+
+    /// BGTaskScheduler task identifier
+    static let backgroundRefreshTaskId = "com.Tazk.Lyttejeger.refresh"
+
+    /// Earliest interval between background refreshes (seconds)
+    static let backgroundRefreshInterval: TimeInterval = 60 * 60
+
     // MARK: - API
 
     static let apiBase = "https://api.podcastindex.org/api/1.0"

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PodcastDetailView: View {
     let podcast: Podcast
+    var focusEpisodeId: String? = nil
 
     @Environment(SubscriptionViewModel.self) private var subscriptionVM
     @Environment(AudioPlayerViewModel.self) private var playerVM
@@ -18,6 +19,7 @@ struct PodcastDetailView: View {
     private var pod: Podcast { podcastInfo ?? podcast }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: AppSpacing.lg) {
                 // Header
@@ -134,6 +136,7 @@ struct PodcastDetailView: View {
                                 podcastImage: nrkImageUrl ?? pod.imageUrl,
                                 showArtwork: false
                             )
+                            .id(episode.id)
                         }
                     }
                     .padding(.horizontal, AppSpacing.lg)
@@ -168,6 +171,21 @@ struct PodcastDetailView: View {
             async let enrichTask: () = enrichPodcastIfNeeded()
             _ = await (episodesTask, enrichTask)
         }
+        .onChange(of: isLoading) { old, new in
+            if old && !new, let focusId = focusEpisodeId {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(300))
+                    if UIAccessibility.isReduceMotionEnabled {
+                        proxy.scrollTo(focusId, anchor: .center)
+                    } else {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            proxy.scrollTo(focusId, anchor: .center)
+                        }
+                    }
+                }
+            }
+        }
+        } // ScrollViewReader
     }
 
     /// Fetches full podcast data from API when initial data is incomplete

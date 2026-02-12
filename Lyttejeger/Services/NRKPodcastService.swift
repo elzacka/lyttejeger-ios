@@ -136,9 +136,8 @@ actor NRKPodcastService {
             feedUrl: "\(Self.feedBaseURL)\(entry.id).xml",
             categories: [],
             language: "Norsk",
-            episodeCount: 10,
+            episodeCount: 0,
             lastUpdated: "",
-            rating: 3.5,
             explicit: false
         )
     }

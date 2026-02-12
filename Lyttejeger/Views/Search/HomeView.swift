@@ -210,10 +210,7 @@ struct HomeView: View {
                                 NoResultsView()
                             } else {
                                 ForEach(searchVM.podcasts) { podcast in
-                                    NavigationLink(value: podcast) {
-                                        PodcastCard(podcast: podcast)
-                                    }
-                                    .buttonStyle(CardButtonStyle())
+                                    PodcastCard(podcast: podcast)
                                 }
                             }
                         } else {
@@ -250,8 +247,8 @@ struct HomeView: View {
         .sheet(isPresented: $showFilters) {
             FilterPanel()
         }
-        .navigationDestination(for: Podcast.self) { podcast in
-            PodcastDetailView(podcast: podcast)
+        .navigationDestination(for: PodcastRoute.self) { route in
+            PodcastDetailView(podcast: route.podcast, focusEpisodeId: route.focusEpisodeId)
         }
         .task(id: subscriptionVM.subscriptions.count) {
             loadLastPlayed()

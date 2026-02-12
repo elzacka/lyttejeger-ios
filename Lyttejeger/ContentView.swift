@@ -12,7 +12,6 @@ struct ContentView: View {
     @State private var homePath = NavigationPath()
     @State private var myPodsPath = NavigationPath()
     @State private var showMenu = false
-    @State private var showPersonvern = false
     @State private var showInnstillinger = false
     @State private var showOmLyttejeger = false
 
@@ -100,14 +99,12 @@ struct ContentView: View {
         }
         .background(Color.appBackground)
         .sheet(isPresented: $showMenu) {
-            MenuSheet(showPersonvern: $showPersonvern, showInnstillinger: $showInnstillinger, showOmLyttejeger: $showOmLyttejeger)
-                .presentationDetents([.height(250)])
-        }
-        .sheet(isPresented: $showPersonvern) {
-            PersonvernView()
+            MenuSheet(showInnstillinger: $showInnstillinger, showOmLyttejeger: $showOmLyttejeger)
+                .presentationDetents([.height(200)])
         }
         .sheet(isPresented: $showInnstillinger) {
             InnstillingerView()
+                .presentationDetents([.height(280)])
         }
         .sheet(isPresented: $showOmLyttejeger) {
             OmLyttejegerView()
@@ -148,7 +145,6 @@ struct ContentView: View {
 
 private struct MenuSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Binding var showPersonvern: Bool
     @Binding var showInnstillinger: Bool
     @Binding var showOmLyttejeger: Bool
 
@@ -165,13 +161,6 @@ private struct MenuSheet: View {
                 menuRow("Innstillinger", icon: "gearshape") {
                     dismiss()
                     showInnstillinger = true
-                }
-
-                menuDivider
-
-                menuRow("Personvern", icon: "shield.checkered") {
-                    dismiss()
-                    showPersonvern = true
                 }
 
                 menuDivider

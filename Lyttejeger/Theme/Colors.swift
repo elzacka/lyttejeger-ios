@@ -32,7 +32,4 @@ extension Color {
 
     /// Card background - white with slight warmth
     static let appCard = Color.white
-
-    /// Input background
-    static let appInput = Color.white
 }

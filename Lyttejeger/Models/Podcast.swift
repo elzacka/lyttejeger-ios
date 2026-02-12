@@ -4,20 +4,16 @@ import Foundation
 
 struct Podcast: Identifiable, Hashable, Sendable {
     let id: String
-    var guid: String?
     var title: String
     var author: String
     var description: String
     var imageUrl: String
     var feedUrl: String
-    var websiteUrl: String?
     var categories: [String]
     var language: String
     var episodeCount: Int
     var lastUpdated: String
-    var rating: Double
     var explicit: Bool
-    var itunesId: Int?
 
     /// True if this podcast comes from the NRK feed source.
     var isNRKFeed: Bool { id.hasPrefix("nrk:") }
@@ -35,6 +31,15 @@ struct Podcast: Identifiable, Hashable, Sendable {
 }
 
 extension Podcast {
+    /// Minimal podcast stub for navigation (e.g. from episode cards, queue items).
+    static func minimal(id: String, title: String, imageUrl: String) -> Podcast {
+        Podcast(
+            id: id, title: title, author: "", description: "",
+            imageUrl: imageUrl, feedUrl: "", categories: [],
+            language: "", episodeCount: 0, lastUpdated: "", explicit: false
+        )
+    }
+
     init(subscription: Subscription) {
         self.init(
             id: subscription.podcastId,
@@ -47,10 +52,16 @@ extension Podcast {
             language: "",
             episodeCount: 0,
             lastUpdated: "",
-            rating: 0,
             explicit: false
         )
     }
+}
+
+// MARK: - Navigation Route
+
+struct PodcastRoute: Hashable {
+    let podcast: Podcast
+    var focusEpisodeId: String?
 }
 
 // MARK: - Episode

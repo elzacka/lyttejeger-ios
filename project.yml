@@ -32,11 +32,8 @@ targets:
       - path: Lyttejeger/Resources/nb.lproj
     settings:
       base:
-        INFOPLIST_FILE: Lyttejeger/Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: com.Tazk.Lyttejeger
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 8NW62A7PRA
-        TARGETED_DEVICE_FAMILY: "1"
         SUPPORTED_PLATFORMS: "iphonesimulator iphoneos"
         SUPPORTS_MACCATALYST: false
     info:
@@ -48,12 +45,11 @@ targets:
           UIColorName: LaunchBackground
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsForMedia: true
-        UIBackgroundModes: [audio]
+        UIBackgroundModes: [audio, fetch]
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.Tazk.Lyttejeger.refresh
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationPortraitUpsideDown
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
         ITSAppUsesNonExemptEncryption: false
         UIAppFonts:
           - DMMono-Light.ttf

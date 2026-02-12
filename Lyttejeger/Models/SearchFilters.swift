@@ -43,10 +43,10 @@ struct SearchFilters: Equatable, Sendable {
     var query: String = ""
     var categories: [String] = []
     var languages: [String] = []
-    var durationFilter: DurationFilter? = nil
+    var durationFilter: DurationFilter?
     var sortBy: SortOption = .relevance
-    var dateFrom: DateFilter? = nil
-    var dateTo: DateFilter? = nil
+    var dateFrom: DateFilter?
+    var dateTo: DateFilter?
 }
 
 enum SortOption: String, CaseIterable, Sendable {

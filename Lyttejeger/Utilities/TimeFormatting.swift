@@ -29,6 +29,13 @@ func formatDuration(_ seconds: TimeInterval) -> String {
     return "\(totalMinutes) min"
 }
 
+private nonisolated(unsafe) let shortDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "nb_NO")
+    f.dateFormat = "MMM yyyy"
+    return f
+}()
+
 private nonisolated(unsafe) let iso8601Formatter: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -36,6 +43,14 @@ private nonisolated(unsafe) let iso8601Formatter: ISO8601DateFormatter = {
 }()
 
 private nonisolated(unsafe) let iso8601BasicFormatter = ISO8601DateFormatter()
+
+/// Format ISO date to short month + year (e.g., "jan. 2025")
+func formatShortDate(_ dateString: String) -> String? {
+    guard let date = iso8601Formatter.date(from: dateString) ?? iso8601BasicFormatter.date(from: dateString) else {
+        return nil
+    }
+    return shortDateFormatter.string(from: date)
+}
 
 /// Format relative date (e.g., "I dag", "I går", "3 dager siden")
 func formatRelativeDate(_ dateString: String) -> String {

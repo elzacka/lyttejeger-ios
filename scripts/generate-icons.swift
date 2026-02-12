@@ -6,11 +6,38 @@ import Foundation
 // MARK: - Config
 
 let projectRoot = "/Users/lene/dev/lyttejeger-ios"
-let sourcePath = "\(projectRoot)/Headphones.png"
 let assetsPath = "\(projectRoot)/Lyttejeger/Resources/Assets.xcassets"
 
-guard let sourceImage = NSImage(contentsOfFile: sourcePath) else {
-    fatalError("Cannot load \(sourcePath)")
+// Try original source first, fall back to extracting from current app icon
+let sourcePath = "\(projectRoot)/Headphones.png"
+let fallbackPath = "\(assetsPath)/AppIcon.appiconset/AppIcon.png"
+let oldPadding: CGFloat = 140 // padding used in previous icon generation
+
+let sourceImage: NSImage
+let needsCrop: Bool
+
+if let img = NSImage(contentsOfFile: sourcePath) {
+    sourceImage = img
+    needsCrop = false
+    print("Using source: Headphones.png")
+} else if let img = NSImage(contentsOfFile: fallbackPath) {
+    // Crop out the old padding to extract the headphones
+    let full = img.size
+    let cropOrigin = oldPadding
+    let cropSize = full.width - oldPadding * 2
+    let cropRect = NSRect(x: cropOrigin, y: cropOrigin, width: cropSize, height: cropSize)
+
+    let cropped = NSImage(size: NSSize(width: cropSize, height: cropSize))
+    cropped.lockFocus()
+    img.draw(in: NSRect(x: 0, y: 0, width: cropSize, height: cropSize),
+             from: cropRect, operation: .copy, fraction: 1.0)
+    cropped.unlockFocus()
+
+    sourceImage = cropped
+    needsCrop = true
+    print("Using source: existing AppIcon.png (cropped)")
+} else {
+    fatalError("Cannot load source image. Place Headphones.png at project root or ensure AppIcon.png exists.")
 }
 
 // MARK: - Helpers
@@ -48,7 +75,7 @@ func savePNG(_ data: Data, to path: String) {
 // MARK: - App Icon (1024x1024, beige bg + headphones)
 
 let iconSize = 1024
-let padding: CGFloat = 140
+let padding: CGFloat = 60
 let iconData = renderPNG(size: iconSize) { _ in
     // Beige background (#F4F1EA)
     NSColor(red: 0xF4/255.0, green: 0xF1/255.0, blue: 0xEA/255.0, alpha: 1.0).setFill()
