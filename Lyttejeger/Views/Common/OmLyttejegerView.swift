@@ -5,9 +5,8 @@ struct OmLyttejegerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @State private var showExportConfirmation = false
     @State private var showDeleteConfirmation = false
-    @State private var showExportSheet = false
-    @State private var exportURL: URL?
 
     private let privacyURL = URL(string: "https://github.com/elzacka/lyttejeger-ios/blob/main/Personvern.md")!
     private let guideURL = URL(string: "https://github.com/elzacka/lyttejeger-ios/blob/main/Brukerveiledning.md")!
@@ -69,7 +68,7 @@ struct OmLyttejegerView: View {
                         cardHeader("Dine data")
 
                         Button {
-                            exportData()
+                            showExportConfirmation = true
                         } label: {
                             HStack(spacing: AppSpacing.sm) {
                                 Image(systemName: "square.and.arrow.down")
@@ -147,6 +146,14 @@ struct OmLyttejegerView: View {
             }
         }
         .background(Color.appBackground)
+        .alert("Eksporter data?", isPresented: $showExportConfirmation) {
+            Button("Avbryt", role: .cancel) {}
+            Button("Eksporter") {
+                exportData()
+            }
+        } message: {
+            Text("Eksporterer abonnementer, spillekø og avspillingsposisjoner som JSON-fil.")
+        }
         .alert("Slett alle data?", isPresented: $showDeleteConfirmation) {
             Button("Avbryt", role: .cancel) {}
             Button("Slett", role: .destructive) {
@@ -154,11 +161,6 @@ struct OmLyttejegerView: View {
             }
         } message: {
             Text("Dette sletter alle abonnementer, spillekøen og avspillingsposisjoner. Handlingen kan ikke angres.")
-        }
-        .sheet(isPresented: $showExportSheet) {
-            if let exportURL {
-                ShareSheet(items: [exportURL])
-            }
         }
     }
 
@@ -249,8 +251,17 @@ struct OmLyttejegerView: View {
         let fileURL = tempDir.appendingPathComponent("lyttejeger-data.json")
         try? jsonData.write(to: fileURL)
 
-        exportURL = fileURL
-        showExportSheet = true
+        // Present UIActivityViewController directly via UIKit
+        // (wrapping in SwiftUI .sheet causes a blank white sheet on iOS 26)
+        let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootVC = windowScene.keyWindow?.rootViewController {
+            var topVC = rootVC
+            while let presented = topVC.presentedViewController {
+                topVC = presented
+            }
+            topVC.present(activityVC, animated: true)
+        }
     }
 
     // MARK: - Data Deletion
@@ -269,18 +280,6 @@ struct OmLyttejegerView: View {
         // Clear URL caches
         URLCache.shared.removeAllCachedResponses()
     }
-}
-
-// MARK: - Share Sheet
-
-private struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 #if DEBUG
