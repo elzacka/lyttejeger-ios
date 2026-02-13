@@ -40,11 +40,11 @@ Lyttejeger henter NRK-podkastkatalogen fra et offentlig GitHub-repo. Ingen bruke
 
 Ettersom Lyttejeger ikke samler inn personopplysninger sentralt, er det ingen data å be om innsyn i, rette eller slette.
 
-Du kan når som helst slette all lokalt lagret data via innstillingene i appen (Meny > Personvern), eller ved å slette appen fra enheten.
+Du kan når som helst slette all lokalt lagret data via innstillingene i appen (Meny > Om Lyttejeger), eller ved å slette appen fra enheten.
 
 ## Eksport av data
 
-Du kan eksportere all lokalt lagret data som en JSON-fil i appen (Meny > Personvern). Denne filen inneholder abonnementer, spillekø og avspillingsposisjoner.
+Du kan eksportere all lokalt lagret data som en JSON-fil i appen (Meny > Om Lyttejeger). Denne filen inneholder abonnementer, spillekø og avspillingsposisjoner.
 
 ## Sikkerhet
 

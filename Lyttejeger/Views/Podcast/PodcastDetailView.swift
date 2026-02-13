@@ -36,7 +36,29 @@ struct PodcastDetailView: View {
                                 .font(.bodyText)
                                 .foregroundStyle(Color.appMutedForeground)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+
+                    // Subscribe button
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        let wasSubscribed = subscriptionVM.isSubscribed(podcast.id)
+                        subscriptionVM.toggleSubscription(podcast: podcast)
+                        toastMessage = wasSubscribed ? "Fjernet fra Mine podder" : "Lagt til Mine podder"
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            withAnimation { toastMessage = nil }
+                        }
+                    } label: {
+                        Text(subscriptionVM.isSubscribed(podcast.id) ? "Slutt å følge" : "Følg")
+                            .font(.buttonText)
+                            .foregroundStyle(subscriptionVM.isSubscribed(podcast.id) ? Color.appMutedForeground : .white)
+                            .padding(.horizontal, AppSpacing.lg)
+                            .padding(.vertical, AppSpacing.sm)
+                            .background(subscriptionVM.isSubscribed(podcast.id) ? Color.appMuted : Color.appAccent)
+                            .clipShape(.rect(cornerRadius: AppRadius.md))
+                    }
+                    .frame(minHeight: AppSize.touchTarget)
 
                     // Categories & explicit
                     if !pod.categories.isEmpty || pod.explicit {
@@ -64,27 +86,6 @@ struct PodcastDetailView: View {
                             }
                         }
                     }
-
-                    // Subscribe button
-                    Button {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        let wasSubscribed = subscriptionVM.isSubscribed(podcast.id)
-                        subscriptionVM.toggleSubscription(podcast: podcast)
-                        toastMessage = wasSubscribed ? "Fjernet fra Mine podder" : "Lagt til Mine podder"
-                        Task {
-                            try? await Task.sleep(for: .seconds(2))
-                            withAnimation { toastMessage = nil }
-                        }
-                    } label: {
-                        Text(subscriptionVM.isSubscribed(podcast.id) ? "Slutt å følge" : "Følg")
-                            .font(.buttonText)
-                            .foregroundStyle(subscriptionVM.isSubscribed(podcast.id) ? Color.appMutedForeground : .white)
-                            .padding(.horizontal, AppSpacing.lg)
-                            .padding(.vertical, AppSpacing.sm)
-                            .background(subscriptionVM.isSubscribed(podcast.id) ? Color.appMuted : Color.appAccent)
-                            .clipShape(.rect(cornerRadius: AppRadius.md))
-                    }
-                    .frame(minHeight: AppSize.touchTarget)
                 }
                 .padding(.horizontal, AppSpacing.lg)
 

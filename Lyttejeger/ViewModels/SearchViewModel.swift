@@ -11,7 +11,6 @@ final class SearchViewModel {
     var episodes: [EpisodeWithPodcast] = []
     var isLoading = false
     var error: String?
-    var searchWarning: String?
     var activeTab: SearchTab = .podcasts
 
     private var searchTask: Task<Void, Never>?
@@ -275,7 +274,6 @@ final class SearchViewModel {
     private func searchPodcasts(_ query: String) async {
         isLoading = true
         error = nil
-        searchWarning = nil
 
         let api = PodcastIndexAPI.shared
 
@@ -360,7 +358,6 @@ final class SearchViewModel {
     private func searchEpisodes(_ query: String) async {
         isLoading = true
         error = nil
-        searchWarning = nil
 
         let api = PodcastIndexAPI.shared
 

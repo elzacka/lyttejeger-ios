@@ -114,6 +114,21 @@ struct ContentView: View {
         .environment(subscriptionVM)
         .environment(playerVM)
         .environment(progressVM)
+        .onChange(of: playerVM.pendingPodcastRoute) { _, route in
+            guard let route else { return }
+            playerVM.pendingPodcastRoute = nil
+            // Delay to allow fullScreenCover dismissal to complete
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                switch selectedTab {
+                case 0: homePath.append(route)
+                case 1: myPodsPath.append(route)
+                default:
+                    selectedTab = 0
+                    homePath.append(route)
+                }
+            }
+        }
         .onAppear {
             queueVM.setup(modelContext)
             subscriptionVM.setup(modelContext)

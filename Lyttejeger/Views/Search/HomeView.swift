@@ -13,7 +13,6 @@ struct HomeView: View {
     @AppStorage("showNewFromSubscriptions") private var showNewFromSubscriptions = true
     @State private var lastPlayedInfo: LastPlayedInfo?
     @State private var recentEpisodes: [RecentEpisodeData] = []
-    @State private var isLoadingRecent = false
     @State private var hasLoadedRecent = false
 
     private var isHomeState: Bool {
@@ -149,7 +148,8 @@ struct HomeView: View {
                                     EpisodeCard(
                                         episode: last.episode,
                                         podcastTitle: last.podcastTitle,
-                                        podcastImage: last.podcastImage
+                                        podcastImage: last.podcastImage,
+                                        compact: true
                                     )
                                 }
                             }
@@ -244,7 +244,7 @@ struct HomeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.appBackground)
         .toolbar(.hidden, for: .navigationBar)
-        .sheet(isPresented: $showFilters) {
+        .sheet(isPresented: $showFilters, onDismiss: { isSearchFocused = false }) {
             FilterPanel()
         }
         .navigationDestination(for: PodcastRoute.self) { route in
@@ -297,8 +297,7 @@ struct HomeView: View {
             return
         }
 
-        isLoadingRecent = true
-        defer { isLoadingRecent = false; hasLoadedRecent = true }
+        defer { hasLoadedRecent = true }
 
         let piSubs = subs.filter { !$0.podcastId.hasPrefix("nrk:") }
         let nrkSubs = subs.filter { $0.podcastId.hasPrefix("nrk:") }

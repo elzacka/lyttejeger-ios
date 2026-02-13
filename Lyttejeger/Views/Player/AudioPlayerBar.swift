@@ -30,18 +30,32 @@ struct AudioPlayerBar: View {
                 MiniProgressBar()
 
                 HStack(spacing: AppSpacing.md) {
+                    // Artwork — navigates to podcast detail
+                    Button {
+                        playerVM.pendingPodcastRoute = PodcastRoute(
+                            podcast: .minimal(
+                                id: episode.podcastId,
+                                title: playerVM.podcastTitle ?? "",
+                                imageUrl: playerVM.podcastImage ?? episode.imageUrl ?? ""
+                            ),
+                            focusEpisodeId: episode.id
+                        )
+                    } label: {
+                        CachedAsyncImage(url: playerVM.podcastImage ?? episode.imageUrl, size: 48)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Vis podcast")
+
+                    // Title — expands player
                     Button {
                         playerVM.isExpanded = true
                     } label: {
-                        HStack(spacing: AppSpacing.md) {
-                            CachedAsyncImage(url: playerVM.podcastImage ?? episode.imageUrl, size: 48)
-
-                            Text(episode.title)
-                                .font(.cardTitle)
-                                .foregroundStyle(Color.appForeground)
-                                .lineLimit(2)
-                        }
-                        .contentShape(Rectangle())
+                        Text(episode.title)
+                            .font(.cardTitle)
+                            .foregroundStyle(Color.appForeground)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
 

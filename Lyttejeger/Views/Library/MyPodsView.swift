@@ -54,6 +54,9 @@ struct MyPodsView: View {
         .navigationDestination(for: Podcast.self) { podcast in
             PodcastDetailView(podcast: podcast)
         }
+        .navigationDestination(for: PodcastRoute.self) { route in
+            PodcastDetailView(podcast: route.podcast, focusEpisodeId: route.focusEpisodeId)
+        }
     }
 }
 

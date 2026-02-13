@@ -58,6 +58,7 @@ final class AudioPlayerViewModel {
     var playbackSpeed: Float { audioService.playbackSpeed }
 
     var isExpanded = false
+    var pendingPodcastRoute: PodcastRoute?
 
     // Sleep timer
     var sleepTimerMinutes: Int = 0
@@ -145,6 +146,7 @@ final class AudioPlayerViewModel {
         transcript = nil
         sleepTimerMinutes = 0
         sleepTimerEndTime = nil
+        sleepTimerRemaining = 0
         audioService.stop()
     }
 
@@ -191,9 +193,6 @@ final class AudioPlayerViewModel {
         sleepTimerMinutes = minutes
         if minutes > 0 {
             sleepTimerEndTime = Date().addingTimeInterval(TimeInterval(minutes * 60))
-        } else if minutes == -1 {
-            // End of episode - handled in timer check
-            sleepTimerEndTime = nil
         } else {
             sleepTimerEndTime = nil
         }

@@ -22,8 +22,8 @@ struct ChapterPanel: View {
                     .foregroundStyle(Color.appAccent)
                     .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
             }
-            .padding(.horizontal, AppSpacing.md)
-            .padding(.top, AppSpacing.md)
+            .padding(.horizontal, AppSpacing.xl)
+            .padding(.top, AppSpacing.sm)
 
             // Chapter list
             ScrollView {

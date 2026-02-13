@@ -13,8 +13,8 @@ settings:
     INFOPLIST_FILE: Lyttejeger/Info.plist
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     PRODUCT_BUNDLE_IDENTIFIER: com.Tazk.Lyttejeger
-    MARKETING_VERSION: "1.0.3"
-    CURRENT_PROJECT_VERSION: "7"
+    MARKETING_VERSION: "1.0.4"
+    CURRENT_PROJECT_VERSION: "8"
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_USER_SCRIPT_SANDBOXING: true
 targets:
@@ -34,8 +34,10 @@ targets:
       base:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 8NW62A7PRA
+        TARGETED_DEVICE_FAMILY: "1"
         SUPPORTED_PLATFORMS: "iphonesimulator iphoneos"
         SUPPORTS_MACCATALYST: false
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
     info:
       path: Lyttejeger/Info.plist
       properties:
@@ -53,17 +55,24 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        UIRequiresFullScreen: true
         ITSAppUsesNonExemptEncryption: false
         UIAppFonts:
           - DMMono-Light.ttf
           - DMMono-Regular.ttf
           - DMMono-Medium.ttf
         CFBundleDisplayName: Lyttejeger
+        CFBundleLocalizations:
+          - nb
+        UIAccessibilityPerformEscapeEnabled: true
   LyttejegerTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: LyttejegerTests
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - target: Lyttejeger
   LyttejegerUITests:
@@ -71,6 +80,9 @@ targets:
     platform: iOS
     sources:
       - path: LyttejegerUITests
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - target: Lyttejeger
 schemes:

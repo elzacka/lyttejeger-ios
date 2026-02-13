@@ -1,9 +1,11 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct QueueView: View {
     @Environment(QueueViewModel.self) private var queueVM
     @Environment(AudioPlayerViewModel.self) private var playerVM
     @State private var showClearConfirmation = false
+    @State private var draggingItemId: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,11 +43,23 @@ struct QueueView: View {
                     LazyVStack(spacing: AppSpacing.sm) {
                         ForEach(queueVM.items, id: \.episodeId) { item in
                             QueueItemCard(item: item)
+                                .onDrag {
+                                    draggingItemId = item.episodeId
+                                    return NSItemProvider(object: item.episodeId as NSString)
+                                }
+                                .onDrop(of: [.text], delegate: QueueDropDelegate(
+                                    targetId: item.episodeId,
+                                    items: queueVM.items,
+                                    draggingItemId: $draggingItemId,
+                                    onReorder: { from, to in
+                                        queueVM.move(from: IndexSet(integer: from), to: to)
+                                    }
+                                ))
+                                .opacity(draggingItemId == item.episodeId ? 0.4 : 1)
                         }
                     }
                     .padding(.horizontal, AppSpacing.lg)
-                    .padding(.top, AppSpacing.sm)
-                    .padding(.bottom, 100)
+                    .padding(.bottom, 60)
                 }
             }
         }
@@ -62,6 +76,37 @@ struct QueueView: View {
         } message: {
             Text("Alle \(queueVM.items.count) episoder i køen vil bli fjernet.")
         }
+    }
+}
+
+// MARK: - Drop Delegate
+
+private struct QueueDropDelegate: DropDelegate {
+    let targetId: String
+    let items: [QueueItem]
+    @Binding var draggingItemId: String?
+    let onReorder: (Int, Int) -> Void
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingItemId = nil
+        return true
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let draggingId = draggingItemId,
+              draggingId != targetId,
+              let fromIndex = items.firstIndex(where: { $0.episodeId == draggingId }),
+              let toIndex = items.firstIndex(where: { $0.episodeId == targetId })
+        else { return }
+
+        let animation = UIAccessibility.isReduceMotionEnabled ? nil : Animation.easeInOut(duration: 0.2)
+        withAnimation(animation) {
+            onReorder(fromIndex, toIndex > fromIndex ? toIndex + 1 : toIndex)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
     }
 }
 
@@ -95,16 +140,17 @@ private struct QueueItemCard: View {
             }
             if let index = queueVM.items.firstIndex(where: { $0.episodeId == item.episodeId }), index > 0 {
                 Button {
-                    queueVM.move(from: IndexSet(integer: index), to: index - 1)
+                    queueVM.move(from: IndexSet(integer: index), to: 0)
                 } label: {
-                    Label("Flytt opp", systemImage: "arrow.up")
+                    Label("Flytt øverst", systemImage: "arrow.up.to.line")
                 }
             }
-            if let index = queueVM.items.firstIndex(where: { $0.episodeId == item.episodeId }), index < queueVM.items.count - 1 {
+            if let index = queueVM.items.firstIndex(where: { $0.episodeId == item.episodeId }),
+               index < queueVM.items.count - 1 {
                 Button {
-                    queueVM.move(from: IndexSet(integer: index), to: index + 2)
+                    queueVM.move(from: IndexSet(integer: index), to: queueVM.items.count)
                 } label: {
-                    Label("Flytt ned", systemImage: "arrow.down")
+                    Label("Flytt nederst", systemImage: "arrow.down.to.line")
                 }
             }
             Button(role: .destructive) {

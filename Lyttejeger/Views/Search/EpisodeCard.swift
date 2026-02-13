@@ -5,6 +5,7 @@ struct EpisodeCard: View {
     let podcastTitle: String
     let podcastImage: String
     var showArtwork: Bool = true
+    var compact: Bool = false
     var onPlay: (() -> Void)? = nil
     var useDefaultContextMenu: Bool = true
 
@@ -60,6 +61,7 @@ struct EpisodeCard: View {
 
     private var cardContent: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            // Top row: artwork + title + play button
             HStack(alignment: .top, spacing: AppSpacing.md) {
                 if showArtwork {
                     NavigationLink(value: podcastRoute) {
@@ -82,49 +84,10 @@ struct EpisodeCard: View {
                         .font(.cardTitle)
                         .foregroundStyle(isNowPlaying ? Color.appAccent : Color.appForeground)
 
-                    if !metadataLine.isEmpty {
-                        HStack(spacing: AppSpacing.sm) {
-                            if isNowPlaying {
-                                Image(systemName: "speaker.wave.2.fill")
-                                    .font(.caption2)
-                                    .foregroundStyle(Color.appAccent)
-                            }
-
-                            Text(metadataLine)
-                                .font(.caption2Text)
-                                .foregroundStyle(Color.appMutedForeground)
-                                .lineLimit(1)
-                        }
-                    }
-
-                    // Badges
-                    if hasBadges {
-                        HStack(spacing: AppSpacing.sm) {
-                            if progressVM.isCompleted(episode.id) {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(Color.appSuccess)
-                                    .accessibilityLabel("Hørt")
-                            } else if let fraction = progressVM.progressFraction(for: episode.id), fraction > 0.01 {
-                                Text("\(Int(fraction * 100))%")
-                                    .font(.caption2Text)
-                                    .foregroundStyle(Color.appAccent)
-                            }
-
-                            if episode.chaptersUrl != nil {
-                                Image(systemName: "list.number")
-                                    .font(.caption2)
-                                    .foregroundStyle(Color.appAccent)
-                                    .accessibilityLabel("Kapitler")
-                            }
-
-                            if episode.transcriptUrl != nil {
-                                Image(systemName: "text.quote")
-                                    .font(.caption2)
-                                    .foregroundStyle(Color.appAccent)
-                                    .accessibilityLabel("Tekst")
-                            }
-                        }
+                    // Compact: metadata + badges inline with title
+                    if compact {
+                        metadataView
+                        badgesView
                     }
                 }
 
@@ -148,7 +111,13 @@ struct EpisodeCard: View {
                 .accessibilityLabel(isNowPlaying && playerVM.isPlaying ? "Pause" : "Spill \(episode.title)")
             }
 
-            // Progress bar
+            // Standard: metadata + badges full width below artwork
+            if !compact {
+                metadataView
+                badgesView
+            }
+
+            // Progress bar (always full width)
             if let fraction = progressVM.progressFraction(for: episode.id), fraction > 0.01, !progressVM.isCompleted(episode.id) {
                 GeometryReader { geo in
                     Rectangle()
@@ -160,9 +129,59 @@ struct EpisodeCard: View {
                 .clipShape(.rect(cornerRadius: 1.5))
             }
 
-            // Description — 1-line preview, tap to expand
-            if !episode.description.isEmpty {
+            // Description (hidden in compact mode)
+            if !compact, !episode.description.isEmpty {
                 ExpandableText(text: episode.description, previewLines: 1)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var metadataView: some View {
+        if !metadataLine.isEmpty {
+            HStack(spacing: AppSpacing.sm) {
+                if isNowPlaying {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.caption2)
+                        .foregroundStyle(Color.appAccent)
+                }
+
+                Text(metadataLine)
+                    .font(.caption2Text)
+                    .foregroundStyle(Color.appMutedForeground)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var badgesView: some View {
+        if hasBadges {
+            HStack(spacing: AppSpacing.sm) {
+                if progressVM.isCompleted(episode.id) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.appSuccess)
+                        .accessibilityLabel("Hørt")
+                } else if let fraction = progressVM.progressFraction(for: episode.id), fraction > 0.01 {
+                    Text("\(Int(fraction * 100))%")
+                        .font(.caption2Text)
+                        .foregroundStyle(Color.appAccent)
+                }
+
+                if episode.chaptersUrl != nil {
+                    Image(systemName: "list.number")
+                        .font(.caption2)
+                        .foregroundStyle(Color.appAccent)
+                        .accessibilityLabel("Kapitler")
+                }
+
+                if episode.transcriptUrl != nil {
+                    Image(systemName: "text.quote")
+                        .font(.caption2)
+                        .foregroundStyle(Color.appAccent)
+                        .accessibilityLabel("Tekst")
+                }
             }
         }
     }

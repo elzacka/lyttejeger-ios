@@ -212,7 +212,6 @@ final class AudioService {
     // MARK: - Now Playing
 
     private func updateNowPlaying() {
-        // Capture values to avoid accessing @MainActor properties from background
         let episodeTitle = currentEpisode?.title ?? ""
         let podcastTitle = currentPodcastTitle ?? ""
         let time = currentTime
@@ -221,31 +220,15 @@ final class AudioService {
         let speed = playbackSpeed
         let imageUrl = currentPodcastImage ?? currentEpisode?.imageUrl
 
-        // All MPNowPlayingInfoCenter access must happen on main queue
-        // Use sync if already on main, async otherwise
-        if Thread.isMainThread {
-            self.updateNowPlayingOnMainThread(
-                episodeTitle: episodeTitle,
-                podcastTitle: podcastTitle,
-                time: time,
-                duration: dur,
-                playing: playing,
-                speed: speed,
-                imageUrl: imageUrl
-            )
-        } else {
-            DispatchQueue.main.async { [weak self] in
-                self?.updateNowPlayingOnMainThread(
-                    episodeTitle: episodeTitle,
-                    podcastTitle: podcastTitle,
-                    time: time,
-                    duration: dur,
-                    playing: playing,
-                    speed: speed,
-                    imageUrl: imageUrl
-                )
-            }
-        }
+        updateNowPlayingOnMainThread(
+            episodeTitle: episodeTitle,
+            podcastTitle: podcastTitle,
+            time: time,
+            duration: dur,
+            playing: playing,
+            speed: speed,
+            imageUrl: imageUrl
+        )
     }
 
     private nonisolated func updateNowPlayingOnMainThread(

@@ -4,7 +4,19 @@ struct AudioPlayerSheet: View {
     @Environment(AudioPlayerViewModel.self) private var playerVM
     @State private var showChapters = false
     @State private var showTranscript = false
-    @State private var showPodcastDetail = false
+
+    private func navigateToPodcast() {
+        guard let episode = playerVM.currentEpisode else { return }
+        playerVM.pendingPodcastRoute = PodcastRoute(
+            podcast: .minimal(
+                id: episode.podcastId,
+                title: playerVM.podcastTitle ?? "",
+                imageUrl: playerVM.podcastImage ?? episode.imageUrl ?? ""
+            ),
+            focusEpisodeId: episode.id
+        )
+        playerVM.isExpanded = false
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -14,7 +26,7 @@ struct AudioPlayerSheet: View {
                 // Artwork (tap to view podcast)
                 if let imageUrl = playerVM.podcastImage ?? playerVM.currentEpisode?.imageUrl {
                     Button {
-                        showPodcastDetail = true
+                        navigateToPodcast()
                     } label: {
                         CachedAsyncImage(url: imageUrl, size: AppSize.artworkLarge)
                             .shadow(color: .black.opacity(0.15), radius: 20, y: 10)
@@ -32,7 +44,7 @@ struct AudioPlayerSheet: View {
                         .multilineTextAlignment(.center)
 
                     Button {
-                        showPodcastDetail = true
+                        navigateToPodcast()
                     } label: {
                         Text(playerVM.podcastTitle ?? "")
                             .font(.bodyText)
@@ -129,26 +141,6 @@ struct AudioPlayerSheet: View {
         }
         .sheet(isPresented: $showTranscript) {
             TranscriptPanel()
-        }
-        .sheet(isPresented: $showPodcastDetail) {
-            if let episode = playerVM.currentEpisode {
-                ZStack(alignment: .topTrailing) {
-                    NavigationStack {
-                        PodcastDetailView(podcast: .minimal(
-                            id: episode.podcastId,
-                            title: playerVM.podcastTitle ?? "",
-                            imageUrl: playerVM.podcastImage ?? episode.imageUrl ?? ""
-                        ))
-                    }
-
-                    Button("Lukk") { showPodcastDetail = false }
-                        .font(.buttonText)
-                        .foregroundStyle(Color.appAccent)
-                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                        .padding(.horizontal, AppSpacing.md)
-                        .padding(.top, AppSpacing.sm)
-                }
-            }
         }
     }
 }
