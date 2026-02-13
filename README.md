@@ -21,7 +21,7 @@ Se [brukerveiledningen](Brukerveiledning.md) for detaljer om søk og filtrering.
 
 | | |
 |---|---|
-| **Språk** | Swift 6.2, streng samtidighet |
+| **Språk** | Swift 6.2, strict concurrency |
 | **Rammeverk** | SwiftUI, SwiftData, AVFoundation, MediaPlayer |
 | **Minstekrav** | iOS 26, iPhone (stående) |
 | **Avhengigheter** | Ingen tredjepartsbiblioteker |
