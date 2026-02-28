@@ -1,9 +1,11 @@
 import Foundation
 import SwiftData
+import os
 
 @Observable
 @MainActor
 final class SubscriptionViewModel {
+    private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "SubscriptionVM")
     private var modelContext: ModelContext?
     var subscriptions: [Subscription] = []
 
@@ -34,7 +36,11 @@ final class SubscriptionViewModel {
             feedUrl: podcast.feedUrl
         )
         modelContext.insert(sub)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            Self.logger.error("Failed to save subscription: \(error)")
+        }
         fetchSubscriptions()
     }
 
@@ -45,7 +51,11 @@ final class SubscriptionViewModel {
             for sub in subs {
                 modelContext.delete(sub)
             }
-            try? modelContext.save()
+            do {
+            try modelContext.save()
+        } catch {
+            Self.logger.error("Failed to save subscription: \(error)")
+        }
             fetchSubscriptions()
         }
     }

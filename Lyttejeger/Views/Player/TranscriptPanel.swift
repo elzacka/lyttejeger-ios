@@ -9,7 +9,7 @@ struct TranscriptPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Custom header
+            // Header
             HStack {
                 Button {
                     autoScroll.toggle()
@@ -33,11 +33,10 @@ struct TranscriptPanel: View {
                     .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
             }
             .padding(.horizontal, AppSpacing.xl)
-            .padding(.top, AppSpacing.sm)
+            .padding(.top, AppSpacing.xl)
 
             Divider()
                 .background(Color.appBorder)
-                .padding(.top, AppSpacing.sm)
 
             // Transcript content
             ScrollViewReader { proxy in

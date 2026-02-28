@@ -98,7 +98,9 @@ struct PodcastCard: View {
                         }
                     }
                 }
-                .accessibilityLabel(isExpanded ? "Skjul beskrivelse" : "Vis beskrivelse")
+                .accessibilityLabel(podcast.description)
+                .accessibilityHint(isExpanded ? "Dobbelttrykk for å skjule" : "Dobbelttrykk for å vise mer")
+                .accessibilityAddTraits(.isButton)
             }
         }
         .padding(AppSpacing.md)
@@ -108,8 +110,7 @@ struct PodcastCard: View {
             RoundedRectangle(cornerRadius: AppRadius.md)
                 .stroke(Color.appBorder, lineWidth: 1)
         )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(podcast.title), av \(podcast.author), \(podcast.episodeCount) episoder")
+        .accessibilityElement(children: .contain)
     }
 }
 

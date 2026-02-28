@@ -1,9 +1,11 @@
 import Foundation
 import SwiftData
+import os
 
 @Observable
 @MainActor
 final class QueueViewModel {
+    private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "QueueVM")
     private var modelContext: ModelContext?
     var items: [QueueItem] = []
 
@@ -27,7 +29,7 @@ final class QueueViewModel {
 
         let nextPosition = (items.last?.position ?? -1) + 1
         modelContext.insert(makeQueueItem(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage, position: nextPosition))
-        try? modelContext.save()
+        save()
         fetchQueue()
     }
 
@@ -43,7 +45,7 @@ final class QueueViewModel {
         for item in items { item.position += 1 }
 
         modelContext.insert(makeQueueItem(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage, position: 0))
-        try? modelContext.save()
+        save()
         fetchQueue()
     }
 
@@ -63,7 +65,7 @@ final class QueueViewModel {
     func remove(_ item: QueueItem) {
         guard let modelContext else { return }
         modelContext.delete(item)
-        try? modelContext.save()
+        save()
         fetchQueue()
     }
 
@@ -72,7 +74,7 @@ final class QueueViewModel {
         for item in items {
             modelContext.delete(item)
         }
-        try? modelContext.save()
+        save()
         fetchQueue()
     }
 
@@ -82,7 +84,7 @@ final class QueueViewModel {
         for (index, item) in mutableItems.enumerated() {
             item.position = index
         }
-        try? modelContext?.save()
+        save()
         fetchQueue()
     }
 
@@ -90,5 +92,13 @@ final class QueueViewModel {
         guard let first = items.first else { return nil }
         remove(first)
         return first
+    }
+
+    private func save() {
+        do {
+            try modelContext?.save()
+        } catch {
+            Self.logger.error("Failed to save queue: \(error)")
+        }
     }
 }

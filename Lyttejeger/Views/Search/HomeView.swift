@@ -39,24 +39,10 @@ struct HomeView: View {
         VStack(spacing: 0) {
             // Header
             VStack(spacing: 0) {
-                // Brand wordmark
-                HStack(spacing: AppSpacing.sm) {
-                    Image("LaunchLogo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 20, height: 20)
-
-                    Text("Lyttejeger")
-                        .font(.sectionTitle)
-                        .foregroundStyle(Color.appForeground)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, AppSpacing.lg)
-
                 // Search field
                 HStack(spacing: AppSpacing.md) {
                     Image(systemName: "magnifyingglass")
-                        .foregroundStyle(Color.appAccent.opacity(0.6))
+                        .foregroundStyle(Color.appAccent.opacity(0.7))
                         .font(.system(size: 16))
 
                     TextField(vm.activeTab == .podcasts ? "Søk etter podkaster..." : "Søk etter episoder...", text: Binding(
@@ -94,23 +80,21 @@ struct HomeView: View {
                     .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                     .accessibilityLabel(searchVM.activeFilterCount > 0 ? "Filter, \(searchVM.activeFilterCount) aktive" : "Filter")
                 }
+                .padding(.horizontal, AppSpacing.md)
                 .padding(.vertical, AppSpacing.md)
-                .overlay(alignment: .bottom) {
-                    Rectangle()
-                        .fill(Color.appBorder.opacity(0.4))
-                        .frame(height: 1)
-                }
-                .padding(.bottom, AppSpacing.sm)
+                .background(Color.appMuted)
+                .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
+                .padding(.bottom, AppSpacing.md)
 
                 // Tab switcher
                 HStack(spacing: 0) {
                     ForEach(SearchViewModel.SearchTab.allCases, id: \.self) { tab in
                         Button {
                             if UIAccessibility.isReduceMotionEnabled {
-                                vm.activeTab = tab
+                                searchVM.setActiveTab(tab)
                             } else {
                                 withAnimation(.easeOut(duration: 0.2)) {
-                                    vm.activeTab = tab
+                                    searchVM.setActiveTab(tab)
                                 }
                             }
                         } label: {
@@ -135,7 +119,7 @@ struct HomeView: View {
                 }
             }
             .padding(.horizontal, AppSpacing.lg)
-            .padding(.top, AppSpacing.sm)
+            .padding(.top, AppSpacing.xl)
 
             // Results / Home
             if isHomeState {
@@ -246,6 +230,8 @@ struct HomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showFilters, onDismiss: { isSearchFocused = false }) {
             FilterPanel()
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Color.appBackground)
         }
         .navigationDestination(for: PodcastRoute.self) { route in
             PodcastDetailView(podcast: route.podcast, focusEpisodeId: route.focusEpisodeId)

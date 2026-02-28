@@ -16,8 +16,17 @@ struct Transcript: Sendable {
 actor TranscriptService {
     static let shared = TranscriptService()
 
+    private static let cacheTTL: TimeInterval = 30 * 60 // 30 minutes
+    private var cache: [String: (transcript: Transcript, fetchedAt: Date)] = [:]
+
     func fetchTranscript(from url: String) async -> Transcript? {
         guard !url.isEmpty, let requestUrl = URL(string: url) else { return nil }
+
+        // Check cache
+        if let cached = cache[url],
+           Date().timeIntervalSince(cached.fetchedAt) < Self.cacheTTL {
+            return cached.transcript
+        }
 
         do {
             let (data, response) = try await URLSession.shared.data(from: requestUrl)
@@ -30,21 +39,39 @@ actor TranscriptService {
 
             // Detect format
             if contentType.contains("json") || url.hasSuffix(".json") {
-                if let result = parseJSON(text), !result.segments.isEmpty { return result }
+                if let result = parseJSON(text), !result.segments.isEmpty {
+                    cache[url] = (transcript: result, fetchedAt: Date())
+                    return result
+                }
             } else if url.hasSuffix(".vtt") || contentType.contains("vtt") || text.contains("WEBVTT") {
                 let result = parseVTT(text)
-                if !result.segments.isEmpty { return result }
+                if !result.segments.isEmpty {
+                    cache[url] = (transcript: result, fetchedAt: Date())
+                    return result
+                }
             } else if url.hasSuffix(".srt") || String(text.prefix(500)).range(of: "\\d+\\n\\d{2}:\\d{2}:\\d{2}", options: .regularExpression) != nil {
                 let result = parseSRT(text)
-                if !result.segments.isEmpty { return result }
+                if !result.segments.isEmpty {
+                    cache[url] = (transcript: result, fetchedAt: Date())
+                    return result
+                }
             }
 
             // Try all formats
-            if let result = parseJSON(text), !result.segments.isEmpty { return result }
+            if let result = parseJSON(text), !result.segments.isEmpty {
+                cache[url] = (transcript: result, fetchedAt: Date())
+                return result
+            }
             let vtt = parseVTT(text)
-            if !vtt.segments.isEmpty { return vtt }
+            if !vtt.segments.isEmpty {
+                cache[url] = (transcript: vtt, fetchedAt: Date())
+                return vtt
+            }
             let srt = parseSRT(text)
-            if !srt.segments.isEmpty { return srt }
+            if !srt.segments.isEmpty {
+                cache[url] = (transcript: srt, fetchedAt: Date())
+                return srt
+            }
 
             return nil
         } catch {

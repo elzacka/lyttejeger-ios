@@ -2,11 +2,13 @@ import Foundation
 import AVFoundation
 import MediaPlayer
 import UIKit
+import os
 
 @Observable
 @MainActor
 final class AudioService {
     static let shared = AudioService()
+    nonisolated(unsafe) private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "AudioService")
 
     private var player: AVPlayer?
     private var timeObserver: Any?
@@ -28,6 +30,11 @@ final class AudioService {
     var currentPodcastTitle: String?
     var currentPodcastImage: String?
 
+    /// Called after a remote play command (Bluetooth/AVRCP) resumes playback.
+    /// Used by AudioPlayerViewModel to restore saved position when a car head unit
+    /// (e.g. Tesla) resets playback to the beginning.
+    var onRemotePlay: (() -> Void)?
+
     private init() {
         setupAudioSession()
         Task.detached { [weak self] in
@@ -42,7 +49,7 @@ final class AudioService {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            print("Audio session setup failed: \(error)")
+            Self.logger.error("Audio session setup failed: \(error)")
         }
     }
 
@@ -203,6 +210,7 @@ final class AudioService {
         currentTime = 0
         duration = 0
         isLoading = false
+        hasError = false
         currentEpisode = nil
         currentPodcastTitle = nil
         currentPodcastImage = nil
@@ -250,26 +258,17 @@ final class AudioService {
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
-        // Load artwork async - use DispatchQueue.global to avoid actor context
+        // Load artwork async via URLSession
         if let imageUrl, let url = URL(string: imageUrl) {
-            DispatchQueue.global(qos: .userInitiated).async {
-                if let data = try? Data(contentsOf: url),
-                   let image = UIImage(data: data) {
-                    let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                    // Capture episodeTitle to verify we're updating the right episode
-                    let capturedTitle = episodeTitle
-                    DispatchQueue.main.async {
-                        // Build a fresh info dict to avoid Sendable issues
-                        let updatedInfo: [String: Any] = [
-                            MPMediaItemPropertyTitle: capturedTitle,
-                            MPMediaItemPropertyArtist: podcastTitle,
-                            MPNowPlayingInfoPropertyElapsedPlaybackTime: time,
-                            MPMediaItemPropertyPlaybackDuration: duration,
-                            MPNowPlayingInfoPropertyPlaybackRate: playing ? Double(speed) : 0.0,
-                            MPMediaItemPropertyArtwork: artwork
-                        ]
-                        MPNowPlayingInfoCenter.default().nowPlayingInfo = updatedInfo
-                    }
+            Task.detached(priority: .userInitiated) {
+                guard let (data, _) = try? await URLSession.shared.data(from: url),
+                      let image = UIImage(data: data) else { return }
+                let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                await MainActor.run {
+                    // Merge artwork into current now-playing info to avoid stale elapsed time
+                    guard var info = MPNowPlayingInfoCenter.default().nowPlayingInfo else { return }
+                    info[MPMediaItemPropertyArtwork] = artwork
+                    MPNowPlayingInfoCenter.default().nowPlayingInfo = info
                 }
             }
         }
@@ -286,6 +285,7 @@ final class AudioService {
                 Task { @MainActor in
                     guard self.player != nil else { return }
                     self.togglePlayPause()
+                    self.onRemotePlay?()
                 }
             }
             return .success

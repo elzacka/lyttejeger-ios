@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import os
 
 // MARK: - Last Played Info
 
@@ -41,9 +42,13 @@ struct LastPlayedInfo: Codable, Sendable {
 @Observable
 @MainActor
 final class AudioPlayerViewModel {
+    private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "AudioPlayerVM")
     private let audioService = AudioService.shared
     private var modelContext: ModelContext?
     private var saveTask: Task<Void, Never>?
+    private var seekTask: Task<Void, Never>?
+    private var chapterTask: Task<Void, Never>?
+    private var transcriptTask: Task<Void, Never>?
 
     // MARK: - State
 
@@ -74,6 +79,9 @@ final class AudioPlayerViewModel {
 
     func setup(_ context: ModelContext) {
         self.modelContext = context
+        audioService.onRemotePlay = { [weak self] in
+            self?.restorePositionIfNeeded()
+        }
     }
 
     // MARK: - Playback
@@ -103,11 +111,17 @@ final class AudioPlayerViewModel {
             podcastImage: podcastImage ?? ""
         ).save()
 
+        // Cancel any in-flight Tasks from a previous episode
+        seekTask?.cancel()
+        chapterTask?.cancel()
+        transcriptTask?.cancel()
+
         // Seek to saved position after player is ready
         if let savedPosition {
-            Task { @MainActor in
+            seekTask = Task { @MainActor in
                 // Wait for player to be ready (check duration is valid)
                 for _ in 0..<20 { // Try for up to 2 seconds
+                    guard !Task.isCancelled else { return }
                     if audioService.duration > 0 {
                         audioService.seek(to: savedPosition)
                         break
@@ -120,14 +134,14 @@ final class AudioPlayerViewModel {
         startSaveTimer()
 
         // Load chapters and transcript
-        Task { @MainActor in
+        chapterTask = Task { @MainActor in
             if let chaptersUrl = episode.chaptersUrl {
                 chapters = await ChapterService.shared.fetchChapters(from: chaptersUrl)
             } else {
                 chapters = []
             }
         }
-        Task { @MainActor in
+        transcriptTask = Task { @MainActor in
             if let transcriptUrl = episode.transcriptUrl {
                 transcript = await TranscriptService.shared.fetchTranscript(from: transcriptUrl)
             } else {
@@ -140,6 +154,12 @@ final class AudioPlayerViewModel {
         savePosition()
         saveTask?.cancel()
         saveTask = nil
+        seekTask?.cancel()
+        seekTask = nil
+        chapterTask?.cancel()
+        chapterTask = nil
+        transcriptTask?.cancel()
+        transcriptTask = nil
         isExpanded = false
         chapters = []
         currentChapter = nil
@@ -217,6 +237,25 @@ final class AudioPlayerViewModel {
         }
     }
 
+    // MARK: - Position Restore (Bluetooth/Tesla workaround)
+
+    /// Some car head units (notably Tesla) reset playback to the beginning when
+    /// sending an AVRCP play command via Bluetooth. This method detects that
+    /// scenario and seeks back to the saved position.
+    private func restorePositionIfNeeded() {
+        guard let modelContext, let episode = currentEpisode else { return }
+        guard currentTime < 3.0 else { return }
+
+        let episodeId = episode.id
+        let descriptor = FetchDescriptor<PlaybackPosition>(predicate: #Predicate { $0.episodeId == episodeId })
+        guard let saved = try? modelContext.fetch(descriptor).first,
+              !saved.completed,
+              saved.position > 30.0 else { return }
+
+        let position = saved.position
+        audioService.seek(to: position)
+    }
+
     // MARK: - Position Saving
 
     private func startSaveTimer() {
@@ -258,6 +297,10 @@ final class AudioPlayerViewModel {
             modelContext.insert(pos)
         }
 
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            Self.logger.error("Failed to save playback position: \(error)")
+        }
     }
 }

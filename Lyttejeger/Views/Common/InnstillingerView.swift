@@ -7,17 +7,6 @@ struct InnstillingerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Spacer()
-                Button("Lukk") { dismiss() }
-                    .font(.buttonText)
-                    .foregroundStyle(Color.appAccent)
-                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-            }
-            .padding(.horizontal, AppSpacing.xl)
-            .padding(.top, AppSpacing.sm)
-
             ScrollView {
                 VStack(spacing: AppSpacing.lg) {
                     // Section header
@@ -60,7 +49,7 @@ struct InnstillingerView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.horizontal, AppSpacing.lg)
-                .padding(.top, AppSpacing.lg)
+                .padding(.top, AppSpacing.xxl)
             }
         }
         .background(Color.appBackground)

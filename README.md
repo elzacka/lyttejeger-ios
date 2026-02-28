@@ -25,6 +25,7 @@ Se [brukerveiledningen](Brukerveiledning.md) for detaljer om søk og filtrering.
 | **Rammeverk** | SwiftUI, SwiftData, AVFoundation, MediaPlayer |
 | **Minstekrav** | iOS 26, iPhone (stående) |
 | **Avhengigheter** | Ingen tredjepartsbiblioteker |
+| **Tester** | Swift Testing (24 tester, 5 suiter) |
 | **Byggverktøy** | Xcode 26.2, xcodegen |
 | **Typografi** | DM Mono (inkludert) |
 | **Design** | Lys modus, beige/grønn retro |
@@ -44,6 +45,11 @@ xcodegen generate
 xcodebuild -project Lyttejeger.xcodeproj -scheme Lyttejeger \
   -sdk iphonesimulator \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' build
+
+# Kjør tester
+xcodebuild -project Lyttejeger.xcodeproj -scheme Lyttejeger \
+  -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' test
 ```
 
 API-nøkler er ikke inkludert i repoet. Opprett `Lyttejeger/Config/Secrets.swift` med dine egne Podcast Index-nøkler. Se [podcastindex.org/developer](https://podcastindex.org/developer) for å registrere deg.
@@ -60,11 +66,13 @@ Lyttejeger/
   Utilities/       Hastighetsbegrenser, søkeparser, tidsformatering
   ViewModels/      Søk, kø, abonnementer, spiller, fremdrift
   Views/
-    Common/        Gjenbrukbare komponenter (bildecache, meny, om/personvern)
+    Common/        Gjenbrukbare komponenter (bildecache, innstillinger, om)
     Library/       Mine podder, kø
     Player/        Spiller, kontroller, kapitler, transkripsjoner
     Podcast/       Podkastdetaljer
     Search/        Hjem, søk, episodekort, filtre
+  Preview Content/ Forhåndsvisningsdata for SwiftUI Previews
+LyttejegerTests/   Enhetstester (Swift Testing)
 ```
 
 ## Personvern

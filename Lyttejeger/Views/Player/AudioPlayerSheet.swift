@@ -138,9 +138,13 @@ struct AudioPlayerSheet: View {
         .background(Color.appBackground)
         .sheet(isPresented: $showChapters) {
             ChapterPanel()
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Color.appBackground)
         }
         .sheet(isPresented: $showTranscript) {
             TranscriptPanel()
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Color.appBackground)
         }
     }
 }

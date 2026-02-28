@@ -93,21 +93,33 @@ struct ContentView: View {
                 }
                 .accessibilityLabel("Meny")
             }
-            .padding(.top, AppSpacing.sm)
-            .padding(.bottom, AppSpacing.sm)
+            .padding(.top, AppSpacing.xs)
+            .padding(.bottom, AppSpacing.xs)
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(Color.appBorder)
+                    .frame(height: 0.5)
+            }
             .background(Color.appBackground)
         }
         .background(Color.appBackground)
         .sheet(isPresented: $showMenu) {
             MenuSheet(showInnstillinger: $showInnstillinger, showOmLyttejeger: $showOmLyttejeger)
                 .presentationDetents([.height(200)])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Color.appBackground)
         }
         .sheet(isPresented: $showInnstillinger) {
             InnstillingerView()
-                .presentationDetents([.height(280)])
+                .presentationDetents([.height(320)])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Color.appBackground)
         }
         .sheet(isPresented: $showOmLyttejeger) {
             OmLyttejegerView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Color.appBackground)
         }
         .environment(searchVM)
         .environment(queueVM)
@@ -165,13 +177,6 @@ private struct MenuSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Drag indicator
-            Capsule()
-                .fill(Color.appBorder)
-                .frame(width: 36, height: 5)
-                .padding(.top, AppSpacing.sm)
-                .padding(.bottom, AppSpacing.lg)
-
             VStack(spacing: 0) {
                 menuRow("Innstillinger", icon: "gearshape") {
                     dismiss()
@@ -185,6 +190,7 @@ private struct MenuSheet: View {
                     showOmLyttejeger = true
                 }
             }
+            .padding(.top, AppSpacing.xxl)
         }
         .frame(maxWidth: .infinity)
         .background(Color.appBackground)

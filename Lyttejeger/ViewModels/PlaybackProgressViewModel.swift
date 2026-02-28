@@ -1,9 +1,11 @@
 import Foundation
 import SwiftData
+import os
 
 @Observable
 @MainActor
 final class PlaybackProgressViewModel {
+    private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "PlaybackProgressVM")
     private var modelContext: ModelContext?
 
     func setup(_ context: ModelContext) {
@@ -21,7 +23,11 @@ final class PlaybackProgressViewModel {
             for pos in old {
                 modelContext.delete(pos)
             }
-            try? modelContext.save()
+            do {
+                try modelContext.save()
+            } catch {
+                Self.logger.error("Failed to save playback progress: \(error)")
+            }
         }
     }
 
@@ -48,7 +54,11 @@ final class PlaybackProgressViewModel {
             for pos in positions {
                 modelContext.delete(pos)
             }
-            try? modelContext.save()
+            do {
+                try modelContext.save()
+            } catch {
+                Self.logger.error("Failed to save playback progress: \(error)")
+            }
         }
     }
 }

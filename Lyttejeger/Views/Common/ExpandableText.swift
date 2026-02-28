@@ -34,6 +34,8 @@ struct ExpandableText: View {
                     }
                 }
             }
-            .accessibilityLabel(isExpanded ? "Skjul beskrivelse" : "Vis beskrivelse")
+            .accessibilityLabel(text)
+            .accessibilityHint(isExpanded ? "Dobbelttrykk for å skjule" : "Dobbelttrykk for å vise mer")
+            .accessibilityAddTraits(.isButton)
     }
 }

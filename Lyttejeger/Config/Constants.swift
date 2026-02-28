@@ -102,7 +102,7 @@ enum AppConstants {
 
     static let apiBase = "https://api.podcastindex.org/api/1.0"
     static let appName = "Lyttejeger"
-    static let appVersion = "1.0.4"
+    static let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
 
     /// Default allowed language codes
     static let allowedLanguagesAPI = "no,nb,nn,da,sv,en"

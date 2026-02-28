@@ -1,6 +1,6 @@
 # Personvern
 
-*Sist oppdatert: 9. februar 2026*
+*Sist oppdatert: 28. februar 2026*
 
 ## Kort oppsummert
 
@@ -15,6 +15,8 @@ Lyttejeger lagrer kun det som trengs for at appen skal fungere, og alt lagres lo
 - **Abonnementer** på podkaster du har valgt å følge
 
 Denne informasjonen lagres i appens lokale database og synkroniseres ikke til noen sky- eller nettjeneste. Hvis du sletter appen, slettes også all data.
+
+I tillegg lagrer appen midlertidige data i minnet (som transkripsjoner og kapittelmerker) for å gi raskere respons. Disse forsvinner automatisk når appen lukkes.
 
 ## Tredjepartstjenester
 
@@ -45,6 +47,10 @@ Du kan når som helst slette all lokalt lagret data via innstillingene i appen (
 ## Eksport av data
 
 Du kan eksportere all lokalt lagret data som en JSON-fil i appen (Meny > Om Lyttejeger). Denne filen inneholder abonnementer, spillekø og avspillingsposisjoner.
+
+## Feilsøkingslogger
+
+Appen bruker Apples innebygde loggfunksjon (`os.Logger`) for å registrere tekniske feilmeldinger. Disse loggene lagres kun lokalt på enheten, sendes aldri til oss eller tredjeparter, og er bare synlige via Apples utviklerverktøy når enheten er koblet til en Mac.
 
 ## Sikkerhet
 

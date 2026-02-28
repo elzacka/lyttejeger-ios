@@ -99,6 +99,7 @@ struct PlayerControls: View {
                                 )
                             )
                     }
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                     .accessibilityLabel(playerVM.isPlaying ? "Pause" : "Spill av")
 
                     // Skip forward

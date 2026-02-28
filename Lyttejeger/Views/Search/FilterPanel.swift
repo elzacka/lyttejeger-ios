@@ -2,38 +2,21 @@ import SwiftUI
 
 struct FilterPanel: View {
     @Environment(SearchViewModel.self) private var searchVM
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                if searchVM.activeFilterCount > 0 {
-                    Button("Nullstill") { searchVM.clearFilters() }
-                        .font(.buttonText)
-                        .foregroundStyle(Color.appAccent)
-                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                }
-
-                Spacer()
-
-                Button("Ferdig") { dismiss() }
-                    .font(.buttonText)
-                    .foregroundStyle(Color.appAccent)
-                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-            }
-            .padding(.horizontal, AppSpacing.xl)
-            .padding(.top, AppSpacing.sm)
-
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.xl) {
                     // Active filters summary
                     if searchVM.activeFilterCount > 0 {
                         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                            Text("Aktive filter")
-                                .font(.caption2Text)
-                                .foregroundStyle(Color.appMutedForeground)
-                                .textCase(.uppercase)
+                            HStack {
+                                filterSectionHeader("Aktive filter", icon: "line.3.horizontal.decrease.circle.fill")
+                                Spacer()
+                                Button("Nullstill") { searchVM.clearFilters() }
+                                    .font(.buttonText)
+                                    .foregroundStyle(Color.appAccent)
+                            }
 
                             FlowLayout(spacing: AppSpacing.sm) {
                                 ForEach(searchVM.filters.languages.sorted(), id: \.self) { lang in
@@ -60,9 +43,7 @@ struct FilterPanel: View {
 
                     // Languages
                     VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                        Text("Språk")
-                            .font(.sectionTitle)
-                            .foregroundStyle(Color.appForeground)
+                        filterSectionHeader("Språk", icon: "globe")
 
                         FlowLayout(spacing: AppSpacing.sm) {
                             ForEach(allLanguages, id: \.self) { language in
@@ -78,27 +59,24 @@ struct FilterPanel: View {
 
                     // Sort
                     VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                        Text("Sorter")
-                            .font(.sectionTitle)
-                            .foregroundStyle(Color.appForeground)
+                        filterSectionHeader("Sorter", icon: "arrow.up.arrow.down")
 
-                        Picker("Sorter", selection: Binding(
-                            get: { searchVM.filters.sortBy },
-                            set: { searchVM.setSortBy($0) }
-                        )) {
+                        FlowLayout(spacing: AppSpacing.sm) {
                             ForEach(SortOption.allCases, id: \.self) { option in
-                                Text(option.label).tag(option)
+                                FilterChip(
+                                    label: option.label,
+                                    isSelected: searchVM.filters.sortBy == option
+                                ) {
+                                    searchVM.setSortBy(option)
+                                }
                             }
                         }
-                        .pickerStyle(.segmented)
                     }
 
                     // Duration (episode search only)
                     if searchVM.activeTab == .episodes {
                         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                            Text("Varighet")
-                                .font(.sectionTitle)
-                                .foregroundStyle(Color.appForeground)
+                            filterSectionHeader("Varighet", icon: "clock")
 
                             FlowLayout(spacing: AppSpacing.sm) {
                                 ForEach(DurationFilter.allCases, id: \.self) { duration in
@@ -115,9 +93,7 @@ struct FilterPanel: View {
 
                     // Categories
                     VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                        Text("Kategorier")
-                            .font(.sectionTitle)
-                            .foregroundStyle(Color.appForeground)
+                        filterSectionHeader("Kategorier", icon: "tag")
 
                         FlowLayout(spacing: AppSpacing.sm) {
                             ForEach(allCategories) { category in
@@ -131,10 +107,24 @@ struct FilterPanel: View {
                         }
                     }
                 }
-                .padding(AppSpacing.lg)
+                .padding(.horizontal, AppSpacing.lg)
+                .padding(.top, AppSpacing.xxl)
+                .padding(.bottom, AppSpacing.lg)
             }
         }
         .background(Color.appBackground)
+    }
+
+    private func filterSectionHeader(_ title: String, icon: String) -> some View {
+        HStack(spacing: AppSpacing.sm) {
+            Image(systemName: icon)
+                .font(.system(size: 13))
+                .foregroundStyle(Color.appAccent)
+            Text(title)
+                .font(.cardTitle)
+                .foregroundStyle(Color.appMutedForeground)
+                .textCase(.uppercase)
+        }
     }
 
     private func activeChip(_ label: String, remove: @escaping () -> Void) -> some View {

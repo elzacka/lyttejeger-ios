@@ -67,17 +67,20 @@ enum BackgroundRefreshService {
         let feedIds = podcastIndexFeedIds
         let slugs = nrkSlugs
 
-        // Fetch in parallel to warm caches
-        await withTaskGroup(of: Void.self) { group in
-            if !feedIds.isEmpty {
-                group.addTask {
-                    _ = try? await PodcastIndexAPI.shared.episodesByFeedIds(feedIds, max: 10)
-                }
-            }
+        // Fetch Podcast Index feeds
+        if !feedIds.isEmpty {
+            _ = try? await PodcastIndexAPI.shared.episodesByFeedIds(feedIds, max: 10)
+        }
 
-            for slug in slugs {
-                group.addTask {
-                    _ = try? await NRKPodcastService.shared.fetchEpisodes(nrkSlug: slug)
+        // Fetch NRK feeds with concurrency limit to avoid overwhelming the network
+        let maxConcurrent = 4
+        for batch in stride(from: 0, to: slugs.count, by: maxConcurrent) {
+            let batchSlugs = Array(slugs[batch..<min(batch + maxConcurrent, slugs.count)])
+            await withTaskGroup(of: Void.self) { group in
+                for slug in batchSlugs {
+                    group.addTask {
+                        _ = try? await NRKPodcastService.shared.fetchEpisodes(nrkSlug: slug)
+                    }
                 }
             }
         }

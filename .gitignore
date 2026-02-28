@@ -28,6 +28,8 @@ xcode_simulator_log.txt
 # IDE
 .vscode/
 
-# Claude
+
+# Developer only
+.obsidian
 .claude/
 CLAUDE.md

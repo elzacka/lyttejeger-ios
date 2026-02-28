@@ -6,7 +6,7 @@ struct ChapterPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Custom header
+            // Header
             HStack {
                 Spacer()
 
@@ -23,7 +23,7 @@ struct ChapterPanel: View {
                     .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
             }
             .padding(.horizontal, AppSpacing.xl)
-            .padding(.top, AppSpacing.sm)
+            .padding(.top, AppSpacing.xl)
 
             // Chapter list
             ScrollView {
