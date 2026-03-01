@@ -1,6 +1,6 @@
 # Personvern
 
-*Sist oppdatert: 28. februar 2026*
+*Sist oppdatert: 2. mars 2026*
 
 ## Kort oppsummert
 
@@ -26,7 +26,7 @@ Når du søker etter podkaster, sendes søketeksten til Podcast Index sine serve
 
 ### NRK-podkaster
 
-Lyttejeger henter NRK-podkastkatalogen fra et offentlig GitHub-repo. Ingen brukerdata sendes i disse forespørslene.
+Lyttejeger henter NRK-podkastkatalogen og RSS-feeder fra et offentlig GitHub-repo (GitHub Pages). IP-adressen din er synlig for GitHub i forbindelse med disse forespørslene. Ingen brukerdata sendes utover det.
 
 ## Hva appen ikke gjør
 
@@ -37,6 +37,10 @@ Lyttejeger henter NRK-podkastkatalogen fra et offentlig GitHub-repo. Ingen bruke
 - Deler ingen data med tredjeparter
 - Bruker ingen informasjonskapsler (cookies)
 - Krever ingen innlogging
+
+## Datalagring og sletting
+
+Avspillingsposisjoner for ferdige episoder slettes automatisk etter 90 dager. All annen data (abonnementer, spillekø) lagres inntil du sletter den manuelt.
 
 ## Dine rettigheter
 
@@ -55,7 +59,7 @@ Appen bruker Apples innebygde loggfunksjon (`os.Logger`) for å registrere tekni
 ## Sikkerhet
 
 - All nettverkskommunikasjon skjer over HTTPS
-- API-nøkler er kryptert i appen
+- API-nøkler er obfuskert i appen
 - Sertifikatpinning sikrer kommunikasjon med Podcast Index
 - Appen bruker ingen tredjepartsbiblioteker
 

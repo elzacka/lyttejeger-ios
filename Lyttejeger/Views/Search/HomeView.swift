@@ -9,8 +9,8 @@ struct HomeView: View {
     @FocusState private var isSearchFocused: Bool
 
     // Home sections
-    @AppStorage("showLastPlayed") private var showLastPlayed = true
-    @AppStorage("showNewFromSubscriptions") private var showNewFromSubscriptions = true
+    @AppStorage(AppConstants.showLastPlayedKey) private var showLastPlayed = true
+    @AppStorage(AppConstants.showNewFromSubscriptionsKey) private var showNewFromSubscriptions = true
     @State private var lastPlayedInfo: LastPlayedInfo?
     @State private var recentEpisodes: [RecentEpisodeData] = []
     @State private var hasLoadedRecent = false
@@ -34,195 +34,13 @@ struct HomeView: View {
     }
 
     var body: some View {
-        @Bindable var vm = searchVM
-
         VStack(spacing: 0) {
-            // Header
-            VStack(spacing: 0) {
-                // Search field
-                HStack(spacing: AppSpacing.md) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(Color.appAccent.opacity(0.7))
-                        .font(.system(size: 16))
+            headerView
 
-                    TextField(vm.activeTab == .podcasts ? "Søk etter podkaster..." : "Søk etter episoder...", text: Binding(
-                        get: { searchVM.filters.query },
-                        set: { searchVM.setQuery($0) }
-                    ))
-                    .font(.bodyText)
-                    .foregroundStyle(Color.appForeground)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .focused($isSearchFocused)
-                    .submitLabel(.search)
-
-                    if !searchVM.filters.query.isEmpty {
-                        Button {
-                            searchVM.setQuery("")
-                            isSearchFocused = false
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 15))
-                                .foregroundStyle(Color.appBorder)
-                        }
-                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                    }
-
-                    Button {
-                        showFilters = true
-                    } label: {
-                        Image(systemName: searchVM.activeFilterCount > 0
-                            ? "line.3.horizontal.decrease.circle.fill"
-                            : "line.3.horizontal.decrease.circle")
-                            .font(.system(size: 16))
-                            .foregroundStyle(searchVM.activeFilterCount > 0 ? Color.appAccent : Color.appAccent.opacity(0.6))
-                    }
-                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                    .accessibilityLabel(searchVM.activeFilterCount > 0 ? "Filter, \(searchVM.activeFilterCount) aktive" : "Filter")
-                }
-                .padding(.horizontal, AppSpacing.md)
-                .padding(.vertical, AppSpacing.md)
-                .background(Color.appMuted)
-                .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
-                .padding(.bottom, AppSpacing.md)
-
-                // Tab switcher
-                HStack(spacing: 0) {
-                    ForEach(SearchViewModel.SearchTab.allCases, id: \.self) { tab in
-                        Button {
-                            if UIAccessibility.isReduceMotionEnabled {
-                                searchVM.setActiveTab(tab)
-                            } else {
-                                withAnimation(.easeOut(duration: 0.2)) {
-                                    searchVM.setActiveTab(tab)
-                                }
-                            }
-                        } label: {
-                            Text(tab == .podcasts ? "Podkaster" : "Episoder")
-                                .font(.buttonText)
-                                .foregroundStyle(vm.activeTab == tab ? Color.appAccent : Color.appMutedForeground)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, AppSpacing.sm)
-                        }
-                        .accessibilityAddTraits(vm.activeTab == tab ? .isSelected : [])
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    GeometryReader { geo in
-                        Rectangle()
-                            .fill(Color.appAccent)
-                            .frame(width: geo.size.width / 2, height: 2)
-                            .offset(x: vm.activeTab == .podcasts ? 0 : geo.size.width / 2)
-                            .animation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.2), value: vm.activeTab)
-                    }
-                    .frame(height: 2)
-                }
-            }
-            .padding(.horizontal, AppSpacing.lg)
-            .padding(.top, AppSpacing.xl)
-
-            // Results / Home
             if isHomeState {
-                if hasHomeContent {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: AppSpacing.xl) {
-                            // Continue listening section
-                            if showLastPlayed, let last = lastPlayedEpisode {
-                                homeSection("Fortsett å lytte", icon: "play.circle") {
-                                    EpisodeCard(
-                                        episode: last.episode,
-                                        podcastTitle: last.podcastTitle,
-                                        podcastImage: last.podcastImage,
-                                        compact: true
-                                    )
-                                }
-                            }
-
-                            // New from subscriptions
-                            if showNewFromSubscriptions && !recentEpisodes.isEmpty {
-                                homeSection("Nytt fra Mine podder", icon: "heart.fill") {
-                                    ForEach(recentEpisodes) { item in
-                                        EpisodeCard(
-                                            episode: item.episode,
-                                            podcastTitle: item.podcastTitle,
-                                            podcastImage: item.podcastImage
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.horizontal, AppSpacing.lg)
-                        .padding(.top, AppSpacing.lg)
-                        .padding(.bottom, 100)
-                    }
-                } else if !hasLoadedRecent && !subscriptionVM.subscriptions.isEmpty {
-                    Spacer()
-                    ProgressView()
-                        .tint(Color.appAccent)
-                    Spacer()
-                } else {
-                    Spacer()
-
-                    VStack(spacing: AppSpacing.lg) {
-                        Image("LaunchLogo")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 48, height: 48)
-                            .opacity(0.4)
-
-                        Text("Finn din neste favoritt")
-                            .font(.bodyText)
-                            .foregroundStyle(Color.appMutedForeground)
-                    }
-
-                    Spacer()
-                }
+                homeContentView
             } else {
-                ScrollView {
-                    LazyVStack(spacing: AppSpacing.sm) {
-                        if searchVM.isLoading {
-                            ProgressView()
-                                .tint(Color.appAccent)
-                                .padding(.top, AppSpacing.xxxl)
-                        } else if let error = searchVM.error {
-                            Text(error)
-                                .font(.bodyText)
-                                .foregroundStyle(Color.appError)
-                                .padding(.top, AppSpacing.xxxl)
-                        } else if searchVM.activeTab == .podcasts {
-                            if searchVM.podcasts.isEmpty && !searchVM.filters.query.isEmpty {
-                                NoResultsView()
-                            } else {
-                                ForEach(searchVM.podcasts) { podcast in
-                                    PodcastCard(podcast: podcast)
-                                }
-                            }
-                        } else {
-                            if searchVM.episodes.isEmpty && !searchVM.filters.query.isEmpty {
-                                NoResultsView()
-                            } else {
-                                ForEach(searchVM.episodes) { episodeWithPodcast in
-                                    EpisodeCard(
-                                        episode: episodeWithPodcast.episode,
-                                        podcastTitle: episodeWithPodcast.podcastTitle,
-                                        podcastImage: episodeWithPodcast.podcastImage
-                                    )
-                                }
-                            }
-                        }
-
-                        // Attribution
-                        Text("Søk via Podcast Index")
-                            .font(.caption2Text)
-                            .foregroundStyle(Color.appBorder)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, AppSpacing.md)
-                    }
-                    .padding(.horizontal, AppSpacing.lg)
-                    .padding(.top, AppSpacing.sm)
-                    .padding(.bottom, 100)
-                }
-                .scrollDismissesKeyboard(.interactively)
+                searchResultsView
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -249,6 +67,202 @@ struct HomeView: View {
         .onChange(of: playerVM.currentEpisode?.id) { _, _ in
             loadLastPlayed()
         }
+    }
+
+    // MARK: - Header
+
+    private var headerView: some View {
+        @Bindable var vm = searchVM
+
+        return VStack(spacing: 0) {
+            // Search field
+            HStack(spacing: AppSpacing.md) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(Color.appAccent.opacity(0.7))
+                    .font(.system(size: 16))
+
+                TextField(vm.activeTab == .podcasts ? "Søk etter podkaster..." : "Søk etter episoder...", text: Binding(
+                    get: { searchVM.filters.query },
+                    set: { searchVM.setQuery($0) }
+                ))
+                .font(.bodyText)
+                .foregroundStyle(Color.appForeground)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .focused($isSearchFocused)
+                .submitLabel(.search)
+
+                if !searchVM.filters.query.isEmpty {
+                    Button {
+                        searchVM.setQuery("")
+                        isSearchFocused = false
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Color.appBorder)
+                    }
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                }
+
+                Button {
+                    showFilters = true
+                } label: {
+                    Image(systemName: searchVM.activeFilterCount > 0
+                        ? "line.3.horizontal.decrease.circle.fill"
+                        : "line.3.horizontal.decrease.circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(searchVM.activeFilterCount > 0 ? Color.appAccent : Color.appAccent.opacity(0.6))
+                }
+                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                .accessibilityLabel(searchVM.activeFilterCount > 0 ? "Filter, \(searchVM.activeFilterCount) aktive" : "Filter")
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, AppSpacing.md)
+            .background(Color.appMuted)
+            .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
+            .padding(.bottom, AppSpacing.md)
+
+            // Tab switcher
+            HStack(spacing: 0) {
+                ForEach(SearchViewModel.SearchTab.allCases, id: \.self) { tab in
+                    Button {
+                        if UIAccessibility.isReduceMotionEnabled {
+                            searchVM.setActiveTab(tab)
+                        } else {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                searchVM.setActiveTab(tab)
+                            }
+                        }
+                    } label: {
+                        Text(tab == .podcasts ? "Podkaster" : "Episoder")
+                            .font(.buttonText)
+                            .foregroundStyle(vm.activeTab == tab ? Color.appAccent : Color.appMutedForeground)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, AppSpacing.sm)
+                    }
+                    .accessibilityAddTraits(vm.activeTab == tab ? .isSelected : [])
+                }
+            }
+            .overlay(alignment: .bottom) {
+                GeometryReader { geo in
+                    Rectangle()
+                        .fill(Color.appAccent)
+                        .frame(width: geo.size.width / 2, height: 2)
+                        .offset(x: vm.activeTab == .podcasts ? 0 : geo.size.width / 2)
+                        .animation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.2), value: vm.activeTab)
+                }
+                .frame(height: 2)
+            }
+        }
+        .padding(.horizontal, AppSpacing.lg)
+        .padding(.top, AppSpacing.xl)
+    }
+
+    // MARK: - Home Content
+
+    @ViewBuilder
+    private var homeContentView: some View {
+        if hasHomeContent {
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppSpacing.xl) {
+                    if showLastPlayed, let last = lastPlayedEpisode {
+                        homeSection("Fortsett å lytte", icon: "play.circle") {
+                            EpisodeCard(
+                                episode: last.episode,
+                                podcastTitle: last.podcastTitle,
+                                podcastImage: last.podcastImage,
+                                compact: true
+                            )
+                        }
+                    }
+
+                    if showNewFromSubscriptions && !recentEpisodes.isEmpty {
+                        homeSection("Nytt fra Mine podder", icon: "heart.fill") {
+                            ForEach(recentEpisodes) { item in
+                                EpisodeCard(
+                                    episode: item.episode,
+                                    podcastTitle: item.podcastTitle,
+                                    podcastImage: item.podcastImage
+                                )
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, AppSpacing.lg)
+                .padding(.top, AppSpacing.lg)
+                .padding(.bottom, AppConstants.playerBottomPadding)
+            }
+        } else if !hasLoadedRecent && !subscriptionVM.subscriptions.isEmpty {
+            Spacer()
+            ProgressView()
+                .tint(Color.appAccent)
+            Spacer()
+        } else {
+            Spacer()
+
+            VStack(spacing: AppSpacing.lg) {
+                Image("LaunchLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 48, height: 48)
+                    .opacity(0.4)
+
+                Text("Finn din neste favoritt")
+                    .font(.bodyText)
+                    .foregroundStyle(Color.appMutedForeground)
+            }
+
+            Spacer()
+        }
+    }
+
+    // MARK: - Search Results
+
+    private var searchResultsView: some View {
+        ScrollView {
+            LazyVStack(spacing: AppSpacing.sm) {
+                if searchVM.isLoading {
+                    ProgressView()
+                        .tint(Color.appAccent)
+                        .padding(.top, AppSpacing.xxxl)
+                } else if let error = searchVM.error {
+                    Text(error)
+                        .font(.bodyText)
+                        .foregroundStyle(Color.appError)
+                        .padding(.top, AppSpacing.xxxl)
+                } else if searchVM.activeTab == .podcasts {
+                    if searchVM.podcasts.isEmpty && !searchVM.filters.query.isEmpty {
+                        NoResultsView()
+                    } else {
+                        ForEach(searchVM.podcasts) { podcast in
+                            PodcastCard(podcast: podcast)
+                        }
+                    }
+                } else {
+                    if searchVM.episodes.isEmpty && !searchVM.filters.query.isEmpty {
+                        NoResultsView()
+                    } else {
+                        ForEach(searchVM.episodes) { episodeWithPodcast in
+                            EpisodeCard(
+                                episode: episodeWithPodcast.episode,
+                                podcastTitle: episodeWithPodcast.podcastTitle,
+                                podcastImage: episodeWithPodcast.podcastImage
+                            )
+                        }
+                    }
+                }
+
+                Text("Søk via Podcast Index")
+                    .font(.caption2Text)
+                    .foregroundStyle(Color.appMutedForeground)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, AppSpacing.md)
+            }
+            .padding(.horizontal, AppSpacing.lg)
+            .padding(.top, AppSpacing.sm)
+            .padding(.bottom, AppConstants.playerBottomPadding)
+        }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     // MARK: - Section Header
@@ -311,25 +325,31 @@ struct HomeView: View {
             }
         }
 
-        // NRK subscriptions
+        // NRK subscriptions (concurrent with limit)
         let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 3600)
-        let formatter = ISO8601DateFormatter()
 
-        for sub in nrkSubs {
-            guard !Task.isCancelled else { break }
-            let slug = String(sub.podcastId.dropFirst(4))
-            if let result = try? await NRKPodcastService.shared.fetchEpisodes(nrkSlug: slug) {
-                for ep in result.episodes {
-                    if let date = formatter.date(from: ep.publishedAt), date > sevenDaysAgo {
-                        results.append(RecentEpisodeData(
+        let nrkSlugList = nrkSubs.map { String($0.podcastId.dropFirst(4)) }
+        let nrkResults = await withTaskGroup(of: [RecentEpisodeData].self) { group in
+            for slug in nrkSlugList {
+                group.addTask {
+                    guard let result = try? await NRKPodcastService.shared.fetchEpisodes(nrkSlug: slug) else { return [] }
+                    return result.episodes.compactMap { ep in
+                        guard let date = iso8601BasicFormatter.date(from: ep.publishedAt), date > sevenDaysAgo else { return nil }
+                        return RecentEpisodeData(
                             episode: ep,
                             podcastTitle: result.podcastTitle,
                             podcastImage: result.podcastImageUrl
-                        ))
+                        )
                     }
                 }
             }
+            var collected: [RecentEpisodeData] = []
+            for await batch in group {
+                collected.append(contentsOf: batch)
+            }
+            return collected
         }
+        results.append(contentsOf: nrkResults)
 
         // Sort newest first (ISO8601 strings sort lexicographically)
         results.sort { $0.episode.publishedAt > $1.episode.publishedAt }

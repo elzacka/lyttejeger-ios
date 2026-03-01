@@ -29,20 +29,22 @@ func formatDuration(_ seconds: TimeInterval) -> String {
     return "\(totalMinutes) min"
 }
 
-private let shortDateFormatter: DateFormatter = {
+nonisolated(unsafe) private let shortDateFormatter: DateFormatter = {
     let f = DateFormatter()
     f.locale = Locale(identifier: "nb_NO")
     f.dateFormat = "MMM yyyy"
     return f
 }()
 
-private nonisolated(unsafe) let iso8601Formatter: ISO8601DateFormatter = {
+/// ISO 8601 formatter with fractional seconds (parses "2025-01-15T12:00:00.000Z")
+nonisolated(unsafe) let iso8601Formatter: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f
 }()
 
-private nonisolated(unsafe) let iso8601BasicFormatter = ISO8601DateFormatter()
+/// ISO 8601 formatter with default options (parses "2025-01-15T12:00:00Z")
+nonisolated(unsafe) let iso8601BasicFormatter = ISO8601DateFormatter()
 
 /// Format ISO date to short month + year (e.g., "jan. 2025")
 func formatShortDate(_ dateString: String) -> String? {

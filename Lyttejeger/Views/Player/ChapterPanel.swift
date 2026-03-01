@@ -33,14 +33,8 @@ struct ChapterPanel: View {
                             playerVM.seekToChapter(chapter)
                         } label: {
                             HStack(spacing: AppSpacing.md) {
-                                if let img = chapter.img, let url = URL(string: img) {
-                                    AsyncImage(url: url) { image in
-                                        image.resizable().aspectRatio(contentMode: .fill)
-                                    } placeholder: {
-                                        Color.appMuted
-                                    }
-                                    .frame(width: 40, height: 40)
-                                    .clipShape(.rect(cornerRadius: AppRadius.sm))
+                                if let img = chapter.img {
+                                    CachedAsyncImage(url: img, size: 40)
                                 }
 
                                 VStack(alignment: .leading, spacing: 2) {

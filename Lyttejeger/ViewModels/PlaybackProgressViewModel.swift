@@ -5,7 +5,7 @@ import os
 @Observable
 @MainActor
 final class PlaybackProgressViewModel {
-    private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "PlaybackProgressVM")
+    nonisolated(unsafe) private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "PlaybackProgressVM")
     private var modelContext: ModelContext?
 
     func setup(_ context: ModelContext) {

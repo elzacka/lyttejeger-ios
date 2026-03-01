@@ -6,6 +6,7 @@ struct PlayerControls: View {
     @State private var isSeeking = false
     @State private var seekPosition: TimeInterval = 0
     @State private var skipOverlay: String?
+    @State private var skipOverlayTask: Task<Void, Never>?
 
     private var displayTime: TimeInterval {
         isSeeking ? seekPosition : playerVM.currentTime
@@ -126,7 +127,7 @@ struct PlayerControls: View {
 
                             if let label = sleepTimerLabel {
                                 Text(label)
-                                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                    .font(.badgeText)
                                     .foregroundStyle(Color.appAccent)
                             }
                         }
@@ -168,10 +169,21 @@ struct PlayerControls: View {
     }
 
     private func showSkipOverlay(_ text: String) {
-        withAnimation(.easeOut(duration: 0.15)) { skipOverlay = text }
-        Task {
-            try? await Task.sleep(for: .milliseconds(600))
-            withAnimation(.easeOut(duration: 0.2)) { skipOverlay = nil }
+        skipOverlayTask?.cancel()
+        if UIAccessibility.isReduceMotionEnabled {
+            skipOverlay = text
+            skipOverlayTask = Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled else { return }
+                skipOverlay = nil
+            }
+        } else {
+            withAnimation(.easeOut(duration: 0.15)) { skipOverlay = text }
+            skipOverlayTask = Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.2)) { skipOverlay = nil }
+            }
         }
     }
 }

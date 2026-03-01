@@ -5,7 +5,7 @@ import os
 @Observable
 @MainActor
 final class QueueViewModel {
-    private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "QueueVM")
+    nonisolated(unsafe) private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "QueueVM")
     private var modelContext: ModelContext?
     var items: [QueueItem] = []
 

@@ -221,6 +221,10 @@ actor PodcastIndexAPI {
         self.decoder = JSONDecoder()
     }
 
+    func clearCache() {
+        cache.removeAll()
+    }
+
     var isConfigured: Bool {
         let key = Secrets.podcastIndexAPIKey
         return !key.isEmpty && key != "YOUR_API_KEY_HERE"
@@ -310,7 +314,8 @@ actor PodcastIndexAPI {
 
             case 429:
                 if retryCount < maxRetries {
-                    try await Task.sleep(for: .seconds(2))
+                    let retryAfter = Double(httpResponse.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 2.0
+                    try await Task.sleep(for: .seconds(retryAfter))
                     return try await apiRequest(endpoint: endpoint, params: params, retryCount: retryCount + 1)
                 }
                 throw PodcastIndexError.rateLimitExceeded

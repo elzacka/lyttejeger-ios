@@ -1,7 +1,9 @@
 import BackgroundTasks
+import os
 import SwiftData
 
 enum BackgroundRefreshService {
+    nonisolated(unsafe) private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "BackgroundRefresh")
 
     static func register() {
         BGTaskScheduler.shared.register(
@@ -26,11 +28,14 @@ enum BackgroundRefreshService {
         let sendableTask = UncheckedSendable(task)
 
         let work = Task {
+            logger.info("Background refresh started")
             await performRefresh()
+            logger.info("Background refresh completed")
             sendableTask.value.setTaskCompleted(success: true)
         }
 
         task.expirationHandler = {
+            logger.warning("Background refresh expired")
             work.cancel()
             sendableTask.value.setTaskCompleted(success: false)
         }
@@ -46,10 +51,16 @@ enum BackgroundRefreshService {
             let subs = try context.fetch(descriptor)
             subscriptions = subs.map { (podcastId: $0.podcastId, feedUrl: $0.feedUrl) }
         } catch {
+            logger.error("Failed to fetch subscriptions: \(error.localizedDescription)")
             return
         }
 
-        guard !subscriptions.isEmpty else { return }
+        guard !subscriptions.isEmpty else {
+            logger.debug("No subscriptions, skipping refresh")
+            return
+        }
+
+        logger.debug("Refreshing \(subscriptions.count) subscriptions")
 
         // Split into Podcast Index feeds vs NRK feeds
         var podcastIndexFeedIds: [Int] = []
@@ -73,9 +84,8 @@ enum BackgroundRefreshService {
         }
 
         // Fetch NRK feeds with concurrency limit to avoid overwhelming the network
-        let maxConcurrent = 4
-        for batch in stride(from: 0, to: slugs.count, by: maxConcurrent) {
-            let batchSlugs = Array(slugs[batch..<min(batch + maxConcurrent, slugs.count)])
+        for batch in stride(from: 0, to: slugs.count, by: AppConstants.nrkConcurrencyLimit) {
+            let batchSlugs = Array(slugs[batch..<min(batch + AppConstants.nrkConcurrencyLimit, slugs.count)])
             await withTaskGroup(of: Void.self) { group in
                 for slug in batchSlugs {
                     group.addTask {

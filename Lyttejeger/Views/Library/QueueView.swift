@@ -59,7 +59,7 @@ struct QueueView: View {
                         }
                     }
                     .padding(.horizontal, AppSpacing.lg)
-                    .padding(.bottom, 60)
+                    .padding(.bottom, AppConstants.playerBottomPadding)
                 }
             }
         }

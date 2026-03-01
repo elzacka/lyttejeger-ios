@@ -7,17 +7,20 @@ actor ChapterService {
     private let cacheTTL: TimeInterval = AppConstants.chapterCacheTTL
 
     func fetchChapters(from url: String) async -> [Chapter] {
-        guard !url.isEmpty else { return [] }
+        guard !url.isEmpty,
+              let requestUrl = URL(string: url),
+              requestUrl.scheme == "https" else { return [] }
 
         // Check cache
         if let cached = cache[url], Date().timeIntervalSince(cached.timestamp) < cacheTTL {
             return cached.chapters
         }
 
-        guard let requestUrl = URL(string: url) else { return [] }
-
         do {
-            let (data, _) = try await URLSession.shared.data(from: requestUrl)
+            let (data, urlResponse) = try await URLSession.shared.data(from: requestUrl)
+            guard let http = urlResponse as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                return []
+            }
             let response = try JSONDecoder().decode(ChaptersResponse.self, from: data)
 
             let chapters = response.chapters
@@ -48,6 +51,10 @@ actor ChapterService {
         } catch {
             return []
         }
+    }
+
+    func clearCache() {
+        cache.removeAll()
     }
 
     static func getCurrentChapter(_ chapters: [Chapter], at time: TimeInterval) -> Chapter? {

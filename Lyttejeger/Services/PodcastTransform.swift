@@ -2,14 +2,14 @@ import Foundation
 
 enum PodcastTransform {
 
-    // MARK: - Cached Formatters & Regex
+    // MARK: - Cached Regex
 
-    private nonisolated(unsafe) static let isoFormatter = ISO8601DateFormatter()
     private static let linkRegex = try! NSRegularExpression(pattern: "<a[^>]*href=[\"']([^\"']+)[\"'][^>]*>([^<]*)</a>")
     private static let blockRegex = try! NSRegularExpression(pattern: "<(p|div|br|h[1-6]|li|tr)[^>]*>")
     private static let tagRegex = try! NSRegularExpression(pattern: "<[^>]*>")
     private static let spacesRegex = try! NSRegularExpression(pattern: "[ \\t]+")
     private static let newlinesRegex = try! NSRegularExpression(pattern: "\\n{3,}")
+    private static let truncatedTagRegex = try! NSRegularExpression(pattern: "<[^>]*$")
 
     // MARK: - Feed Transform
 
@@ -64,10 +64,10 @@ enum PodcastTransform {
 
     private static func safeTimestampToISO(_ timestamp: Int?) -> String {
         guard let timestamp, timestamp > 0 else {
-            return isoFormatter.string(from: Date())
+            return iso8601BasicFormatter.string(from: Date())
         }
         let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
-        return isoFormatter.string(from: date)
+        return iso8601BasicFormatter.string(from: date)
     }
 
     private static func normalizeLanguage(_ lang: String) -> String {
@@ -126,6 +126,9 @@ enum PodcastTransform {
         nsRange = NSRange(text.startIndex..., in: text)
         // Remove remaining HTML
         text = tagRegex.stringByReplacingMatches(in: text, range: nsRange, withTemplate: "")
+        nsRange = NSRange(text.startIndex..., in: text)
+        // Remove truncated tags (API may cut off mid-tag)
+        text = truncatedTagRegex.stringByReplacingMatches(in: text, range: nsRange, withTemplate: "")
         // Decode entities
         text = decodeHTMLEntities(text)
         nsRange = NSRange(text.startIndex..., in: text)

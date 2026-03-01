@@ -8,7 +8,8 @@ En podkastspiller for iOS, skrevet i SwiftUI. Rolig, retro design uten sporing e
 - NRK-podkaster via dedikert katalog
 - Spillekø med manuell sortering
 - Abonnementer med nytt-fra-mine-podder-visning
-- Fullskjermspiller med kapitler, transkripsjoner og sovetimer
+- Fullskjermspiller med kapitler, transkripsjoner og søvntimer
+- Eksporter/lagre lydfiler direkte fra spilleren
 - Eksplisitt-merking per Apple og Podcast Index sine retningslinjer
 - Sortering og filtrering: språk, kategori, dato, popularitet, varighet
 - Avansert søk med eksakte fraser (`"..."`), ekskludering (`-ord`) og OR-operator
@@ -25,7 +26,7 @@ Se [brukerveiledningen](Brukerveiledning.md) for detaljer om søk og filtrering.
 | **Rammeverk** | SwiftUI, SwiftData, AVFoundation, MediaPlayer |
 | **Minstekrav** | iOS 26, iPhone (stående) |
 | **Avhengigheter** | Ingen tredjepartsbiblioteker |
-| **Tester** | Swift Testing (24 tester, 5 suiter) |
+| **Tester** | Swift Testing (50 tester, 12 suiter) |
 | **Byggverktøy** | Xcode 26.2, xcodegen |
 | **Typografi** | DM Mono (inkludert) |
 | **Design** | Lys modus, beige/grønn retro |

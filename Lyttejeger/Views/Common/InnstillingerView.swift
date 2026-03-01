@@ -2,56 +2,54 @@ import SwiftUI
 
 struct InnstillingerView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("showLastPlayed") private var showLastPlayed = true
-    @AppStorage("showNewFromSubscriptions") private var showNewFromSubscriptions = true
+    @AppStorage(AppConstants.showLastPlayedKey) private var showLastPlayed = true
+    @AppStorage(AppConstants.showNewFromSubscriptionsKey) private var showNewFromSubscriptions = true
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: AppSpacing.lg) {
-                    // Section header
-                    HStack(spacing: AppSpacing.sm) {
-                        Image(systemName: "house")
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color.appAccent)
-                        Text("Hjem-skjerm")
-                            .font(.caption2Text)
-                            .foregroundStyle(Color.appMutedForeground)
-                            .textCase(.uppercase)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    // Toggles card
-                    VStack(spacing: 0) {
-                        toggleRow(
-                            title: "Fortsett å lytte",
-                            subtitle: "Vis uferdig episode",
-                            isOn: $showLastPlayed
-                        )
-
-                        Rectangle()
-                            .fill(Color.appBorder.opacity(0.3))
-                            .frame(height: 1)
-                            .padding(.horizontal, AppSpacing.lg)
-
-                        toggleRow(
-                            title: "Nytt fra Mine podder",
-                            subtitle: "Episoder fra siste 7 dager",
-                            isOn: $showNewFromSubscriptions
-                        )
-                    }
-                    .background(Color.appCard)
-                    .clipShape(.rect(cornerRadius: AppRadius.lg))
-
-                    Text("Velg hva som vises på Hjem-skjermen når du ikke søker.")
-                        .font(.caption2Text)
-                        .foregroundStyle(Color.appMutedForeground)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, AppSpacing.lg)
-                .padding(.top, AppSpacing.xxl)
+        VStack(spacing: AppSpacing.lg) {
+            // Section header
+            HStack(spacing: AppSpacing.sm) {
+                Image(systemName: "house")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.appAccent)
+                Text("Hjem-skjerm")
+                    .font(.caption2Text)
+                    .foregroundStyle(Color.appMutedForeground)
+                    .textCase(.uppercase)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Toggles card
+            VStack(spacing: 0) {
+                toggleRow(
+                    title: "Fortsett å lytte",
+                    subtitle: "Vis uferdig episode",
+                    isOn: $showLastPlayed
+                )
+
+                Rectangle()
+                    .fill(Color.appBorder.opacity(0.3))
+                    .frame(height: 1)
+                    .padding(.horizontal, AppSpacing.lg)
+
+                toggleRow(
+                    title: "Nytt fra Mine podder",
+                    subtitle: "Episoder fra siste 7 dager",
+                    isOn: $showNewFromSubscriptions
+                )
+            }
+            .background(Color.appCard)
+            .clipShape(.rect(cornerRadius: AppRadius.lg))
+
+            Text("Velg hva som vises på Hjem-skjermen når du ikke søker.")
+                .font(.caption2Text)
+                .foregroundStyle(Color.appMutedForeground)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer()
         }
+        .padding(.top, AppSpacing.xxl)
+        .padding(.horizontal, AppSpacing.lg)
         .background(Color.appBackground)
     }
 

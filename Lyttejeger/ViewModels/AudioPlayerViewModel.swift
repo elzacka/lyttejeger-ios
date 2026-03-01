@@ -28,13 +28,13 @@ struct LastPlayedInfo: Codable, Sendable {
     }
 
     static func load() -> LastPlayedInfo? {
-        guard let data = UserDefaults.standard.data(forKey: "lastPlayedInfo") else { return nil }
+        guard let data = UserDefaults.standard.data(forKey: AppConstants.lastPlayedInfoKey) else { return nil }
         return try? JSONDecoder().decode(LastPlayedInfo.self, from: data)
     }
 
     func save() {
         if let data = try? JSONEncoder().encode(self) {
-            UserDefaults.standard.set(data, forKey: "lastPlayedInfo")
+            UserDefaults.standard.set(data, forKey: AppConstants.lastPlayedInfoKey)
         }
     }
 }
@@ -42,7 +42,7 @@ struct LastPlayedInfo: Codable, Sendable {
 @Observable
 @MainActor
 final class AudioPlayerViewModel {
-    private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "AudioPlayerVM")
+    nonisolated(unsafe) private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "AudioPlayerVM")
     private let audioService = AudioService.shared
     private var modelContext: ModelContext?
     private var saveTask: Task<Void, Never>?
@@ -224,13 +224,13 @@ final class AudioPlayerViewModel {
         if sleepTimerMinutes == -1 {
             // End of episode
             if duration > 0 && currentTime >= duration - 1 {
-                audioService.togglePlayPause()
+                audioService.pause()
                 sleepTimerMinutes = 0
             }
         } else if let endTime = sleepTimerEndTime {
             sleepTimerRemaining = endTime.timeIntervalSince(Date())
             if sleepTimerRemaining <= 0 {
-                audioService.togglePlayPause()
+                audioService.pause()
                 sleepTimerMinutes = 0
                 sleepTimerEndTime = nil
             }
@@ -277,7 +277,7 @@ final class AudioPlayerViewModel {
         let dur = duration
         guard dur > 0 else { return }
 
-        let completed = time / dur > 0.9
+        let completed = time / dur > AppConstants.completionThreshold
         let episodeId = episode.id
 
         let descriptor = FetchDescriptor<PlaybackPosition>(predicate: #Predicate { $0.episodeId == episodeId })

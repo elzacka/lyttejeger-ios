@@ -14,6 +14,7 @@ struct PodcastDetailView: View {
     @State private var nrkImageUrl: String?
     @State private var nrkDescription: String?
     @State private var toastMessage: String?
+    @State private var toastTask: Task<Void, Never>?
 
     /// Enriched podcast data (fetched from API when initial data is incomplete)
     private var pod: Podcast { podcastInfo ?? podcast }
@@ -42,20 +43,28 @@ struct PodcastDetailView: View {
                     // Subscribe button
                     Button {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        let wasSubscribed = subscriptionVM.isSubscribed(podcast.id)
-                        subscriptionVM.toggleSubscription(podcast: podcast)
-                        toastMessage = wasSubscribed ? "Fjernet fra Mine podder" : "Lagt til Mine podder"
-                        Task {
+                        let wasSubscribed = subscriptionVM.isSubscribed(pod.id)
+                        subscriptionVM.toggleSubscription(podcast: pod)
+                        let message = wasSubscribed ? "Fjernet fra Mine podder" : "Lagt til Mine podder"
+                        toastMessage = message
+                        UIAccessibility.post(notification: .announcement, argument: message)
+                        toastTask?.cancel()
+                        toastTask = Task {
                             try? await Task.sleep(for: .seconds(2))
-                            withAnimation { toastMessage = nil }
+                            guard !Task.isCancelled else { return }
+                            if UIAccessibility.isReduceMotionEnabled {
+                                toastMessage = nil
+                            } else {
+                                withAnimation { toastMessage = nil }
+                            }
                         }
                     } label: {
-                        Text(subscriptionVM.isSubscribed(podcast.id) ? "Slutt å følge" : "Følg")
+                        Text(subscriptionVM.isSubscribed(pod.id) ? "Slutt å følge" : "Følg")
                             .font(.buttonText)
-                            .foregroundStyle(subscriptionVM.isSubscribed(podcast.id) ? Color.appMutedForeground : .white)
+                            .foregroundStyle(subscriptionVM.isSubscribed(pod.id) ? Color.appMutedForeground : .white)
                             .padding(.horizontal, AppSpacing.lg)
                             .padding(.vertical, AppSpacing.sm)
-                            .background(subscriptionVM.isSubscribed(podcast.id) ? Color.appMuted : Color.appAccent)
+                            .background(subscriptionVM.isSubscribed(pod.id) ? Color.appMuted : Color.appAccent)
                             .clipShape(.rect(cornerRadius: AppRadius.md))
                     }
                     .frame(minHeight: AppSize.touchTarget)
@@ -143,7 +152,7 @@ struct PodcastDetailView: View {
                     .padding(.horizontal, AppSpacing.lg)
                 }
             }
-            .padding(.bottom, 100)
+            .padding(.bottom, AppConstants.playerBottomPadding)
         }
         .background(Color.appBackground)
         .overlay(alignment: .bottom) {
@@ -225,20 +234,21 @@ struct PodcastDetailView: View {
             return
         }
 
+        defer { isLoading = false }
+
         do {
             let response = try await PodcastIndexAPI.shared.episodesByFeedId(feedId, max: 100)
             episodes = PodcastTransform.transformEpisodes(response.items ?? [])
-            isLoading = false
         } catch is URLError {
             self.error = "Ingen nettverkstilkobling.\nSjekk tilkoblingen og prøv igjen."
-            isLoading = false
         } catch {
             self.error = "Kunne ikke laste episoder.\nPrøv igjen senere."
-            isLoading = false
         }
     }
 
     private func loadNRKEpisodes(slug: String) async {
+        defer { isLoading = false }
+
         do {
             let result = try await NRKPodcastService.shared.fetchEpisodes(nrkSlug: slug)
             episodes = result.episodes
@@ -250,14 +260,10 @@ struct PodcastDetailView: View {
             if !result.podcastDescription.isEmpty {
                 nrkDescription = result.podcastDescription
             }
-
-            isLoading = false
         } catch is URLError {
             self.error = "Ingen nettverkstilkobling.\nSjekk tilkoblingen og prøv igjen."
-            isLoading = false
         } catch {
             self.error = "Kunne ikke laste NRK-episoder.\nPrøv igjen senere."
-            isLoading = false
         }
     }
 }

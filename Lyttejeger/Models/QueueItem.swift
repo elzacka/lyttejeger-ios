@@ -3,7 +3,7 @@ import SwiftData
 
 @Model
 final class QueueItem {
-    var episodeId: String
+    @Attribute(.unique) var episodeId: String
     var podcastId: String
     var title: String
     var episodeDescription: String?

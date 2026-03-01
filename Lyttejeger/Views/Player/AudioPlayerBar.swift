@@ -86,7 +86,7 @@ struct AudioPlayerBar: View {
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(Color.appMutedForeground)
                     }
-                    .frame(minWidth: 36, minHeight: AppSize.touchTarget)
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                     .accessibilityLabel("Stopp avspilling")
                 }
                 .padding(.horizontal, AppSpacing.lg)
@@ -95,7 +95,6 @@ struct AudioPlayerBar: View {
             .frame(height: AppSize.miniPlayerHeight, alignment: .top)
             .background(Color.appCard)
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("Spiller: \(episode.title)")
             .fullScreenCover(isPresented: Binding(
                 get: { playerVM.isExpanded },
                 set: { playerVM.isExpanded = $0 }

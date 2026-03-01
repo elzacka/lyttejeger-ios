@@ -1,94 +1,207 @@
 # Brukerveiledning
 
-*Sist oppdatert: 12. februar 2026*
+*Sist oppdatert: 2. mars 2026*
+
+## Oversikt
+
+Lyttejeger har tre faner nederst på skjermen:
+
+- **Hjem** — søk og oppdagelse av podkaster
+- **Mine podder** — podkaster du følger
+- **Kø** — episoder du har lagt til for senere lytting
+
+Menyknappen (☰) gir tilgang til **Innstillinger** og **Om Lyttejeger**.
+
+## Hjem
+
+Når du ikke søker, viser Hjem-skjermen to valgfrie seksjoner:
+
+- **Fortsett å lytte** — siste episode du ikke har hørt ferdig
+- **Nytt fra Mine podder** — nye episoder fra podkaster du følger (siste 7 dager)
+
+Begge kan slås av under Innstillinger.
 
 ## Søk
 
-Lyttejeger søker i to datakilder: [Podcast Index](https://podcastindex.org/) (åpen podkast-katalog med over 4 millioner podkaster) og NRK-podkaster (via åpne RSS-feeder). Resultater fra begge kildene vises samlet.
+Lyttejeger søker i [Podcast Index](https://podcastindex.org/) (åpen katalog med over 4 millioner podkaster) og NRK-podkaster (via åpne RSS-feeder). Resultater fra begge kildene vises samlet.
 
 ### Faner
 
-- **Podkaster** — søker etter podkaster basert på tittel, beskrivelse og forfatter.
-- **Episoder** — søker etter enkeltepisoder basert på tittel, beskrivelse og medvirkende.
+- **Podkaster** — søker etter tittel, beskrivelse og forfatter
+- **Episoder** — søker etter tittel, beskrivelse og medvirkende
 
 ### Søkeoperatorer
-
-Du kan bruke spesielle operatorer for å presisere søket:
 
 | Operator | Syntaks | Eksempel | Beskrivelse |
 |----------|---------|----------|-------------|
 | OG | mellomrom | `true crime` | Alle ordene må finnes (standard) |
-| ELLER | `OR` | `krim OR true crime` | Minst ett av uttrykkene må finnes |
-| Nøyaktig frase | `"frase"` | `"true crime"` | Hele frasen må finnes nøyaktig som skrevet |
-| Utelukk | `-ord` | `krim -mord` | Fjerner resultater som inneholder ordet |
+| ELLER | `OR` | `krim OR true crime` | Minst ett av uttrykkene |
+| Nøyaktig frase | `"frase"` | `"true crime"` | Hele frasen må finnes |
+| Utelukk | `-ord` | `krim -mord` | Fjerner resultater med ordet |
 
-Operatorer kan kombineres fritt:
+Operatorer kan kombineres: `"true crime" -mord` gir nøyaktig frase uten resultater med «mord».
 
-- `"true crime" -mord` — nøyaktig frase, men utelukk resultater med «mord»
-- `fotball OR håndball -premier league` — fotball eller håndball, men ikke Premier League
+**Tips:** iOS-tastaturet bytter automatisk ut bindestrek og anførselstegn til typografiske varianter. Lyttejeger håndterer dette automatisk.
 
-**Tips:** iOS-tastaturet bytter automatisk ut bindestreken `-` med tankestrek `–` og rette anførselstegn `"` med typografiske `""`. Lyttejeger håndterer dette automatisk, så du trenger ikke tenke på det.
+### Bla uten søkeord
+
+Aktiverer du filter uten å skrive et søkeord, viser Lyttejeger populære podkaster som matcher filtrene.
 
 ## Filter
 
-Trykk på filterknappen ved siden av søkefeltet for å åpne filterpanelet. Aktive filter vises som merkede knapper øverst i panelet, og kan fjernes enkeltvis ved å trykke på krysset.
+Trykk på filterknappen ved siden av søkefeltet. Aktive filter vises som merkede knapper og kan fjernes enkeltvis. Trykk **Nullstill** for å fjerne alle.
 
 ### Språk
 
-Filtrerer resultater etter podkastens språk. Tilgjengelige valg:
-
-- **Norsk** — inkluderer bokmål og nynorsk
-- **Engelsk** — inkluderer alle engelske varianter (US, UK, AU, m.fl.)
-- **Svensk**
-- **Dansk**
-
-Du kan velge flere språk samtidig. Uten språkfilter vises kun resultater på norsk, engelsk, svensk og dansk.
+Norsk (bokmål og nynorsk), engelsk (alle varianter), svensk og dansk. Du kan velge flere. Uten språkfilter vises kun disse fire.
 
 ### Sortering
 
-Endrer rekkefølgen på resultatene:
-
-- **Relevans** — standard, sorterer etter treff i tittel, forfatter og aktualitet
-- **Nyeste** — nylig oppdaterte podkaster eller nylig publiserte episoder først
+- **Relevans** — standard, basert på treff og aktualitet
+- **Nyeste** — nylig oppdaterte eller publiserte først
 - **Eldste** — eldst først
-- **Populære** — podkaster med flest episoder først
+- **Populære** — flest episoder først
 
 ### Kategorier
 
-Filtrerer etter podkastens kategori fra Podcast Index sin taksonomi. Det finnes over 100 kategorier, fra «Astronomi» til «Vær». Du kan velge flere kategorier samtidig.
-
-Kategorier fungerer for begge faner:
-
-- **Podkaster** — viser kun podkaster som tilhører valgt(e) kategori(er)
-- **Episoder** — viser kun episoder fra podkaster som tilhører valgt(e) kategori(er)
+Over 100 kategorier fra Podcast Index. Fungerer for begge faner. Du kan velge flere.
 
 ### Varighet
 
-Kun tilgjengelig på **Episoder**-fanen. Filtrerer episoder etter lengde:
+Kun på Episoder-fanen: Under 15 min, 15–30 min, 30–60 min, over 60 min.
 
-- **Under 15 min**
-- **15–30 min**
-- **30–60 min**
-- **Over 60 min**
+### NRK-podkaster
 
-## Kombinere søk, operatorer og filter
+NRK-podkaster vises sammen med øvrige resultater, men har noen begrensninger:
 
-Alle søkeoperatorer og filter kan kombineres fritt. For eksempel:
+- Kategorier har ingen effekt
+- Sortering er begrenset
+- Søkeoperatorer matcher kun mot tittel
 
-- Søk etter `"true crime"` med språk satt til **Norsk** og kategori **Krim** — gir norskspråklige true crime-podkaster
-- Søk etter `fotball -tipping` på **Episoder**-fanen med varighet **Under 15 min** — gir korte fotballepisoder uten tippestoff
-- Søk etter `teknologi OR vitenskap` sortert etter **Nyeste** — gir de ferskeste podkastene om teknologi eller vitenskap
+For best resultat med NRK: bruk enkle søkeord og eventuelt språkfilteret Norsk.
 
-## NRK-podkaster
+## Podkastside
 
-NRK-podkaster er integrert i søket og vises sammen med øvrige resultater. Vær oppmerksom på at NRK-podkaster har noen begrensninger:
+Trykk på et podkastbilde i søkeresultatene eller i Mine podder for å åpne podkastsiden med beskrivelse, kategorier og episodeliste. Trykk på beskrivelsen for å utvide den.
 
-- **Kategorier** har ingen effekt — NRK-katalogen inneholder ikke kategoriinformasjon
-- **Sortering** etter nyeste/eldste/populære er begrenset — NRK-katalogen mangler oppdateringsdato og popularitetsdata
-- **Søkeoperatorer** fungerer best med enkle søkeord — NRK-søket matcher mot podkasttittel
+### Følge podkaster
 
-For best resultat med NRK-podkaster: bruk enkle søkeord og eventuelt språkfilteret **Norsk**.
+Trykk **Følg** for å legge podkasten til i Mine podder. Trykk **Slutt å følge** for å fjerne den.
 
-## Bla uten søkeord
+### Episodekort
 
-Hvis du ikke skriver et søkeord, men aktiverer et eller flere filter, viser Lyttejeger populære podkaster som matcher filtrene dine. Dette er nyttig for å oppdage nye podkaster innen en bestemt kategori eller på et bestemt språk.
+Hvert episodekort kan vise:
+
+- Avspillingsfremdrift (prosentlinje og prosent)
+- Avkrysningsikon for ferdighørte episoder
+- Kapittelikon hvis episoden har kapitler
+- Tekstikon hvis episoden har transkripsjon
+
+Trykk på beskrivelsen for å utvide den.
+
+## Avspilling
+
+### Starte avspilling
+
+- Trykk **avspillingsknappen** (▶) på et episodekort
+- Hold inne et episodekort og velg **Spill**
+
+### Hold inne et episodekort
+
+Holder du inne et episodekort, får du en meny med:
+
+- **Spill** — starter episoden med en gang
+- **Spill neste** — legger episoden først i køen
+- **Legg i kø** — legger episoden sist i køen
+
+### Minispilleren
+
+Når en episode spilles, vises en spillerbar nederst. Fremdriftslinjen øverst viser hvor langt du har kommet.
+
+- **Podkastbilde** — trykk for å gå til podkastsiden
+- **Episodetittel** — trykk for å åpne fullskjermspilleren
+- **Spill/Pause** — starter eller pauser avspilling
+- **Spol frem** — spoler 30 sekunder frem
+- **Stopp** (✕) — stopper avspillingen
+
+### Fullskjermspilleren
+
+Trykk på episodetittelen i minispilleren for å åpne fullskjermspilleren.
+
+**Navigering:**
+
+- Trykk på podkastbildet eller podkastnavnet for å gå til podkastsiden
+- Eksportknappen (øverst til høyre) laster ned lydfilen og åpner delingsmenyen der du kan lagre til Filer, sende via AirDrop eller dele videre
+
+**Kontroller:**
+
+- **Hastighet** — trykk for å bla gjennom: 0,5×, 0,75×, 1×, 1,25×, 1,5×, 1,75× og 2×
+- **Spol tilbake** — 10 sekunder
+- **Spill/Pause**
+- **Spol frem** — 30 sekunder
+- **Søvntimer** (måneikon) — velg mellom 15, 30, 45 eller 60 minutter, eller at avspillingen stopper ved slutten av episoden
+- **Fremdriftslinje** — dra for å spole til ønsket tidspunkt
+
+### Kapitler
+
+Hvis episoden har kapitler, vises en **Kapitler**-knapp under kontrollene. Trykk for å åpne kapittellisten og trykk på et kapittel for å spole dit. Aktivt kapittel er markert.
+
+### Transkripsjon
+
+Hvis episoden har transkripsjon, vises en **Transkripsjon**-knapp. I transkripsjonspanelet kan du:
+
+- Trykke på en tekstblokk for å spole til det tidspunktet
+- Veksle mellom **Auto** (teksten følger avspillingen) og **Manuell** (du ruller selv)
+
+### Låseskjerm og fjernkontroll
+
+Avspillingskontrollene fungerer fra låseskjermen, Kontrollsenter og tilkoblede enheter (hodetelefoner, Bluetooth, CarPlay). Du kan spille, pause, spole frem og tilbake, og dra i fremdriftslinjen.
+
+### Avspillingsposisjon
+
+Lyttejeger lagrer automatisk hvor langt du har kommet. Når du starter en episode du har hørt på før, fortsetter den der du slapp. Episoder markeres som ferdige når du har hørt over 90 %.
+
+## Kø
+
+Køen holder episoder du vil høre senere.
+
+### Legge til
+
+Hold inne et episodekort og velg:
+
+- **Spill neste** — legger episoden først i køen
+- **Legg i kø** — legger episoden sist i køen
+
+### Endre rekkefølge
+
+- **Dra og slipp** — hold inne og dra et episodekort opp eller ned
+- Hold inne et køelement og velg **Flytt øverst** eller **Flytt nederst**
+
+### Fjerne
+
+- Hold inne et køelement og velg **Fjern fra kø**
+- Trykk **Tøm** øverst for å fjerne alle (krever bekreftelse)
+
+Når du spiller en episode fra køen, fjernes den automatisk.
+
+## Mine podder
+
+Fanen **Mine podder** viser podkaster du følger. Trykk på en podkast for å se episodene.
+
+Hold inne en podkast og velg **Slutt å følge** for å fjerne den. Du kan også trykke **Slutt å følge** inne på podkastsiden.
+
+## Innstillinger
+
+Åpne menyen (☰) og velg **Innstillinger**. To valg for Hjem-skjermen:
+
+- **Fortsett å lytte** — vis eller skjul siste uferdige episode
+- **Nytt fra Mine podder** — vis eller skjul nye episoder fra podkaster du følger
+
+## Dine data
+
+Åpne menyen (☰), velg **Om Lyttejeger** og bla ned til **Dine data**:
+
+- **Eksporter som JSON** — last ned abonnementer, spillekø og avspillingsposisjoner som en JSON-fil
+- **Slett alle data** — fjerner alle lokalt lagrede data (krever bekreftelse, kan ikke angres)
+
+All data lagres kun lokalt på enheten din.

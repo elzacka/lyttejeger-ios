@@ -4,11 +4,12 @@ import MediaPlayer
 import UIKit
 import os
 
+private let audioLogger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "AudioService")
+
 @Observable
 @MainActor
 final class AudioService {
     static let shared = AudioService()
-    nonisolated(unsafe) private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "AudioService")
 
     private var player: AVPlayer?
     private var timeObserver: Any?
@@ -49,7 +50,7 @@ final class AudioService {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            Self.logger.error("Audio session setup failed: \(error)")
+            audioLogger.error("Audio session setup failed: \(error)")
         }
     }
 
@@ -79,7 +80,7 @@ final class AudioService {
         // machinery itself reads .status off-main, triggering iOS 26's
         // _dispatch_assert_queue_fail. Polling avoids KVO entirely.
         statusCheckTask = Task { @MainActor in
-            for _ in 0..<300 { // up to 30 seconds at 100ms intervals
+            for _ in 0..<AppConstants.statusPollingMaxAttempts {
                 guard !Task.isCancelled else { return }
                 guard let currentItem = self.player?.currentItem else { return }
                 switch currentItem.status {
@@ -93,7 +94,7 @@ final class AudioService {
                 default:
                     break
                 }
-                try? await Task.sleep(for: .milliseconds(100))
+                try? await Task.sleep(for: .milliseconds(AppConstants.statusPollingIntervalMs))
             }
             // Timeout after 30 seconds
             self.isLoading = false
@@ -161,6 +162,13 @@ final class AudioService {
             player.rate = playbackSpeed
             isPlaying = true
         }
+        updateNowPlaying()
+    }
+
+    func pause() {
+        guard let player, isPlaying else { return }
+        player.pause()
+        isPlaying = false
         updateNowPlaying()
     }
 
@@ -258,17 +266,26 @@ final class AudioService {
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
-        // Load artwork async via URLSession
+        // Load artwork async - use DispatchQueue.global to avoid actor context
         if let imageUrl, let url = URL(string: imageUrl) {
-            Task.detached(priority: .userInitiated) {
-                guard let (data, _) = try? await URLSession.shared.data(from: url),
-                      let image = UIImage(data: data) else { return }
-                let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                await MainActor.run {
-                    // Merge artwork into current now-playing info to avoid stale elapsed time
-                    guard var info = MPNowPlayingInfoCenter.default().nowPlayingInfo else { return }
-                    info[MPMediaItemPropertyArtwork] = artwork
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+            DispatchQueue.global(qos: .userInitiated).async {
+                if let data = try? Data(contentsOf: url),
+                   let image = UIImage(data: data) {
+                    let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                    // Capture episodeTitle to verify we're updating the right episode
+                    let capturedTitle = episodeTitle
+                    DispatchQueue.main.async {
+                        // Build a fresh info dict to avoid Sendable issues
+                        let updatedInfo: [String: Any] = [
+                            MPMediaItemPropertyTitle: capturedTitle,
+                            MPMediaItemPropertyArtist: podcastTitle,
+                            MPNowPlayingInfoPropertyElapsedPlaybackTime: time,
+                            MPMediaItemPropertyPlaybackDuration: duration,
+                            MPNowPlayingInfoPropertyPlaybackRate: playing ? Double(speed) : 0.0,
+                            MPMediaItemPropertyArtwork: artwork
+                        ]
+                        MPNowPlayingInfoCenter.default().nowPlayingInfo = updatedInfo
+                    }
                 }
             }
         }

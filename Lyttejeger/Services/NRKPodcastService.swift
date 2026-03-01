@@ -89,6 +89,11 @@ actor NRKPodcastService {
             return cached.result
         }
 
+        // Validate slug contains only safe characters (defense against path traversal)
+        guard nrkSlug.range(of: AppConstants.nrkSlugPattern, options: .regularExpression) != nil else {
+            throw NRKError.invalidURL
+        }
+
         guard let url = URL(string: "\(Self.feedBaseURL)\(nrkSlug).xml") else {
             throw NRKError.invalidURL
         }
@@ -142,6 +147,12 @@ actor NRKPodcastService {
         )
     }
 
+    func clearCache() {
+        catalog = []
+        catalogFetchedAt = nil
+        feedCache.removeAll()
+    }
+
     // MARK: - Errors
 
     enum NRKError: Error, LocalizedError {
@@ -187,7 +198,7 @@ final class NRKRSSParser: NSObject, XMLParserDelegate {
     private var currentElement = ""
     private var textBuffer = ""
 
-    private static let pubDateFormatter: DateFormatter = {
+    nonisolated(unsafe) private static let pubDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
@@ -208,7 +219,9 @@ final class NRKRSSParser: NSObject, XMLParserDelegate {
     func parse() -> NRKFeedResult {
         let parser = XMLParser(data: data)
         parser.delegate = self
-        parser.parse()
+        if !parser.parse() {
+            // Parse failed — return whatever partial data we collected
+        }
 
         return NRKFeedResult(
             podcastTitle: channelTitle,
@@ -276,6 +289,10 @@ final class NRKRSSParser: NSObject, XMLParserDelegate {
             case "itunes:duration": currentDuration = text
             case "pubDate": currentPubDate = text
             case "item":
+                guard episodes.count < AppConstants.nrkMaxEpisodes else {
+                    inItem = false
+                    break
+                }
                 let episode = Episode(
                     id: currentGuid.isEmpty ? "nrk-\(episodes.count)" : currentGuid,
                     podcastId: podcastId,

@@ -64,7 +64,7 @@ struct TranscriptPanel: View {
                                             .foregroundStyle(
                                                 isCurrent
                                                     ? Color.appForeground
-                                                    : Color.appMutedForeground.opacity(0.7)
+                                                    : Color.appMutedForeground
                                             )
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -77,6 +77,7 @@ struct TranscriptPanel: View {
                                     playerVM.seek(to: segment.startTime)
                                 }
                                 .accessibilityLabel(segment.text)
+                                .accessibilityAddTraits(.isButton)
                                 .accessibilityHint("Trykk for å spole til dette tidspunktet")
 
                                 // Divider between segments

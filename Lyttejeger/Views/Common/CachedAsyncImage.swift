@@ -25,6 +25,11 @@ struct CachedAsyncImage: View {
         return URLSession(configuration: config)
     }()
 
+    static func clearCache() {
+        cache.removeAllObjects()
+        imageSession.configuration.urlCache?.removeAllCachedResponses()
+    }
+
     var body: some View {
         Group {
             if let uiImage {

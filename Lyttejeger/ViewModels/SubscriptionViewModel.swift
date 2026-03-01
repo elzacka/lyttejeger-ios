@@ -5,7 +5,7 @@ import os
 @Observable
 @MainActor
 final class SubscriptionViewModel {
-    private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "SubscriptionVM")
+    nonisolated(unsafe) private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "SubscriptionVM")
     private var modelContext: ModelContext?
     var subscriptions: [Subscription] = []
 
@@ -16,7 +16,7 @@ final class SubscriptionViewModel {
 
     func fetchSubscriptions() {
         guard let modelContext else { return }
-        let descriptor = FetchDescriptor<Subscription>(sortBy: [SortDescriptor(\.subscribedAt, order: .reverse)])
+        let descriptor = FetchDescriptor<Subscription>(sortBy: [SortDescriptor(\.title)])
         subscriptions = (try? modelContext.fetch(descriptor)) ?? []
     }
 
@@ -52,10 +52,10 @@ final class SubscriptionViewModel {
                 modelContext.delete(sub)
             }
             do {
-            try modelContext.save()
-        } catch {
-            Self.logger.error("Failed to save subscription: \(error)")
-        }
+                try modelContext.save()
+            } catch {
+                Self.logger.error("Failed to save subscription: \(error)")
+            }
             fetchSubscriptions()
         }
     }

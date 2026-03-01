@@ -8,18 +8,40 @@ struct ContentView: View {
     @State private var subscriptionVM = SubscriptionViewModel()
     @State private var playerVM = AudioPlayerViewModel()
     @State private var progressVM = PlaybackProgressViewModel()
-    @State private var selectedTab = 0
+    @State private var selectedTab = Tab.home
     @State private var homePath = NavigationPath()
     @State private var myPodsPath = NavigationPath()
     @State private var showMenu = false
     @State private var showInnstillinger = false
     @State private var showOmLyttejeger = false
 
-    private let tabs: [(icon: String, iconFilled: String)] = [
-        ("house", "house.fill"),
-        ("heart", "heart.fill"),
-        ("list.number", "list.number"),
-    ]
+    enum Tab: Int, CaseIterable {
+        case home, myPods, queue
+
+        var icon: String {
+            switch self {
+            case .home: "house"
+            case .myPods: "heart"
+            case .queue: "list.number"
+            }
+        }
+
+        var iconFilled: String {
+            switch self {
+            case .home: "house.fill"
+            case .myPods: "heart.fill"
+            case .queue: "list.number"
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .home: "Hjem"
+            case .myPods: "Mine podder"
+            case .queue: "Kø"
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,20 +50,20 @@ struct ContentView: View {
                 NavigationStack(path: $homePath) {
                     HomeView()
                 }
-                .opacity(selectedTab == 0 ? 1 : 0)
-                .zIndex(selectedTab == 0 ? 1 : 0)
+                .opacity(selectedTab == .home ? 1 : 0)
+                .zIndex(selectedTab == .home ? 1 : 0)
 
                 NavigationStack(path: $myPodsPath) {
                     MyPodsView()
                 }
-                .opacity(selectedTab == 1 ? 1 : 0)
-                .zIndex(selectedTab == 1 ? 1 : 0)
+                .opacity(selectedTab == .myPods ? 1 : 0)
+                .zIndex(selectedTab == .myPods ? 1 : 0)
 
                 NavigationStack {
                     QueueView()
                 }
-                .opacity(selectedTab == 2 ? 1 : 0)
-                .zIndex(selectedTab == 2 ? 1 : 0)
+                .opacity(selectedTab == .queue ? 1 : 0)
+                .zIndex(selectedTab == .queue ? 1 : 0)
             }
 
             // Audio player bar
@@ -51,28 +73,28 @@ struct ContentView: View {
 
             // Custom tab bar
             HStack(spacing: 0) {
-                ForEach(0..<3) { index in
+                ForEach(Tab.allCases, id: \.self) { tab in
                     Button {
-                        if selectedTab == index {
+                        if selectedTab == tab {
                             // Pop to root on re-tap
-                            switch index {
-                            case 0: homePath = NavigationPath()
-                            case 1: myPodsPath = NavigationPath()
-                            default: break
+                            switch tab {
+                            case .home: homePath = NavigationPath()
+                            case .myPods: myPodsPath = NavigationPath()
+                            case .queue: break
                             }
                         } else {
-                            selectedTab = index
+                            selectedTab = tab
                         }
                     } label: {
-                        Image(systemName: selectedTab == index ? tabs[index].iconFilled : tabs[index].icon)
-                            .font(.system(size: 20, weight: selectedTab == index ? .semibold : .regular))
-                            .foregroundStyle(selectedTab == index ? Color.appAccent : Color.appMutedForeground)
+                        Image(systemName: selectedTab == tab ? tab.iconFilled : tab.icon)
+                            .font(.system(size: 20, weight: selectedTab == tab ? .semibold : .regular))
+                            .foregroundStyle(selectedTab == tab ? Color.appAccent : Color.appMutedForeground)
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
                             .contentShape(Rectangle())
                     }
-                    .accessibilityLabel(["Hjem", "Mine podder", "Kø"][index])
-                    .accessibilityAddTraits(selectedTab == index ? .isSelected : [])
+                    .accessibilityLabel(tab.label)
+                    .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
                 }
 
                 // Menu divider
@@ -94,7 +116,7 @@ struct ContentView: View {
                 .accessibilityLabel("Meny")
             }
             .padding(.top, AppSpacing.xs)
-            .padding(.bottom, AppSpacing.xs)
+            .safeAreaPadding(.bottom)
             .overlay(alignment: .top) {
                 Rectangle()
                     .fill(Color.appBorder)
@@ -105,7 +127,7 @@ struct ContentView: View {
         .background(Color.appBackground)
         .sheet(isPresented: $showMenu) {
             MenuSheet(showInnstillinger: $showInnstillinger, showOmLyttejeger: $showOmLyttejeger)
-                .presentationDetents([.height(200)])
+                .presentationDetents([.height(160)])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Color.appBackground)
         }
@@ -117,7 +139,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showOmLyttejeger) {
             OmLyttejegerView()
-                .presentationDetents([.large])
+                .presentationDetents([.fraction(0.75)])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Color.appBackground)
         }
@@ -131,12 +153,12 @@ struct ContentView: View {
             playerVM.pendingPodcastRoute = nil
             // Delay to allow fullScreenCover dismissal to complete
             Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(400))
+                try? await Task.sleep(for: .milliseconds(AppConstants.routeNavigationDelayMs))
                 switch selectedTab {
-                case 0: homePath.append(route)
-                case 1: myPodsPath.append(route)
-                default:
-                    selectedTab = 0
+                case .home: homePath.append(route)
+                case .myPods: myPodsPath.append(route)
+                case .queue:
+                    selectedTab = .home
                     homePath.append(route)
                 }
             }
@@ -152,12 +174,14 @@ struct ContentView: View {
             navAppearance.configureWithTransparentBackground()
             navAppearance.backgroundColor = UIColor(Color.appBackground)
             navAppearance.shadowColor = nil
+            let largeTitleFont = UIFont(name: "DMMono-Medium", size: 28) ?? .systemFont(ofSize: 28, weight: .bold)
+            let titleFont = UIFont(name: "DMMono-Medium", size: 17) ?? .systemFont(ofSize: 17, weight: .semibold)
             navAppearance.largeTitleTextAttributes = [
-                .font: UIFont(name: "DMMono-Medium", size: 28) ?? .systemFont(ofSize: 28, weight: .bold),
+                .font: UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: largeTitleFont),
                 .foregroundColor: UIColor(Color.appForeground)
             ]
             navAppearance.titleTextAttributes = [
-                .font: UIFont(name: "DMMono-Medium", size: 17) ?? .systemFont(ofSize: 17, weight: .semibold),
+                .font: UIFontMetrics(forTextStyle: .headline).scaledFont(for: titleFont),
                 .foregroundColor: UIColor(Color.appForeground)
             ]
 
@@ -190,7 +214,7 @@ private struct MenuSheet: View {
                     showOmLyttejeger = true
                 }
             }
-            .padding(.top, AppSpacing.xxl)
+            .padding(.top, AppSpacing.sm)
         }
         .frame(maxWidth: .infinity)
         .background(Color.appBackground)

@@ -29,7 +29,7 @@ struct OmLyttejegerView: View {
                     .frame(maxWidth: .infinity)
 
                     // Description
-                    Text("En rolig podkastspiller som lar deg lytte i fred")
+                    Text("Rolig og smart podkastspiller som lar deg lytte i fred")
                         .font(.smallText)
                         .foregroundStyle(Color.appMutedForeground)
                         .multilineTextAlignment(.center)
@@ -37,19 +37,10 @@ struct OmLyttejegerView: View {
 
                     // Credits
                     card {
-                        cardHeader("Laget med")
+                        cardHeader("Datakilder")
 
-                        creditRow("Swift & SwiftUI", detail: "Apples rammeverk for iOS")
-                        creditRow("Podcast Index", detail: "Åpen podkast-katalog")
-                        creditRow("sindrel/nrk-pod-feeds", detail: "NRK-podkaster via åpne RSS-feeder")
-                        creditRow("DM Mono", detail: "Typografi av Colophon Foundry")
-                    }
-
-                    // Contact
-                    card {
-                        cardHeader("Kontakt")
-
-                        creditRow("Tazk", detail: "hei@tazk.no")
+                        creditRow("Podcast Index API", detail: "Åpen podkastdatabase")
+                        creditRow("github.com/sindrel/nrk-pod-feeds", detail: "NRK-podkaster via åpne RSS-feeds")
                     }
 
                     // Data management
@@ -228,8 +219,8 @@ struct OmLyttejegerView: View {
                 ] as [String: Any]
             },
             "innstillinger": [
-                "visFortsettÅLytte": UserDefaults.standard.bool(forKey: "showLastPlayed"),
-                "visNyttFraAbonnementer": UserDefaults.standard.bool(forKey: "showNewFromSubscriptions"),
+                "visFortsettÅLytte": UserDefaults.standard.bool(forKey: AppConstants.showLastPlayedKey),
+                "visNyttFraAbonnementer": UserDefaults.standard.bool(forKey: AppConstants.showNewFromSubscriptionsKey),
             ] as [String: Any],
         ]
 
@@ -239,11 +230,14 @@ struct OmLyttejegerView: View {
 
         let tempDir = FileManager.default.temporaryDirectory
         let fileURL = tempDir.appendingPathComponent("lyttejeger-data.json")
-        try? jsonData.write(to: fileURL)
+        try? jsonData.write(to: fileURL, options: .completeFileProtection)
 
         // Present UIActivityViewController directly via UIKit
         // (wrapping in SwiftUI .sheet causes a blank white sheet on iOS 26)
         let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
+        activityVC.completionWithItemsHandler = { _, _, _, _ in
+            try? FileManager.default.removeItem(at: fileURL)
+        }
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let rootVC = windowScene.keyWindow?.rootViewController {
             var topVC = rootVC
@@ -263,12 +257,21 @@ struct OmLyttejegerView: View {
         try? modelContext.save()
 
         // Clear UserDefaults
-        UserDefaults.standard.removeObject(forKey: "lastPlayedInfo")
-        UserDefaults.standard.removeObject(forKey: "showLastPlayed")
-        UserDefaults.standard.removeObject(forKey: "showNewFromSubscriptions")
+        UserDefaults.standard.removeObject(forKey: AppConstants.lastPlayedInfoKey)
+        UserDefaults.standard.removeObject(forKey: AppConstants.showLastPlayedKey)
+        UserDefaults.standard.removeObject(forKey: AppConstants.showNewFromSubscriptionsKey)
 
         // Clear URL caches
         URLCache.shared.removeAllCachedResponses()
+        CachedAsyncImage.clearCache()
+
+        // Clear in-memory service caches
+        Task {
+            await ChapterService.shared.clearCache()
+            await TranscriptService.shared.clearCache()
+            await PodcastIndexAPI.shared.clearCache()
+            await NRKPodcastService.shared.clearCache()
+        }
     }
 }
 

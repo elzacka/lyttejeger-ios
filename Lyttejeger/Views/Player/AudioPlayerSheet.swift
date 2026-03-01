@@ -4,6 +4,8 @@ struct AudioPlayerSheet: View {
     @Environment(AudioPlayerViewModel.self) private var playerVM
     @State private var showChapters = false
     @State private var showTranscript = false
+    @State private var isDownloading = false
+    @State private var downloadError: String?
 
     private func navigateToPodcast() {
         guard let episode = playerVM.currentEpisode else { return }
@@ -63,7 +65,7 @@ struct AudioPlayerSheet: View {
                         Button {
                             showChapters = true
                         } label: {
-                            VStack(spacing: 4) {
+                            VStack(spacing: AppSpacing.xs) {
                                 Image(systemName: "list.number")
                                     .font(.system(size: 20))
                                 Text("Kapitler")
@@ -78,7 +80,7 @@ struct AudioPlayerSheet: View {
                         Button {
                             showTranscript = true
                         } label: {
-                            VStack(spacing: 4) {
+                            VStack(spacing: AppSpacing.xs) {
                                 Image(systemName: "text.quote")
                                     .font(.system(size: 20))
                                 Text("Transkripsjon")
@@ -121,15 +123,22 @@ struct AudioPlayerSheet: View {
 
                 Spacer()
 
-                if let episode = playerVM.currentEpisode,
-                   let url = URL(string: episode.audioUrl) {
-                    ShareLink(item: url) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(Color.appMutedForeground)
+                if playerVM.currentEpisode != nil {
+                    Button {
+                        Task { await downloadAndShare() }
+                    } label: {
+                        if isDownloading {
+                            ProgressView()
+                                .tint(Color.appMutedForeground)
+                        } else {
+                            Image(systemName: "square.and.arrow.down")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(Color.appMutedForeground)
+                        }
                     }
+                    .disabled(isDownloading)
                     .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                    .accessibilityLabel("Del episode")
+                    .accessibilityLabel("Eksporter lydfil")
                 }
             }
             .padding(.horizontal, AppSpacing.md)
@@ -145,6 +154,55 @@ struct AudioPlayerSheet: View {
             TranscriptPanel()
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Color.appBackground)
+        }
+        .alert("Nedlasting feilet", isPresented: Binding(
+            get: { downloadError != nil },
+            set: { if !$0 { downloadError = nil } }
+        )) {
+            Button("OK") { downloadError = nil }
+        } message: {
+            Text(downloadError ?? "")
+        }
+    }
+
+    private func downloadAndShare() async {
+        guard let episode = playerVM.currentEpisode,
+              let url = URL(string: episode.audioUrl) else { return }
+
+        isDownloading = true
+        defer { isDownloading = false }
+
+        do {
+            let (tempURL, _) = try await URLSession.shared.download(from: url)
+            let invalidChars = CharacterSet(charactersIn: "/:\\?%*|\"<>")
+            let safeName = episode.title
+                .components(separatedBy: invalidChars)
+                .joined(separator: "-")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(200)
+            let ext = url.pathExtension.isEmpty ? "mp3" : url.pathExtension
+            let destURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(String(safeName))
+                .appendingPathExtension(ext)
+            try? FileManager.default.removeItem(at: destURL)
+            try FileManager.default.moveItem(at: tempURL, to: destURL)
+
+            await MainActor.run {
+                let activityVC = UIActivityViewController(activityItems: [destURL], applicationActivities: nil)
+                activityVC.completionWithItemsHandler = { _, _, _, _ in
+                    try? FileManager.default.removeItem(at: destURL)
+                }
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let rootVC = windowScene.keyWindow?.rootViewController {
+                    var topVC = rootVC
+                    while let presented = topVC.presentedViewController {
+                        topVC = presented
+                    }
+                    topVC.present(activityVC, animated: true)
+                }
+            }
+        } catch {
+            downloadError = "Kunne ikke laste ned lydfilen. Sjekk nettverkstilkoblingen og prøv igjen."
         }
     }
 }

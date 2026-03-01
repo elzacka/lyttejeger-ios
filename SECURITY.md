@@ -37,10 +37,15 @@ This policy covers:
 - **HTTPS enforced:** All API calls use HTTPS; `NSAllowsArbitraryLoadsForMedia` enabled only for podcast audio stream URLs
 - **Async networking only:** Artwork downloads use `URLSession.shared.data(from:)` — no synchronous `Data(contentsOf:)` calls that block threads
 - **Concurrency-limited fetches:** Background refresh caps NRK feed fetches to 4 parallel requests to prevent resource exhaustion
+- **Structured logging:** `BackgroundRefreshService` uses `os.Logger` (subsystem `com.Tazk.Lyttejeger`, category `BackgroundRefresh`) for auditable refresh lifecycle logging
 
 ### Data
 - **Local-only data:** All user data (subscriptions, queue, playback positions) stored on-device via SwiftData — no cloud sync, no analytics, no tracking
-- **Full-screen mode:** `UIRequiresFullScreen: true` prevents data exposure via multitasking split views
+- **iPhone-only mode:** `TARGETED_DEVICE_FAMILY: "1"` ensures the app only runs on iPhone. Portrait-only is enforced at runtime via `AppDelegate`
+
+### Data export
+- **File protection:** In-app JSON data export uses `.completeFileProtection` — files are only accessible while the device is unlocked
+- **Filename sanitization:** Episode audio downloads sanitize titles by stripping `/:\?%*|"<>` characters and limiting to 200 characters
 
 ### Concurrency & error handling
 - **Strict concurrency:** Full Swift 6 strict concurrency checking (`SWIFT_STRICT_CONCURRENCY: complete`) eliminates data races at compile time
@@ -50,8 +55,14 @@ This policy covers:
 ### Input validation
 - **Input normalization:** Search query parser normalizes smart punctuation (curly quotes, em/en dashes) to prevent injection of unexpected Unicode
 
+### URL validation
+- **HTTPS-only:** `ChapterService` and `TranscriptService` validate that URLs use the `https` scheme before making network requests — non-HTTPS URLs are silently rejected
+
 ### Background tasks
 - **Isolated context:** Background refresh uses a fresh `ModelContainer` isolated from the main app context
 
+### Data integrity
+- **Unique constraints:** `QueueItem.episodeId` uses `@Attribute(.unique)` in SwiftData to prevent duplicate queue entries at the database level
+
 ### Testing
-- **Unit test coverage:** 24 tests across 5 suites verify pure functions (time formatting, search query parsing, HTML-to-text conversion, duration parsing) to catch regressions in input handling
+- **Unit test coverage:** 50 tests across 12 suites verify pure functions (time formatting, date formatting, search query parsing, HTML-to-text conversion, duration parsing, feed transformation, chapter navigation, transcript lookup, duration filtering, NRK feed detection) to catch regressions in input handling and data transformation

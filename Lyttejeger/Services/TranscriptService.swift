@@ -18,9 +18,14 @@ actor TranscriptService {
 
     private static let cacheTTL: TimeInterval = 30 * 60 // 30 minutes
     private var cache: [String: (transcript: Transcript, fetchedAt: Date)] = [:]
+    private static let timestampRegex = try! NSRegularExpression(
+        pattern: "(\\d{2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})\\s*-->\\s*(\\d{2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})"
+    )
 
     func fetchTranscript(from url: String) async -> Transcript? {
-        guard !url.isEmpty, let requestUrl = URL(string: url) else { return nil }
+        guard !url.isEmpty,
+              let requestUrl = URL(string: url),
+              requestUrl.scheme == "https" else { return nil }
 
         // Check cache
         if let cached = cache[url],
@@ -31,51 +36,65 @@ actor TranscriptService {
         do {
             let (data, response) = try await URLSession.shared.data(from: requestUrl)
 
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return nil }
             guard data.count <= AppConstants.maxTranscriptSize else { return nil }
 
-            let contentType = (response as? HTTPURLResponse)?
-                .value(forHTTPHeaderField: "Content-Type") ?? ""
+            let contentType = http.value(forHTTPHeaderField: "Content-Type") ?? ""
             let text = String(data: data, encoding: .utf8) ?? ""
 
             // Detect format
             if contentType.contains("json") || url.hasSuffix(".json") {
                 if let result = parseJSON(text), !result.segments.isEmpty {
-                    cache[url] = (transcript: result, fetchedAt: Date())
+                    storeInCache(url: url, transcript: result)
                     return result
                 }
             } else if url.hasSuffix(".vtt") || contentType.contains("vtt") || text.contains("WEBVTT") {
                 let result = parseVTT(text)
                 if !result.segments.isEmpty {
-                    cache[url] = (transcript: result, fetchedAt: Date())
+                    storeInCache(url: url, transcript: result)
                     return result
                 }
             } else if url.hasSuffix(".srt") || String(text.prefix(500)).range(of: "\\d+\\n\\d{2}:\\d{2}:\\d{2}", options: .regularExpression) != nil {
                 let result = parseSRT(text)
                 if !result.segments.isEmpty {
-                    cache[url] = (transcript: result, fetchedAt: Date())
+                    storeInCache(url: url, transcript: result)
                     return result
                 }
             }
 
             // Try all formats
             if let result = parseJSON(text), !result.segments.isEmpty {
-                cache[url] = (transcript: result, fetchedAt: Date())
+                storeInCache(url: url, transcript: result)
                 return result
             }
             let vtt = parseVTT(text)
             if !vtt.segments.isEmpty {
-                cache[url] = (transcript: vtt, fetchedAt: Date())
+                storeInCache(url: url, transcript: vtt)
                 return vtt
             }
             let srt = parseSRT(text)
             if !srt.segments.isEmpty {
-                cache[url] = (transcript: srt, fetchedAt: Date())
+                storeInCache(url: url, transcript: srt)
                 return srt
             }
 
             return nil
         } catch {
             return nil
+        }
+    }
+
+    func clearCache() {
+        cache.removeAll()
+    }
+
+    private func storeInCache(url: String, transcript: Transcript) {
+        cache[url] = (transcript: transcript, fetchedAt: Date())
+        if cache.count > AppConstants.transcriptCacheMaxSize {
+            let sorted = cache.sorted { $0.value.fetchedAt < $1.value.fetchedAt }
+            for entry in sorted.prefix(cache.count - AppConstants.transcriptCacheMaxSize) {
+                cache.removeValue(forKey: entry.key)
+            }
         }
     }
 
@@ -207,9 +226,7 @@ actor TranscriptService {
     // MARK: - Timestamp Parsing
 
     private func parseTimestampLine(_ line: String) -> (TimeInterval, TimeInterval)? {
-        let pattern = "(\\d{2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})\\s*-->\\s*(\\d{2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})"
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) else {
+        guard let match = Self.timestampRegex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) else {
             return nil
         }
 
@@ -243,13 +260,14 @@ actor TranscriptService {
     // MARK: - Helpers
 
     static func getCurrentSegment(_ transcript: Transcript, at time: TimeInterval) -> TranscriptSegment? {
-        transcript.segments.first { time >= $0.startTime && time < $0.endTime }
+        // Exact match first
+        if let exact = transcript.segments.first(where: { time >= $0.startTime && time < $0.endTime }) {
+            return exact
+        }
+        // Fall back to most recent segment (handles gaps between segments)
+        return transcript.segments.last { time >= $0.startTime }
     }
 
-    static func searchTranscript(_ segments: [TranscriptSegment], query: String) -> [TranscriptSegment] {
-        let lower = query.lowercased()
-        return segments.filter { $0.text.lowercased().contains(lower) }
-    }
 }
 
 // MARK: - JSON Decodable Types

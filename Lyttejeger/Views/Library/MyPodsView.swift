@@ -44,7 +44,7 @@ struct MyPodsView: View {
                         }
                     }
                     .padding(AppSpacing.lg)
-                    .padding(.bottom, 100)
+                    .padding(.bottom, AppConstants.playerBottomPadding)
                 }
             }
         }

@@ -61,7 +61,7 @@ enum AppConstants {
     static let minSearchQueryLength = 2
 
     /// Max search query length
-    static let maxSearchQueryLength = 500
+    static let maxSearchQueryLength = 200
 
     /// Default search result limit
     static let searchResultsDefault = 200
@@ -85,10 +85,21 @@ enum AppConstants {
     /// Days to keep completed playback positions
     static let completedPositionRetentionDays = 90
 
+    /// Fraction of episode duration to consider "completed"
+    static let completionThreshold: Double = 0.9
+
     // MARK: - Transcript
 
     /// Max transcript download size (bytes)
     static let maxTranscriptSize = 5 * 1024 * 1024
+
+    /// Max transcript cache entries
+    static let transcriptCacheMaxSize = 30
+
+    // MARK: - Layout
+
+    /// Bottom padding for scroll content (accounts for mini player)
+    static let playerBottomPadding: CGFloat = 100
 
     // MARK: - Background Refresh
 
@@ -97,6 +108,34 @@ enum AppConstants {
 
     /// Earliest interval between background refreshes (seconds)
     static let backgroundRefreshInterval: TimeInterval = 60 * 60
+
+    /// Max concurrent NRK feed fetches during background refresh
+    static let nrkConcurrencyLimit = 4
+
+    /// Max episodes to parse from an NRK RSS feed
+    static let nrkMaxEpisodes = 500
+
+    /// Valid pattern for NRK slugs (alphanumeric, underscores, hyphens)
+    static let nrkSlugPattern = "^[a-zA-Z0-9_-]+$"
+
+    // MARK: - Player Status Polling
+
+    /// Interval between AVPlayer status polls (milliseconds)
+    static let statusPollingIntervalMs: UInt64 = 100
+
+    /// Max polling attempts before timeout (300 × 100ms = 30s)
+    static let statusPollingMaxAttempts = 300
+
+    // MARK: - Navigation
+
+    /// Delay for route navigation after fullScreenCover dismissal (milliseconds)
+    static let routeNavigationDelayMs: UInt64 = 400
+
+    // MARK: - UserDefaults Keys
+
+    static let lastPlayedInfoKey = "lastPlayedInfo"
+    static let showLastPlayedKey = "showLastPlayed"
+    static let showNewFromSubscriptionsKey = "showNewFromSubscriptions"
 
     // MARK: - API
 
