@@ -9,17 +9,16 @@ on:
 jobs:
   test:
     name: Unit tests
-    runs-on: macos-15
-
-    env:
-      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+    runs-on: macos-26
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Select Xcode 26.4
-        run: sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+          xcodebuild -version
 
       - name: Install xcodegen
         run: brew install xcodegen
@@ -58,6 +57,7 @@ jobs:
             -testRegion NO \
             -only-testing:LyttejegerTests \
             -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
             test
 
       - name: Upload test results
