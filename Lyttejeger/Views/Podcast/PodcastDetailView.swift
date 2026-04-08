@@ -46,7 +46,11 @@ struct PodcastDetailView: View {
                         let wasSubscribed = subscriptionVM.isSubscribed(pod.id)
                         subscriptionVM.toggleSubscription(podcast: pod)
                         let message = wasSubscribed ? "Fjernet fra Mine podder" : "Lagt til Mine podder"
-                        toastMessage = message
+                        if UIAccessibility.isReduceMotionEnabled {
+                            toastMessage = message
+                        } else {
+                            withAnimation(.easeOut(duration: 0.25)) { toastMessage = message }
+                        }
                         UIAccessibility.post(notification: .announcement, argument: message)
                         toastTask?.cancel()
                         toastTask = Task {
@@ -100,7 +104,7 @@ struct PodcastDetailView: View {
 
                 // Description
                 if let desc = nrkDescription ?? (pod.description.isEmpty ? nil : pod.description) {
-                    ExpandableText(text: desc, textFont: .bodyText, textColor: .appForeground)
+                    ExpandableText(text: desc, textFont: .bodyText, textColor: .appForeground, backgroundColor: .appBackground)
                         .padding(.horizontal, AppSpacing.lg)
                 }
 

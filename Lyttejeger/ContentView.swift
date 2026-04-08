@@ -86,12 +86,16 @@ struct ContentView: View {
                             selectedTab = tab
                         }
                     } label: {
-                        Image(systemName: selectedTab == tab ? tab.iconFilled : tab.icon)
-                            .font(.system(size: 20, weight: selectedTab == tab ? .semibold : .regular))
-                            .foregroundStyle(selectedTab == tab ? Color.appAccent : Color.appMutedForeground)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                            .contentShape(Rectangle())
+                        VStack(spacing: 2) {
+                            Image(systemName: selectedTab == tab ? tab.iconFilled : tab.icon)
+                                .font(.system(size: 18, weight: selectedTab == tab ? .semibold : .regular))
+                            Text(tab.label)
+                                .font(.system(.caption2, weight: selectedTab == tab ? .medium : .regular))
+                        }
+                        .foregroundStyle(selectedTab == tab ? Color.appAccent : Color.appMutedForeground)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .contentShape(Rectangle())
                     }
                     .accessibilityLabel(tab.label)
                     .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
@@ -133,7 +137,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showInnstillinger) {
             InnstillingerView()
-                .presentationDetents([.height(320)])
+                .presentationDetents([.height(320), .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Color.appBackground)
         }
@@ -166,28 +170,8 @@ struct ContentView: View {
         .onAppear {
             queueVM.setup(modelContext)
             subscriptionVM.setup(modelContext)
-            playerVM.setup(modelContext)
+            playerVM.setup(modelContext, queueVM: queueVM)
             progressVM.setup(modelContext)
-
-            // Style navigation bar — for pushed views (detail screens)
-            let navAppearance = UINavigationBarAppearance()
-            navAppearance.configureWithTransparentBackground()
-            navAppearance.backgroundColor = UIColor(Color.appBackground)
-            navAppearance.shadowColor = nil
-            let largeTitleFont = UIFont(name: "DMMono-Medium", size: 28) ?? .systemFont(ofSize: 28, weight: .bold)
-            let titleFont = UIFont(name: "DMMono-Medium", size: 17) ?? .systemFont(ofSize: 17, weight: .semibold)
-            navAppearance.largeTitleTextAttributes = [
-                .font: UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: largeTitleFont),
-                .foregroundColor: UIColor(Color.appForeground)
-            ]
-            navAppearance.titleTextAttributes = [
-                .font: UIFontMetrics(forTextStyle: .headline).scaledFont(for: titleFont),
-                .foregroundColor: UIColor(Color.appForeground)
-            ]
-
-            UINavigationBar.appearance().standardAppearance = navAppearance
-            UINavigationBar.appearance().scrollEdgeAppearance = navAppearance
-            UINavigationBar.appearance().compactAppearance = navAppearance
         }
     }
 }
@@ -234,6 +218,7 @@ private struct MenuSheet: View {
                     .font(.system(size: 16))
                     .foregroundStyle(Color.appAccent)
                     .frame(width: 24)
+                    .accessibilityHidden(true)
                 Text(title)
                     .font(.bodyText)
                     .foregroundStyle(Color.appForeground)
@@ -241,11 +226,13 @@ private struct MenuSheet: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color.appBorder)
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, AppSpacing.xl)
             .frame(height: AppSize.touchTarget)
             .contentShape(Rectangle())
         }
+        .accessibilityLabel(title)
     }
 }
 

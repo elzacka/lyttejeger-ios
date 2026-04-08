@@ -16,8 +16,12 @@ actor RateLimiter {
 
         if elapsed < interval {
             let waitTime = interval - elapsed
+            // Advance lastRequestTime before sleeping so concurrent callers
+            // compute staggered waits instead of bursting simultaneously
+            lastRequestTime = lastRequestTime.addingTimeInterval(interval)
             try? await Task.sleep(for: .seconds(waitTime))
+        } else {
+            lastRequestTime = now
         }
-        lastRequestTime = Date()
     }
 }

@@ -34,15 +34,13 @@ struct EpisodeCard: View {
         )
     }
 
-    private var hasBadges: Bool {
-        progressVM.isCompleted(episode.id)
-            || (progressVM.progressFraction(for: episode.id) ?? 0) > 0.01
+    var body: some View {
+        let progress = progressVM.progressInfo(for: episode.id)
+        let hasBadges = progress.completed
+            || (progress.fraction ?? 0) > 0.01
             || episode.chaptersUrl != nil
             || episode.transcriptUrl != nil
-    }
-
-    var body: some View {
-        let card = cardContent
+        let card = cardContent(progress: progress, hasBadges: hasBadges)
             .padding(AppSpacing.md)
             .background(isNowPlaying ? Color.appAccent.opacity(0.08) : Color.appCard)
             .clipShape(.rect(cornerRadius: AppRadius.md))
@@ -51,6 +49,7 @@ struct EpisodeCard: View {
                     .stroke(isNowPlaying ? Color.appAccent.opacity(0.4) : Color.appBorder, lineWidth: isNowPlaying ? 1.5 : 1)
             )
             .animation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.2), value: isNowPlaying)
+            .accessibilityElement(children: .contain)
 
         if useDefaultContextMenu {
             card.episodeContextMenu(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
@@ -59,7 +58,7 @@ struct EpisodeCard: View {
         }
     }
 
-    private var cardContent: some View {
+    private func cardContent(progress: PlaybackProgressViewModel.ProgressInfo, hasBadges: Bool) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             // Top row: artwork + title + play button
             HStack(alignment: .top, spacing: AppSpacing.md) {
@@ -87,7 +86,7 @@ struct EpisodeCard: View {
                     // Compact: metadata + badges inline with title
                     if compact {
                         metadataView
-                        badgesView
+                        badgesRow(progress: progress, hasBadges: hasBadges)
                     }
                 }
 
@@ -114,11 +113,11 @@ struct EpisodeCard: View {
             // Standard: metadata + badges full width below artwork
             if !compact {
                 metadataView
-                badgesView
+                badgesRow(progress: progress, hasBadges: hasBadges)
             }
 
             // Progress bar (always full width)
-            if let fraction = progressVM.progressFraction(for: episode.id), fraction > 0.01, !progressVM.isCompleted(episode.id) {
+            if let fraction = progress.fraction, fraction > 0.01, !progress.completed {
                 GeometryReader { geo in
                     Rectangle()
                         .fill(Color.appAccent)
@@ -155,15 +154,15 @@ struct EpisodeCard: View {
     }
 
     @ViewBuilder
-    private var badgesView: some View {
+    private func badgesRow(progress p: PlaybackProgressViewModel.ProgressInfo, hasBadges: Bool) -> some View {
         if hasBadges {
             HStack(spacing: AppSpacing.sm) {
-                if progressVM.isCompleted(episode.id) {
+                if p.completed {
                     Image(systemName: "checkmark")
                         .font(.system(size: 10))
                         .foregroundStyle(Color.appSuccess)
                         .accessibilityLabel("Hørt")
-                } else if let fraction = progressVM.progressFraction(for: episode.id), fraction > 0.01 {
+                } else if let fraction = p.fraction, fraction > 0.01 {
                     Text("\(Int(fraction * 100))%")
                         .font(.caption2Text)
                         .foregroundStyle(Color.appAccent)

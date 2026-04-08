@@ -4,6 +4,7 @@ struct ExpandableText: View {
     let text: String
     var textFont: Font = .smallText
     var textColor: Color = .appMutedForeground
+    var backgroundColor: Color = .appCard
     var previewLines: Int = 2
     @State private var isExpanded = false
 
@@ -16,7 +17,7 @@ struct ExpandableText: View {
             .overlay(alignment: .bottomTrailing) {
                 if !isExpanded {
                     LinearGradient(
-                        colors: [textColor.opacity(0), textColor.opacity(0.15)],
+                        colors: [backgroundColor.opacity(0), backgroundColor],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
@@ -35,7 +36,7 @@ struct ExpandableText: View {
                 }
             }
             .accessibilityLabel(text)
-            .accessibilityHint(isExpanded ? "Dobbelttrykk for å skjule" : "Dobbelttrykk for å vise mer")
+            .accessibilityHint(isExpanded ? "Skjuler beskrivelsen" : "Viser hele beskrivelsen")
             .accessibilityAddTraits(.isButton)
     }
 }

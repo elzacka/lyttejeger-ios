@@ -34,6 +34,9 @@ enum AppConstants {
     /// Base delay for exponential backoff (seconds)
     static let apiRetryBaseDelay: TimeInterval = 1.0
 
+    /// Max Retry-After header value to honor (seconds)
+    static let apiRetryAfterMaxSeconds: TimeInterval = 30
+
     // MARK: - Audio
 
     /// Skip backward (seconds)
@@ -85,6 +88,9 @@ enum AppConstants {
     /// Days to keep completed playback positions
     static let completedPositionRetentionDays = 90
 
+    /// Days to keep incomplete (in-progress) playback positions
+    static let incompletePositionRetentionDays = 180
+
     /// Fraction of episode duration to consider "completed"
     static let completionThreshold: Double = 0.9
 
@@ -131,11 +137,24 @@ enum AppConstants {
     /// Delay for route navigation after fullScreenCover dismissal (milliseconds)
     static let routeNavigationDelayMs: UInt64 = 400
 
+    /// Delay between queue auto-advance episodes (seconds)
+    static let autoAdvanceDelay: TimeInterval = 3.0
+
+    /// Sleep timer fade-out duration (seconds)
+    static let sleepFadeDuration: TimeInterval = 30.0
+
+    /// Pause duration threshold for smart resume rewind (seconds)
+    static let smartResumeThreshold: TimeInterval = 300.0
+
+    /// Smart resume rewind amount (seconds)
+    static let smartResumeRewind: TimeInterval = 10.0
+
     // MARK: - UserDefaults Keys
 
     static let lastPlayedInfoKey = "lastPlayedInfo"
     static let showLastPlayedKey = "showLastPlayed"
     static let showNewFromSubscriptionsKey = "showNewFromSubscriptions"
+    static let podcastSpeedPrefsKey = "podcastSpeedPrefs"
 
     // MARK: - API
 

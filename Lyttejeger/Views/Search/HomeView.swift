@@ -54,7 +54,7 @@ struct HomeView: View {
         .navigationDestination(for: PodcastRoute.self) { route in
             PodcastDetailView(podcast: route.podcast, focusEpisodeId: route.focusEpisodeId)
         }
-        .task(id: subscriptionVM.subscriptions.count) {
+        .task(id: subscriptionVM.subscriptions.map(\.podcastId).sorted().joined(separator: ",")) {
             loadLastPlayed()
             hasLoadedRecent = false
             await loadRecentEpisodes()
@@ -72,16 +72,14 @@ struct HomeView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        @Bindable var vm = searchVM
-
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             // Search field
             HStack(spacing: AppSpacing.md) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(Color.appAccent.opacity(0.7))
                     .font(.system(size: 16))
 
-                TextField(vm.activeTab == .podcasts ? "Søk etter podkaster..." : "Søk etter episoder...", text: Binding(
+                TextField(searchVM.activeTab == .podcasts ? "Søk etter podkaster..." : "Søk etter episoder...", text: Binding(
                     get: { searchVM.filters.query },
                     set: { searchVM.setQuery($0) }
                 ))
@@ -91,6 +89,7 @@ struct HomeView: View {
                 .textInputAutocapitalization(.never)
                 .focused($isSearchFocused)
                 .submitLabel(.search)
+                .accessibilityLabel(searchVM.activeTab == .podcasts ? "Søk etter podkaster" : "Søk etter episoder")
 
                 if !searchVM.filters.query.isEmpty {
                     Button {
@@ -136,11 +135,11 @@ struct HomeView: View {
                     } label: {
                         Text(tab == .podcasts ? "Podkaster" : "Episoder")
                             .font(.buttonText)
-                            .foregroundStyle(vm.activeTab == tab ? Color.appAccent : Color.appMutedForeground)
+                            .foregroundStyle(searchVM.activeTab == tab ? Color.appAccent : Color.appMutedForeground)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, AppSpacing.sm)
                     }
-                    .accessibilityAddTraits(vm.activeTab == tab ? .isSelected : [])
+                    .accessibilityAddTraits(searchVM.activeTab == tab ? .isSelected : [])
                 }
             }
             .overlay(alignment: .bottom) {
@@ -148,8 +147,8 @@ struct HomeView: View {
                     Rectangle()
                         .fill(Color.appAccent)
                         .frame(width: geo.size.width / 2, height: 2)
-                        .offset(x: vm.activeTab == .podcasts ? 0 : geo.size.width / 2)
-                        .animation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.2), value: vm.activeTab)
+                        .offset(x: searchVM.activeTab == .podcasts ? 0 : geo.size.width / 2)
+                        .animation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.2), value: searchVM.activeTab)
                 }
                 .frame(height: 2)
             }
@@ -210,6 +209,11 @@ struct HomeView: View {
                 Text("Finn din neste favoritt")
                     .font(.bodyText)
                     .foregroundStyle(Color.appMutedForeground)
+
+                Text("Søk etter podkaster øverst på skjermen")
+                    .font(.caption2Text)
+                    .foregroundStyle(Color.appBorder)
+                    .multilineTextAlignment(.center)
             }
 
             Spacer()
@@ -272,12 +276,11 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
             HStack(spacing: AppSpacing.sm) {
                 Image(systemName: icon)
-                    .font(.system(size: 13))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Color.appAccent)
                 Text(title)
-                    .font(.caption2Text)
-                    .foregroundStyle(Color.appMutedForeground)
-                    .textCase(.uppercase)
+                    .font(.buttonText)
+                    .foregroundStyle(Color.appForeground)
             }
 
             content()

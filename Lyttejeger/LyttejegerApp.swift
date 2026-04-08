@@ -5,7 +5,28 @@ import SwiftData
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         BackgroundRefreshService.register()
+        configureNavigationBarAppearance()
         return true
+    }
+
+    private func configureNavigationBarAppearance() {
+        let navAppearance = UINavigationBarAppearance()
+        navAppearance.configureWithTransparentBackground()
+        navAppearance.backgroundColor = UIColor(Color.appBackground)
+        navAppearance.shadowColor = nil
+        let largeTitleFont = UIFont(name: "DMMono-Medium", size: 28) ?? .systemFont(ofSize: 28, weight: .bold)
+        let titleFont = UIFont(name: "DMMono-Medium", size: 17) ?? .systemFont(ofSize: 17, weight: .semibold)
+        navAppearance.largeTitleTextAttributes = [
+            .font: UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: largeTitleFont),
+            .foregroundColor: UIColor(Color.appForeground)
+        ]
+        navAppearance.titleTextAttributes = [
+            .font: UIFontMetrics(forTextStyle: .headline).scaledFont(for: titleFont),
+            .foregroundColor: UIColor(Color.appForeground)
+        ]
+        UINavigationBar.appearance().standardAppearance = navAppearance
+        UINavigationBar.appearance().scrollEdgeAppearance = navAppearance
+        UINavigationBar.appearance().compactAppearance = navAppearance
     }
 
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {

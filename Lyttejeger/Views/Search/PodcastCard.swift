@@ -6,26 +6,27 @@ struct PodcastCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            // Top row: artwork + title/author
-            HStack(alignment: .top, spacing: AppSpacing.md) {
-                NavigationLink(value: PodcastRoute(podcast: podcast)) {
+            // Top row: artwork + title/author — entire row navigates to podcast
+            NavigationLink(value: PodcastRoute(podcast: podcast)) {
+                HStack(alignment: .top, spacing: AppSpacing.md) {
                     CachedAsyncImage(url: podcast.imageUrl, size: AppSize.artworkSmall)
+
+                    VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                        Text(podcast.title)
+                            .font(.cardTitle)
+                            .foregroundStyle(Color.appForeground)
+
+                        Text(podcast.author)
+                            .font(.smallText)
+                            .foregroundStyle(Color.appMutedForeground)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
                 }
-                .buttonStyle(CardButtonStyle())
-
-                VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                    Text(podcast.title)
-                        .font(.cardTitle)
-                        .foregroundStyle(Color.appForeground)
-
-                    Text(podcast.author)
-                        .font(.smallText)
-                        .foregroundStyle(Color.appMutedForeground)
-                        .lineLimit(1)
-                }
-
-                Spacer()
             }
+            .buttonStyle(CardButtonStyle())
+            .accessibilityLabel("\(podcast.title), \(podcast.author)")
 
             // Metadata (full width, below artwork)
             HStack(spacing: AppSpacing.xs) {
@@ -64,7 +65,7 @@ struct PodcastCard: View {
                         .overlay(alignment: .bottomTrailing) {
                             if !isExpanded {
                                 LinearGradient(
-                                    colors: [Color.appMutedForeground.opacity(0), Color.appMutedForeground.opacity(0.15)],
+                                    colors: [Color.appCard.opacity(0), Color.appCard],
                                     startPoint: .leading,
                                     endPoint: .trailing
                                 )
@@ -99,7 +100,7 @@ struct PodcastCard: View {
                     }
                 }
                 .accessibilityLabel(podcast.description)
-                .accessibilityHint(isExpanded ? "Dobbelttrykk for å skjule" : "Dobbelttrykk for å vise mer")
+                .accessibilityHint(isExpanded ? "Skjuler beskrivelsen" : "Viser hele beskrivelsen")
                 .accessibilityAddTraits(.isButton)
             }
         }

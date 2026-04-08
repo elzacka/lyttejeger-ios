@@ -1,6 +1,16 @@
 # Brukerveiledning
 
-*Sist oppdatert: 2. mars 2026*
+*Sist oppdatert: 7. april 2026*
+
+## Kom i gang
+
+Tre steg til din første episode:
+
+1. **Søk** — skriv i søkefeltet på Hjem-skjermen
+2. **Følg** — åpne en podkast og trykk **Følg**
+3. **Spill** — trykk ▶ på en episode
+
+Det er alt du trenger. Resten av veiledningen er for deg som vil utforske mer.
 
 ## Oversikt
 
@@ -10,7 +20,7 @@ Lyttejeger har tre faner nederst på skjermen:
 - **Mine podder** — podkaster du følger
 - **Kø** — episoder du har lagt til for senere lytting
 
-Menyknappen (☰) gir tilgang til **Innstillinger** og **Om Lyttejeger**.
+Menyknappen gir tilgang til **Innstillinger** og **Om Lyttejeger**.
 
 ## Hjem
 
@@ -32,20 +42,28 @@ Lyttejeger søker i [Podcast Index](https://podcastindex.org/) (åpen katalog me
 
 ### Søkeoperatorer
 
+Du kan kombinere disse for å finne akkurat det du leter etter:
+
 | Operator | Syntaks | Eksempel | Beskrivelse |
 |----------|---------|----------|-------------|
 | OG | mellomrom | `true crime` | Alle ordene må finnes (standard) |
 | ELLER | `OR` | `krim OR true crime` | Minst ett av uttrykkene |
-| Nøyaktig frase | `"frase"` | `"true crime"` | Hele frasen må finnes |
+| Nøyaktig frase | `"frase"` eller `«frase»` | `"true crime"` | Hele frasen må finnes |
 | Utelukk | `-ord` | `krim -mord` | Fjerner resultater med ordet |
 
 Operatorer kan kombineres: `"true crime" -mord` gir nøyaktig frase uten resultater med «mord».
+
+**Anførselstegn:** Du kan bruke rette anførselstegn (`"`), norske anførselstegn (`«»`) eller typografiske anførselstegn. Alle fungerer likt for nøyaktig frasesøk.
+
+**ELLER-operator:** `OR` kan skrives med store eller små bokstaver (`OR`, `or`, `Or`).
+
+**Bindestrek i ord:** Bindestrek midt i ord (som `covid-19` eller `e-post`) behandles som vanlige søkeord. Bare bindestrek med mellomrom foran (`krim -mord`) aktiverer utelukkelse.
 
 **Tips:** iOS-tastaturet bytter automatisk ut bindestrek og anførselstegn til typografiske varianter. Lyttejeger håndterer dette automatisk.
 
 ### Bla uten søkeord
 
-Aktiverer du filter uten å skrive et søkeord, viser Lyttejeger populære podkaster som matcher filtrene.
+Aktiverer du filter uten å skrive et søkeord, viser Lyttejeger populære podkaster som matcher filtrene. Nyttig for å utforske nye kategorier.
 
 ## Filter
 
@@ -64,7 +82,7 @@ Norsk (bokmål og nynorsk), engelsk (alle varianter), svensk og dansk. Du kan ve
 
 ### Kategorier
 
-Over 100 kategorier fra Podcast Index. Fungerer for begge faner. Du kan velge flere.
+Over 100 kategorier fra Podcast Index, organisert i grupper som «Krim & Fiksjon», «Vitenskap & Teknologi», «Hobbyer & Interesser» og flere. Trykk på en gruppe for å se kategoriene i den. Du kan velge flere kategorier på tvers av grupper.
 
 ### Varighet
 
@@ -93,7 +111,7 @@ Trykk **Følg** for å legge podkasten til i Mine podder. Trykk **Slutt å følg
 Hvert episodekort kan vise:
 
 - Avspillingsfremdrift (prosentlinje og prosent)
-- Avkrysningsikon for ferdighørte episoder
+- Avhakingsikon for ferdighørte episoder
 - Kapittelikon hvis episoden har kapitler
 - Tekstikon hvis episoden har transkripsjon
 
@@ -135,20 +153,22 @@ Trykk på episodetittelen i minispilleren for å åpne fullskjermspilleren.
 
 **Kontroller:**
 
-- **Hastighet** — trykk for å bla gjennom: 0,5×, 0,75×, 1×, 1,25×, 1,5×, 1,75× og 2×
+- **Hastighet** — trykk for å bla gjennom: 0,5×, 0,75×, 1×, 1,25×, 1,5×, 1,75× og 2×. Lyttejeger husker valgt hastighet per podkast, slik at du slipper å justere hver gang du bytter mellom podkaster.
 - **Spol tilbake** — 10 sekunder
 - **Spill/Pause**
 - **Spol frem** — 30 sekunder
-- **Søvntimer** (måneikon) — velg mellom 15, 30, 45 eller 60 minutter, eller at avspillingen stopper ved slutten av episoden
+- **Søvntimer** (måneikon) — velg mellom 15, 30, 45 eller 60 minutter, eller at avspillingen stopper ved slutten av episoden. Volumet senkes gradvis de siste 30 sekundene for en mykere overgang.
 - **Fremdriftslinje** — dra for å spole til ønsket tidspunkt
 
 ### Kapitler
 
-Hvis episoden har kapitler, vises en **Kapitler**-knapp under kontrollene. Trykk for å åpne kapittellisten og trykk på et kapittel for å spole dit. Aktivt kapittel er markert.
+Hvis episoden har kapitler (fra podkastens utgiver), vises en **Kapitler**-knapp under kontrollene. Trykk for å åpne kapittellisten og trykk på et kapittel for å spole dit. Aktivt kapittel er markert.
+
+Merk: Kapitler krever at podkastens utgiver leverer strukturerte kapitteldata. Tidsstempler i episodebeskrivelsen er vanlig tekst og gir ikke tilgang til kapittelfunksjonen.
 
 ### Transkripsjon
 
-Hvis episoden har transkripsjon, vises en **Transkripsjon**-knapp. I transkripsjonspanelet kan du:
+Hvis episoden har transkripsjon (fra podkastens utgiver), vises en **Transkripsjon**-knapp. I transkripsjonspanelet kan du:
 
 - Trykke på en tekstblokk for å spole til det tidspunktet
 - Veksle mellom **Auto** (teksten følger avspillingen) og **Manuell** (du ruller selv)
@@ -159,11 +179,17 @@ Avspillingskontrollene fungerer fra låseskjermen, Kontrollsenter og tilkoblede 
 
 ### Avspillingsposisjon
 
-Lyttejeger lagrer automatisk hvor langt du har kommet. Når du starter en episode du har hørt på før, fortsetter den der du slapp. Episoder markeres som ferdige når du har hørt over 90 %.
+Lyttejeger lagrer automatisk hvor langt du har kommet. Når du starter en episode du har hørt på før, fortsetter den der du slapp. Hvis det har gått mer enn fem minutter siden du pauset, spoler appen automatisk 10 sekunder tilbake slik at du får med deg sammenhengen.
+
+Appen markerer en episode som ferdig når du har hørt over 90 %.
 
 ## Kø
 
-Køen holder episoder du vil høre senere.
+Køen holder episoder du vil høre senere. Øverst ser du antall episoder og total spilletid.
+
+### Spill alle
+
+Trykk **Spill alle** for å starte avspilling fra første episode i køen. Når en episode er ferdig, starter neste episode automatisk etter en kort pause.
 
 ### Legge til
 
@@ -186,20 +212,20 @@ Når du spiller en episode fra køen, fjernes den automatisk.
 
 ## Mine podder
 
-Fanen **Mine podder** viser podkaster du følger. Trykk på en podkast for å se episodene.
+Fanen **Mine podder** viser podkaster du følger med bilde og tittel. Trykk på en podkast for å se episodene.
 
 Hold inne en podkast og velg **Slutt å følge** for å fjerne den. Du kan også trykke **Slutt å følge** inne på podkastsiden.
 
 ## Innstillinger
 
-Åpne menyen (☰) og velg **Innstillinger**. To valg for Hjem-skjermen:
+Åpne menyen og velg **Innstillinger**. To valg for Hjem-skjermen:
 
 - **Fortsett å lytte** — vis eller skjul siste uferdige episode
 - **Nytt fra Mine podder** — vis eller skjul nye episoder fra podkaster du følger
 
 ## Dine data
 
-Åpne menyen (☰), velg **Om Lyttejeger** og bla ned til **Dine data**:
+Åpne menyen, velg **Om Lyttejeger** og bla ned til **Dine data**:
 
 - **Eksporter som JSON** — last ned abonnementer, spillekø og avspillingsposisjoner som en JSON-fil
 - **Slett alle data** — fjerner alle lokalt lagrede data (krever bekreftelse, kan ikke angres)

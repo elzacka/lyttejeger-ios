@@ -8,7 +8,7 @@ extension SearchViewModel {
         isLoading = true
         error = nil
 
-        let api = PodcastIndexAPI.shared
+        let api = self.api
 
         do {
             let parsed = SearchQueryParser.parse(query)
@@ -64,7 +64,7 @@ extension SearchViewModel {
             results = applyLocalFilters(results)
 
             // Merge NRK results (local, instant)
-            let nrkResults = await NRKPodcastService.shared.searchCatalog(query: apiQuery)
+            let nrkResults = await nrkService.searchCatalog(query: apiQuery)
             if !nrkResults.isEmpty {
                 let piTitles = Set(results.map { $0.title.lowercased() })
                 var unique = nrkResults.filter { !piTitles.contains($0.title.lowercased()) }

@@ -1,17 +1,19 @@
 # Lyttejeger
 
-En podkastspiller for iOS, skrevet i SwiftUI. Rolig, retro design uten sporing eller kontoer.
+En podkastspiller for iOS, laget i Swift. Rolig, retro design uten sporing eller kontoer.
 
 ## Funksjoner
 
 - Søk etter podkaster via [Podcast Index](https://podcastindex.org)
 - NRK-podkaster via dedikert katalog
-- Spillekø med manuell sortering
+- Spillekø med manuell sortering, total spilletid og automatisk avspilling av neste episode
 - Abonnementer med nytt-fra-mine-podder-visning
-- Fullskjermspiller med kapitler, transkripsjoner og søvntimer
+- Fullskjermspiller med kapitler, transkripsjoner og søvntimer (gradvis volumnedtrapping)
+- Avspillingshastighet per podkast — appen husker valgt hastighet
+- Smart gjenopptakelse: 10 sekunders tilbakespoling etter lange pauser
 - Eksporter/lagre lydfiler direkte fra spilleren
 - Eksplisitt-merking per Apple og Podcast Index sine retningslinjer
-- Sortering og filtrering: språk, kategori, dato, popularitet, varighet
+- Sortering og filtrering: språk, kategori (gruppert), dato, popularitet, varighet
 - Avansert søk med eksakte fraser (`"..."`), ekskludering (`-ord`) og OR-operator
 - Bakgrunnsoppdatering av abonnementer via Background App Refresh
 - All data lagres lokalt — ingen sky, ingen kontoer
@@ -20,16 +22,15 @@ Se [brukerveiledningen](Brukerveiledning.md) for detaljer om søk og filtrering.
 
 ## Teknologi
 
-| | |
-|---|---|
-| **Språk** | Swift 6.2, strict concurrency |
-| **Rammeverk** | SwiftUI, SwiftData, AVFoundation, MediaPlayer |
-| **Minstekrav** | iOS 26, iPhone (stående) |
-| **Avhengigheter** | Ingen tredjepartsbiblioteker |
-| **Tester** | Swift Testing (50 tester, 12 suiter) |
-| **Byggverktøy** | Xcode 26.2, xcodegen |
-| **Typografi** | DM Mono (inkludert) |
-| **Design** | Lys modus, beige/grønn retro |
+| **Språk**         | Swift 6.3, strict concurrency                 |
+| ----------------- | --------------------------------------------- |
+| **Rammeverk**     | SwiftUI, SwiftData, AVFoundation, MediaPlayer |
+| **Minstekrav**    | iOS 26, iPhone                                |
+| **Avhengigheter** | Ingen tredjepartsbiblioteker                  |
+| **Tester**        | Swift Testing (75 tester, 16 suiter)          |
+| **Byggverktøy**   | Xcode 26.4, xcodegen                          |
+| **Typografi**     | DM Mono (inkludert)                           |
+| **Design**        | Lys modus, beige/blågrønn retro               |
 
 ## Bygg
 
@@ -45,12 +46,12 @@ xcodegen generate
 # Bygg
 xcodebuild -project Lyttejeger.xcodeproj -scheme Lyttejeger \
   -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' build
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4' build
 
 # Kjør tester
 xcodebuild -project Lyttejeger.xcodeproj -scheme Lyttejeger \
   -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' test
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4' test
 ```
 
 API-nøkler er ikke inkludert i repoet. Opprett `Lyttejeger/Config/Secrets.swift` med dine egne Podcast Index-nøkler. Se [podcastindex.org/developer](https://podcastindex.org/developer) for å registrere deg.

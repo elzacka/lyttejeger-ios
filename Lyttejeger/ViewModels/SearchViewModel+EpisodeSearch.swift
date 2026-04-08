@@ -8,7 +8,7 @@ extension SearchViewModel {
         isLoading = true
         error = nil
 
-        let api = PodcastIndexAPI.shared
+        let api = self.api
 
         let parsed = SearchQueryParser.parse(query)
         guard let apiQuery = buildApiQuery(from: parsed) else {
@@ -79,7 +79,7 @@ extension SearchViewModel {
                 let feedIds = topPodcasts.compactMap { Int($0.id) }
                 let podcastMap = Dictionary(uniqueKeysWithValues: topPodcasts.map { ($0.id, $0) })
 
-                if let epsRes = try? await api.episodesByFeedIds(feedIds, max: 200) {
+                if let epsRes = try? await api.episodesByFeedIds(feedIds, max: 200, since: nil) {
                     let eps = PodcastTransform.transformEpisodes(epsRes.items ?? [])
                     for (idx, ep) in eps.enumerated() {
                         guard !existingIds.contains(ep.id) else { continue }

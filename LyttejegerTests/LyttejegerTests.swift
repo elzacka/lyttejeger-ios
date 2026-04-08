@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import SwiftData
 @testable import Lyttejeger
 
 // MARK: - TimeFormatting Tests
@@ -94,6 +95,51 @@ struct SearchQueryParserTests {
         #expect(result.exactPhrases == ["exact"])
         #expect(result.mustExclude == ["exclude"])
     }
+
+    @Test func norwegianGuillemets() {
+        // Norwegian standard quotation marks « »
+        let result = SearchQueryParser.parse("«true crime» other")
+        #expect(result.exactPhrases == ["true crime"])
+        #expect(result.mustInclude == ["other"])
+    }
+
+    @Test func mixedQuotationStyles() {
+        // Left guillemet + right smart quote (user inconsistency)
+        let result = SearchQueryParser.parse("«true crime\u{201D} other")
+        #expect(result.exactPhrases == ["true crime"])
+        #expect(result.mustInclude == ["other"])
+    }
+
+    @Test func lowNineQuotes() {
+        // German/Polish style „phrase"
+        let result = SearchQueryParser.parse("\u{201E}exact phrase\u{201D}")
+        #expect(result.exactPhrases == ["exact phrase"])
+    }
+
+    @Test func caseInsensitiveOr() {
+        let lower = SearchQueryParser.parse("crime or mystery")
+        #expect(lower.shouldInclude.contains("crime"))
+        #expect(lower.shouldInclude.contains("mystery"))
+        #expect(lower.mustInclude.isEmpty)
+
+        let mixed = SearchQueryParser.parse("crime Or mystery")
+        #expect(mixed.shouldInclude.contains("crime"))
+        #expect(mixed.shouldInclude.contains("mystery"))
+    }
+
+    @Test func midWordHyphenNotExclusion() {
+        // Norwegian compound words and numbers with hyphens
+        let result = SearchQueryParser.parse("covid-19 e-post IT-sikkerhet")
+        #expect(result.mustInclude == ["covid-19", "e-post", "IT-sikkerhet"])
+        #expect(result.mustExclude.isEmpty)
+    }
+
+    @Test func exclusionRequiresWordBoundary() {
+        // Space before hyphen = exclusion, no space = regular term
+        let result = SearchQueryParser.parse("NRK-podkaster -nyheter")
+        #expect(result.mustInclude == ["NRK-podkaster"])
+        #expect(result.mustExclude == ["nyheter"])
+    }
 }
 
 // MARK: - PodcastTransform Tests
@@ -167,17 +213,20 @@ struct FormatRelativeDateTests {
     }
 
     @Test func yesterday() {
-        let yesterday = iso8601BasicFormatter.string(from: Date().addingTimeInterval(-86400))
+        let date = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+        let yesterday = iso8601BasicFormatter.string(from: date)
         #expect(formatRelativeDate(yesterday) == "I går")
     }
 
     @Test func daysAgo() {
-        let threeDaysAgo = iso8601BasicFormatter.string(from: Date().addingTimeInterval(-3 * 86400))
+        let date = Calendar.current.date(byAdding: .day, value: -3, to: Date())!
+        let threeDaysAgo = iso8601BasicFormatter.string(from: date)
         #expect(formatRelativeDate(threeDaysAgo) == "3 dager siden")
     }
 
     @Test func weeksAgo() {
-        let tenDaysAgo = iso8601BasicFormatter.string(from: Date().addingTimeInterval(-10 * 86400))
+        let date = Calendar.current.date(byAdding: .day, value: -10, to: Date())!
+        let tenDaysAgo = iso8601BasicFormatter.string(from: date)
         #expect(formatRelativeDate(tenDaysAgo) == "1 uke siden")
     }
 
@@ -387,5 +436,418 @@ struct TransformFeedTests {
         let result = PodcastTransform.transformFeeds(feeds)
         #expect(result.count == 1)
         #expect(result.first?.title == "Live")
+    }
+}
+
+// MARK: - QueueViewModel Tests
+
+@Suite("QueueViewModel")
+@MainActor
+struct QueueViewModelTests {
+
+    private func makeContainer() throws -> ModelContainer {
+        let schema = Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        return try ModelContainer(for: schema, configurations: [config])
+    }
+
+    private func makeEpisode(id: String = "ep-1", title: String = "Test Episode") -> Episode {
+        Episode(
+            id: id,
+            podcastId: "pod-1",
+            title: title,
+            description: "A test episode",
+            audioUrl: "https://example.com/\(id).mp3",
+            duration: 1800,
+            publishedAt: "20250101T120000Z",
+            imageUrl: nil,
+            transcriptUrl: nil,
+            chaptersUrl: nil,
+            season: nil,
+            episode: nil,
+            episodeType: nil,
+            soundbites: nil
+        )
+    }
+
+    @Test("addToQueue prevents duplicates")
+    func addToQueuePreventsduplicates() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = QueueViewModel()
+        vm.setup(context)
+
+        let episode = makeEpisode()
+        vm.addToQueue(episode: episode, podcastTitle: "Test Podcast", podcastImage: nil)
+        vm.addToQueue(episode: episode, podcastTitle: "Test Podcast", podcastImage: nil)
+
+        #expect(vm.items.count == 1)
+    }
+
+    @Test("playNext inserts at position 0")
+    func playNextInsertsAtPositionZero() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = QueueViewModel()
+        vm.setup(context)
+
+        let first = makeEpisode(id: "ep-1", title: "First")
+        vm.addToQueue(episode: first, podcastTitle: "Pod", podcastImage: nil)
+
+        let next = makeEpisode(id: "ep-2", title: "Next")
+        vm.playNext(episode: next, podcastTitle: "Pod", podcastImage: nil)
+
+        #expect(vm.items.first?.episodeId == "ep-2")
+        #expect(vm.items.first?.position == 0)
+    }
+
+    @Test("playNext shifts existing items' positions")
+    func playNextShiftsExistingItems() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = QueueViewModel()
+        vm.setup(context)
+
+        let ep1 = makeEpisode(id: "ep-1")
+        let ep2 = makeEpisode(id: "ep-2")
+        vm.addToQueue(episode: ep1, podcastTitle: "Pod", podcastImage: nil)
+        vm.addToQueue(episode: ep2, podcastTitle: "Pod", podcastImage: nil)
+
+        let front = makeEpisode(id: "ep-front")
+        vm.playNext(episode: front, podcastTitle: "Pod", podcastImage: nil)
+
+        #expect(vm.items.count == 3)
+        #expect(vm.items[0].episodeId == "ep-front")
+        #expect(vm.items[1].position > vm.items[0].position)
+        #expect(vm.items[2].position > vm.items[1].position)
+    }
+
+    @Test("move reorders items correctly")
+    func moveReordersItems() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = QueueViewModel()
+        vm.setup(context)
+
+        let ep1 = makeEpisode(id: "ep-1", title: "First")
+        let ep2 = makeEpisode(id: "ep-2", title: "Second")
+        let ep3 = makeEpisode(id: "ep-3", title: "Third")
+        vm.addToQueue(episode: ep1, podcastTitle: "Pod", podcastImage: nil)
+        vm.addToQueue(episode: ep2, podcastTitle: "Pod", podcastImage: nil)
+        vm.addToQueue(episode: ep3, podcastTitle: "Pod", podcastImage: nil)
+
+        // Move the last item to the front
+        vm.move(from: IndexSet(integer: 2), to: 0)
+
+        #expect(vm.items[0].episodeId == "ep-3")
+        #expect(vm.items[1].episodeId == "ep-1")
+        #expect(vm.items[2].episodeId == "ep-2")
+    }
+
+    @Test("clearQueue removes all items")
+    func clearQueueRemovesAll() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = QueueViewModel()
+        vm.setup(context)
+
+        vm.addToQueue(episode: makeEpisode(id: "ep-1"), podcastTitle: "Pod", podcastImage: nil)
+        vm.addToQueue(episode: makeEpisode(id: "ep-2"), podcastTitle: "Pod", podcastImage: nil)
+        vm.addToQueue(episode: makeEpisode(id: "ep-3"), podcastTitle: "Pod", podcastImage: nil)
+
+        vm.clearQueue()
+
+        #expect(vm.items.isEmpty)
+    }
+
+    @Test("popFirst returns and removes the first item")
+    func popFirstReturnsAndRemovesFirst() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = QueueViewModel()
+        vm.setup(context)
+
+        let ep1 = makeEpisode(id: "ep-1", title: "First")
+        let ep2 = makeEpisode(id: "ep-2", title: "Second")
+        vm.addToQueue(episode: ep1, podcastTitle: "Pod", podcastImage: nil)
+        vm.addToQueue(episode: ep2, podcastTitle: "Pod", podcastImage: nil)
+
+        let popped = vm.popFirst()
+
+        #expect(popped?.episode.id == "ep-1")
+        #expect(vm.items.count == 1)
+        #expect(vm.items.first?.episodeId == "ep-2")
+    }
+}
+
+// MARK: - SubscriptionViewModel Tests
+
+@Suite("SubscriptionViewModel")
+@MainActor
+struct SubscriptionViewModelTests {
+
+    private func makeContainer() throws -> ModelContainer {
+        let schema = Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        return try ModelContainer(for: schema, configurations: [config])
+    }
+
+    private func makePodcast(id: String = "pod-1", title: String = "Test Podcast") -> Podcast {
+        Podcast(
+            id: id, title: title, author: "Test Author", description: "A test podcast",
+            imageUrl: "https://example.com/art.jpg", feedUrl: "https://example.com/feed.xml",
+            categories: ["Technology"], language: "Norsk", episodeCount: 50,
+            lastUpdated: "20250101T000000Z", explicit: false
+        )
+    }
+
+    @Test("subscribe adds a subscription")
+    func subscribeAddsSubscription() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = SubscriptionViewModel()
+        vm.setup(context)
+
+        vm.subscribe(podcast: makePodcast())
+
+        #expect(vm.subscriptions.count == 1)
+        #expect(vm.subscriptions.first?.podcastId == "pod-1")
+    }
+
+    @Test("subscribe is idempotent")
+    func subscribeIsIdempotent() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = SubscriptionViewModel()
+        vm.setup(context)
+
+        let podcast = makePodcast()
+        vm.subscribe(podcast: podcast)
+        vm.subscribe(podcast: podcast)
+
+        #expect(vm.subscriptions.count == 1)
+    }
+
+    @Test("unsubscribe removes the subscription")
+    func unsubscribeRemovesSubscription() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = SubscriptionViewModel()
+        vm.setup(context)
+
+        let podcast = makePodcast()
+        vm.subscribe(podcast: podcast)
+        vm.unsubscribe(podcast.id)
+
+        #expect(vm.subscriptions.isEmpty)
+    }
+
+    @Test("toggleSubscription round-trips")
+    func toggleSubscriptionRoundTrips() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = SubscriptionViewModel()
+        vm.setup(context)
+
+        let podcast = makePodcast()
+        vm.toggleSubscription(podcast: podcast)
+        #expect(vm.subscriptions.count == 1)
+
+        vm.toggleSubscription(podcast: podcast)
+        #expect(vm.subscriptions.isEmpty)
+    }
+
+    @Test("isSubscribed returns correct values")
+    func isSubscribedReturnsCorrectValues() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = SubscriptionViewModel()
+        vm.setup(context)
+
+        #expect(vm.isSubscribed("pod-1") == false)
+        vm.subscribe(podcast: makePodcast(id: "pod-1"))
+        #expect(vm.isSubscribed("pod-1") == true)
+        #expect(vm.isSubscribed("pod-2") == false)
+    }
+}
+
+// MARK: - Search Ranking Tests
+
+@Suite("SearchViewModel ranking")
+@MainActor
+struct SearchRankingTests {
+
+    private func makePodcast(
+        id: String,
+        title: String,
+        episodeCount: Int = 10,
+        lastUpdated: String = "20250101T000000Z"
+    ) -> Podcast {
+        Podcast(
+            id: id, title: title, author: "", description: "",
+            imageUrl: "", feedUrl: "", categories: [],
+            language: "Norsk", episodeCount: episodeCount,
+            lastUpdated: lastUpdated, explicit: false
+        )
+    }
+
+    @Test("exact title match scores above prefix match")
+    func exactTitleMatchScoresAbovePrefix() {
+        let vm = SearchViewModel()
+        let exact = makePodcast(id: "1", title: "Daglig Dose")
+        let prefix = makePodcast(id: "2", title: "Daglig Dose Ekstra")
+        let parsed = SearchQueryParser.parse("daglig dose")
+
+        let ranked = vm.rankResults([prefix, exact], query: "daglig dose", parsed: parsed)
+
+        #expect(ranked.first?.id == "1")
+    }
+
+    @Test("dead feeds are penalized")
+    func deadFeedsArePenalized() {
+        let vm = SearchViewModel()
+        let active = makePodcast(id: "1", title: "Norsk Podcast", episodeCount: 50)
+        let dead = makePodcast(id: "2", title: "Norsk Podcast", episodeCount: 0)
+        let parsed = SearchQueryParser.parse("norsk podcast")
+
+        let ranked = vm.rankResults([dead, active], query: "norsk podcast", parsed: parsed)
+
+        #expect(ranked.first?.id == "1")
+    }
+
+    @Test("exclusion operator filters results")
+    func exclusionOperatorFiltersResults() {
+        let vm = SearchViewModel()
+        let podcasts = [
+            makePodcast(id: "1", title: "Krim og Mysterier"),
+            makePodcast(id: "2", title: "Krim og Nyheter"),
+        ]
+        let parsed = SearchQueryParser.parse("krim -nyheter")
+
+        let result = vm.applyQueryOperators(podcasts, parsed: parsed)
+
+        #expect(result.count == 1)
+        #expect(result.first?.id == "1")
+    }
+
+    @Test("exact phrase operator works")
+    func exactPhraseOperatorWorks() {
+        let vm = SearchViewModel()
+        let podcasts = [
+            makePodcast(id: "1", title: "Historisk Perspektiv"),
+            makePodcast(id: "2", title: "Historisk sett"),
+        ]
+        let parsed = SearchQueryParser.parse("\"historisk perspektiv\"")
+
+        let result = vm.applyQueryOperators(podcasts, parsed: parsed)
+
+        #expect(result.count == 1)
+        #expect(result.first?.id == "1")
+    }
+
+    @Test("buildApiQuery returns nil for empty parsed query")
+    func buildApiQueryReturnsNilForEmpty() {
+        let vm = SearchViewModel()
+        let parsed = SearchQueryParser.parse("")
+
+        let result = vm.buildApiQuery(from: parsed)
+
+        #expect(result == nil)
+    }
+
+    @Test("buildApiQuery returns nil for exclusion-only query")
+    func buildApiQueryReturnsNilForExclusionOnly() {
+        let vm = SearchViewModel()
+        let parsed = SearchQueryParser.parse("-news")
+
+        let result = vm.buildApiQuery(from: parsed)
+
+        #expect(result == nil)
+    }
+}
+
+// MARK: - PodcastTransform.transformEpisode Tests
+
+@Suite("PodcastTransform.transformEpisode")
+struct TransformEpisodeTests {
+
+    @Test("nil feedId falls back to episode-based id, never '0' or empty string")
+    func nilFeedIdProducesFallbackPodcastId() {
+        let apiEpisode = PodcastIndexEpisode(
+            id: 99,
+            title: "Test Episode",
+            link: nil,
+            description: nil,
+            guid: nil,
+            datePublished: nil,
+            datePublishedPretty: nil,
+            enclosureUrl: "https://example.com/ep.mp3",
+            enclosureType: nil,
+            enclosureLength: nil,
+            duration: 1800,
+            explicit: 0,
+            episode: nil,
+            episodeType: nil,
+            season: nil,
+            image: nil,
+            feedItunesId: nil,
+            feedImage: nil,
+            feedId: nil,
+            feedLanguage: nil,
+            feedDead: nil,
+            chaptersUrl: nil,
+            transcriptUrl: nil,
+            soundbite: nil,
+            soundbites: nil,
+            feedTitle: nil,
+            feedAuthor: nil
+        )
+
+        let episode = PodcastTransform.transformEpisode(apiEpisode)
+
+        // Must never be empty or "0" — both silently break navigation
+        #expect(!episode.podcastId.isEmpty)
+        #expect(episode.podcastId != "0")
+        // With no feedId and no feedTitle, falls back to "unknown:<episodeId>"
+        #expect(episode.podcastId == "unknown:99")
+    }
+
+    @Test("valid feedId is mapped correctly")
+    func validFeedIdIsMapped() {
+        let apiEpisode = PodcastIndexEpisode(
+            id: 100,
+            title: "Episode With Feed",
+            link: nil,
+            description: nil,
+            guid: nil,
+            datePublished: nil,
+            datePublishedPretty: nil,
+            enclosureUrl: "https://example.com/ep.mp3",
+            enclosureType: nil,
+            enclosureLength: nil,
+            duration: 3600,
+            explicit: 0,
+            episode: nil,
+            episodeType: nil,
+            season: nil,
+            image: nil,
+            feedItunesId: nil,
+            feedImage: nil,
+            feedId: 42,
+            feedLanguage: nil,
+            feedDead: nil,
+            chaptersUrl: nil,
+            transcriptUrl: nil,
+            soundbite: nil,
+            soundbites: nil,
+            feedTitle: nil,
+            feedAuthor: nil
+        )
+
+        let episode = PodcastTransform.transformEpisode(apiEpisode)
+
+        #expect(episode.podcastId == "42")
+        #expect(episode.id == "100")
+        #expect(episode.duration == 3600)
     }
 }

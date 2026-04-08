@@ -16,18 +16,23 @@ struct CachedAsyncImage: View {
         return cache
     }()
 
+    // URLCache is stored separately so clearCache() can reach it.
+    // URLSessionConfiguration is copied at URLSession init — mutating
+    // imageSession.configuration.urlCache after init has no effect.
+    private static let imageURLCache = URLCache(
+        memoryCapacity: 20 * 1024 * 1024,
+        diskCapacity: 100 * 1024 * 1024
+    )
+
     private static let imageSession: URLSession = {
         let config = URLSessionConfiguration.default
-        config.urlCache = URLCache(
-            memoryCapacity: 20 * 1024 * 1024,
-            diskCapacity: 100 * 1024 * 1024
-        )
+        config.urlCache = imageURLCache
         return URLSession(configuration: config)
     }()
 
     static func clearCache() {
         cache.removeAllObjects()
-        imageSession.configuration.urlCache?.removeAllCachedResponses()
+        imageURLCache.removeAllCachedResponses()
     }
 
     var body: some View {
@@ -50,6 +55,7 @@ struct CachedAsyncImage: View {
         }
         .frame(width: size, height: size)
         .clipShape(.rect(cornerRadius: AppRadius.md))
+        .accessibilityHidden(true)
         .task(id: url) {
             await loadImage()
         }
@@ -66,6 +72,10 @@ struct CachedAsyncImage: View {
     }
 
     private func loadImage() async {
+        uiImage = nil
+        hasFailed = false
+        isLoading = true
+
         guard let urlString = url, !urlString.isEmpty else {
             isLoading = false
             hasFailed = true
@@ -83,7 +93,7 @@ struct CachedAsyncImage: View {
             return
         }
 
-        guard let imageUrl = URL(string: urlString) else {
+        guard let imageUrl = URL(string: urlString), imageUrl.scheme == "https" else {
             isLoading = false
             hasFailed = true
             return

@@ -8,13 +8,14 @@ extension SearchViewModel {
         isLoading = true
         error = nil
 
-        let api = PodcastIndexAPI.shared
+        let api = self.api
 
         do {
             let res = try await api.trending(
                 max: !filters.categories.isEmpty ? 200 : 100,
                 lang: getApiLanguageCodes(filters.languages),
-                cat: filters.categories.isEmpty ? nil : filters.categories.joined(separator: ",")
+                cat: filters.categories.isEmpty ? nil : filters.categories.joined(separator: ","),
+                notcat: nil
             )
 
             var results = PodcastTransform.transformFeeds(res.feeds ?? [])

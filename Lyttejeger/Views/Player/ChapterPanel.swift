@@ -68,7 +68,8 @@ struct ChapterPanel: View {
                                     : Color.clear
                             )
                         }
-                        .accessibilityLabel("\(chapter.title), \(formatTime(chapter.startTime))")
+                        .accessibilityLabel("\(chapter.title), \(formatTime(chapter.startTime))\(playerVM.currentChapter?.id == chapter.id ? ", spilles nå" : "")")
+                        .accessibilityHint("Trykk for å spole til kapittelet")
 
                         Divider().padding(.leading, AppSpacing.lg)
                     }

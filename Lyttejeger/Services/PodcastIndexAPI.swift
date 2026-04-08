@@ -203,7 +203,7 @@ private final class APIPinningDelegate: NSObject, URLSessionDelegate, Sendable {
 
 // MARK: - API Client
 
-actor PodcastIndexAPI {
+actor PodcastIndexAPI: PodcastSearching {
     static let shared = PodcastIndexAPI()
 
     private let session: URLSession
@@ -314,15 +314,19 @@ actor PodcastIndexAPI {
 
             case 429:
                 if retryCount < maxRetries {
-                    let retryAfter = Double(httpResponse.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 2.0
+                    let retryAfter = min(
+                        Double(httpResponse.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 2.0,
+                        AppConstants.apiRetryAfterMaxSeconds
+                    )
                     try await Task.sleep(for: .seconds(retryAfter))
                     return try await apiRequest(endpoint: endpoint, params: params, retryCount: retryCount + 1)
                 }
                 throw PodcastIndexError.rateLimitExceeded
 
-            case 500...:
+            case 500...599:
                 if retryCount < maxRetries {
-                    let delay = AppConstants.apiRetryBaseDelay * Double(retryCount + 1)
+                    // Exponential backoff: 1s, 2s, 4s for retries 0, 1, 2
+                    let delay = AppConstants.apiRetryBaseDelay * pow(2.0, Double(retryCount))
                     try await Task.sleep(for: .seconds(delay))
                     return try await apiRequest(endpoint: endpoint, params: params, retryCount: retryCount + 1)
                 }
@@ -344,9 +348,9 @@ actor PodcastIndexAPI {
         var params: [String: String] = [
             "q": query,
             "max": String(options.max),
-            "similar": "",
             "fulltext": "",
         ]
+        if options.similar { params["similar"] = "" }
         if let lang = options.lang { params["lang"] = lang }
         return try await apiRequest(endpoint: "/search/bytitle", params: params)
     }

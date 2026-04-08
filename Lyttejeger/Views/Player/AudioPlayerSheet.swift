@@ -6,6 +6,7 @@ struct AudioPlayerSheet: View {
     @State private var showTranscript = false
     @State private var isDownloading = false
     @State private var downloadError: String?
+    @State private var showDownloadError = false
 
     private func navigateToPodcast() {
         guard let episode = playerVM.currentEpisode else { return }
@@ -22,8 +23,10 @@ struct AudioPlayerSheet: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            VStack(spacing: AppSpacing.xl) {
+            VStack(spacing: AppSpacing.lg) {
+                // Top spacing for close/download buttons
                 Spacer()
+                    .frame(minHeight: AppSize.touchTarget)
 
                 // Artwork (tap to view podcast)
                 if let imageUrl = playerVM.podcastImage ?? playerVM.currentEpisode?.imageUrl {
@@ -60,35 +63,39 @@ struct AudioPlayerSheet: View {
                 PlayerControls()
 
                 // Feature buttons
-                HStack(spacing: AppSpacing.xl) {
-                    if !playerVM.chapters.isEmpty {
-                        Button {
-                            showChapters = true
-                        } label: {
-                            VStack(spacing: AppSpacing.xs) {
-                                Image(systemName: "list.number")
-                                    .font(.system(size: 20))
-                                Text("Kapitler")
-                                    .font(.caption2Text)
+                if !playerVM.chapters.isEmpty || playerVM.transcript != nil {
+                    HStack(spacing: AppSpacing.xl) {
+                        if !playerVM.chapters.isEmpty {
+                            Button {
+                                showChapters = true
+                            } label: {
+                                VStack(spacing: AppSpacing.xs) {
+                                    Image(systemName: "list.number")
+                                        .font(.system(size: 20))
+                                    Text("Kapitler")
+                                        .font(.caption2Text)
+                                }
+                                .foregroundStyle(Color.appAccent)
                             }
-                            .foregroundStyle(Color.appAccent)
+                            .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                            .accessibilityLabel("Vis kapitler")
                         }
-                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                    }
 
-                    if playerVM.transcript != nil {
-                        Button {
-                            showTranscript = true
-                        } label: {
-                            VStack(spacing: AppSpacing.xs) {
-                                Image(systemName: "text.quote")
-                                    .font(.system(size: 20))
-                                Text("Transkripsjon")
-                                    .font(.caption2Text)
+                        if playerVM.transcript != nil {
+                            Button {
+                                showTranscript = true
+                            } label: {
+                                VStack(spacing: AppSpacing.xs) {
+                                    Image(systemName: "text.quote")
+                                        .font(.system(size: 20))
+                                    Text("Transkripsjon")
+                                        .font(.caption2Text)
+                                }
+                                .foregroundStyle(Color.appAccent)
                             }
-                            .foregroundStyle(Color.appAccent)
+                            .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                            .accessibilityLabel("Vis transkripsjon")
                         }
-                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                     }
                 }
 
@@ -155,11 +162,8 @@ struct AudioPlayerSheet: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Color.appBackground)
         }
-        .alert("Nedlasting feilet", isPresented: Binding(
-            get: { downloadError != nil },
-            set: { if !$0 { downloadError = nil } }
-        )) {
-            Button("OK") { downloadError = nil }
+        .alert("Nedlasting feilet", isPresented: $showDownloadError) {
+            Button("OK") { }
         } message: {
             Text(downloadError ?? "")
         }
@@ -167,7 +171,8 @@ struct AudioPlayerSheet: View {
 
     private func downloadAndShare() async {
         guard let episode = playerVM.currentEpisode,
-              let url = URL(string: episode.audioUrl) else { return }
+              let url = URL(string: episode.audioUrl),
+              url.scheme == "https" || url.scheme == "http" else { return }
 
         isDownloading = true
         defer { isDownloading = false }
@@ -203,6 +208,7 @@ struct AudioPlayerSheet: View {
             }
         } catch {
             downloadError = "Kunne ikke laste ned lydfilen. Sjekk nettverkstilkoblingen og prøv igjen."
+            showDownloadError = true
         }
     }
 }

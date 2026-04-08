@@ -1,11 +1,19 @@
 import Foundation
 
 struct TranscriptSegment: Identifiable, Sendable {
-    var id: String { "\(startTime)-\(text.prefix(20))" }
+    let id: String
     var startTime: TimeInterval
     var endTime: TimeInterval
     var text: String
     var speaker: String?
+
+    init(startTime: TimeInterval, endTime: TimeInterval, text: String, speaker: String? = nil) {
+        self.id = UUID().uuidString
+        self.startTime = startTime
+        self.endTime = endTime
+        self.text = text
+        self.speaker = speaker
+    }
 }
 
 struct Transcript: Sendable {
@@ -13,11 +21,12 @@ struct Transcript: Sendable {
     var language: String?
 }
 
-actor TranscriptService {
+actor TranscriptService: TranscriptFetching {
     static let shared = TranscriptService()
 
     private static let cacheTTL: TimeInterval = 30 * 60 // 30 minutes
     private var cache: [String: (transcript: Transcript, fetchedAt: Date)] = [:]
+    private let decoder = JSONDecoder()
     private static let timestampRegex = try! NSRegularExpression(
         pattern: "(\\d{2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})\\s*-->\\s*(\\d{2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})"
     )
@@ -104,7 +113,7 @@ actor TranscriptService {
         guard let data = text.data(using: .utf8) else { return nil }
 
         // Try array format
-        if let items = try? JSONDecoder().decode([JSONSegment].self, from: data) {
+        if let items = try? decoder.decode([JSONSegment].self, from: data) {
             return Transcript(segments: items.map { item in
                 TranscriptSegment(
                     startTime: item.startTime ?? item.start ?? 0,
@@ -116,7 +125,7 @@ actor TranscriptService {
         }
 
         // Try object with segments
-        if let obj = try? JSONDecoder().decode(JSONTranscript.self, from: data) {
+        if let obj = try? decoder.decode(JSONTranscript.self, from: data) {
             return Transcript(
                 segments: obj.segments.map { seg in
                     TranscriptSegment(

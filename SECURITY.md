@@ -35,7 +35,7 @@ This policy covers:
 ### Network
 - **Certificate pinning:** SHA-256 public key pins for Podcast Index API connections (leaf + intermediate CA) via custom `URLSessionDelegate`
 - **HTTPS enforced:** All API calls use HTTPS; `NSAllowsArbitraryLoadsForMedia` enabled only for podcast audio stream URLs
-- **Async networking only:** Artwork downloads use `URLSession.shared.data(from:)` — no synchronous `Data(contentsOf:)` calls that block threads
+- **Async networking:** All network calls use `URLSession` async APIs. Now Playing artwork is loaded via `Task.detached` with a 10-second timeout and 5 MB size limit
 - **Concurrency-limited fetches:** Background refresh caps NRK feed fetches to 4 parallel requests to prevent resource exhaustion
 - **Structured logging:** `BackgroundRefreshService` uses `os.Logger` (subsystem `com.Tazk.Lyttejeger`, category `BackgroundRefresh`) for auditable refresh lifecycle logging
 
@@ -56,7 +56,7 @@ This policy covers:
 - **Input normalization:** Search query parser normalizes smart punctuation (curly quotes, em/en dashes) to prevent injection of unexpected Unicode
 
 ### URL validation
-- **HTTPS-only:** `ChapterService` and `TranscriptService` validate that URLs use the `https` scheme before making network requests — non-HTTPS URLs are silently rejected
+- **HTTPS-only:** `ChapterService`, `TranscriptService` and `CachedAsyncImage` validate that URLs use the `https` scheme before making network requests — non-HTTPS URLs are silently rejected
 
 ### Background tasks
 - **Isolated context:** Background refresh uses a fresh `ModelContainer` isolated from the main app context
@@ -65,4 +65,4 @@ This policy covers:
 - **Unique constraints:** `QueueItem.episodeId` uses `@Attribute(.unique)` in SwiftData to prevent duplicate queue entries at the database level
 
 ### Testing
-- **Unit test coverage:** 50 tests across 12 suites verify pure functions (time formatting, date formatting, search query parsing, HTML-to-text conversion, duration parsing, feed transformation, chapter navigation, transcript lookup, duration filtering, NRK feed detection) to catch regressions in input handling and data transformation
+- **Unit test coverage:** 75 tests across 16 suites verify pure functions (time formatting, date formatting, search query parsing, HTML-to-text conversion, duration parsing, feed transformation, chapter navigation, transcript lookup, duration filtering, NRK feed detection, queue operations, subscription management, search ranking, episode transformation) to catch regressions in input handling and data transformation

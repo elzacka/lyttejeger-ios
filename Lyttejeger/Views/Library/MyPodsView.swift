@@ -22,15 +22,29 @@ struct MyPodsView: View {
                     Text("Ingen podkaster ennå")
                         .font(.bodyText)
                         .foregroundStyle(Color.appMutedForeground)
+
+                    Text("Gå til Hjem og søk etter podkaster")
+                        .font(.caption2Text)
+                        .foregroundStyle(Color.appBorder)
+                        .multilineTextAlignment(.center)
                 }
 
                 Spacer()
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: AppSpacing.md) {
+                    LazyVGrid(columns: columns, spacing: AppSpacing.lg) {
                         ForEach(subscriptionVM.subscriptions, id: \.podcastId) { sub in
                             NavigationLink(value: Podcast(subscription: sub)) {
-                                CachedAsyncImage(url: sub.imageUrl, size: 100)
+                                VStack(spacing: AppSpacing.sm) {
+                                    CachedAsyncImage(url: sub.imageUrl, size: 100)
+
+                                    Text(sub.title)
+                                        .font(.caption2Text)
+                                        .foregroundStyle(Color.appForeground)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.center)
+                                        .frame(maxWidth: .infinity)
+                                }
                             }
                             .buttonStyle(CardButtonStyle())
                             .accessibilityLabel(sub.title)

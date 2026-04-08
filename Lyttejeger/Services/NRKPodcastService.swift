@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - NRK Catalog Entry (matches podcasts.json)
 
@@ -22,8 +23,9 @@ struct NRKFeedResult: Sendable {
 
 // MARK: - Service
 
-actor NRKPodcastService {
+actor NRKPodcastService: NRKSearching {
     static let shared = NRKPodcastService()
+    private let decoder = JSONDecoder()
 
     private static let catalogURL = "https://raw.githubusercontent.com/sindrel/nrk-pod-feeds/master/podcasts.json"
     private static let feedBaseURL = "https://sindrel.github.io/nrk-pod-feeds/rss/"
@@ -56,7 +58,7 @@ actor NRKPodcastService {
             throw NRKError.fetchFailed
         }
 
-        let entries = try JSONDecoder().decode([NRKCatalogEntry].self, from: data)
+        let entries = try decoder.decode([NRKCatalogEntry].self, from: data)
         catalog = entries.filter { $0.enabled && $0.ignore != true && $0.hidden != true }
         catalogFetchedAt = Date()
         return catalog
@@ -107,6 +109,10 @@ actor NRKPodcastService {
         let parser = NRKRSSParser(data: data, podcastId: "nrk:\(nrkSlug)")
         let result = parser.parse()
 
+        // Only cache successful parses — avoid locking out retries for 30 min on parse failure
+        guard !result.episodes.isEmpty || !result.podcastTitle.isEmpty else {
+            throw NRKError.parseFailed
+        }
         feedCache[nrkSlug] = (result: result, fetchedAt: Date())
 
         // Trim feed cache to 30 entries (LRU)
@@ -198,7 +204,7 @@ final class NRKRSSParser: NSObject, XMLParserDelegate {
     private var currentElement = ""
     private var textBuffer = ""
 
-    nonisolated(unsafe) private static let pubDateFormatter: DateFormatter = {
+    private static let pubDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
@@ -216,11 +222,13 @@ final class NRKRSSParser: NSObject, XMLParserDelegate {
         self.podcastId = podcastId
     }
 
+    private static let parseLogger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "NRKParser")
+
     func parse() -> NRKFeedResult {
         let parser = XMLParser(data: data)
         parser.delegate = self
         if !parser.parse() {
-            // Parse failed — return whatever partial data we collected
+            Self.parseLogger.warning("XML parse failed for \(self.podcastId): \(parser.parserError?.localizedDescription ?? "unknown")")
         }
 
         return NRKFeedResult(

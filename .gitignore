@@ -29,8 +29,7 @@ xcode_simulator_log.txt
 .vscode/
 
 
-# Developer only
-.obsidian
+# Developer context
+.obsidian/
 .claude/
-CLAUDE.md
-APP-STORE-CHECKLIST.md
+dev_only/

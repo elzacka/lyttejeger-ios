@@ -29,7 +29,7 @@ func formatDuration(_ seconds: TimeInterval) -> String {
     return "\(totalMinutes) min"
 }
 
-nonisolated(unsafe) private let shortDateFormatter: DateFormatter = {
+private let shortDateFormatter: DateFormatter = {
     let f = DateFormatter()
     f.locale = Locale(identifier: "nb_NO")
     f.dateFormat = "MMM yyyy"

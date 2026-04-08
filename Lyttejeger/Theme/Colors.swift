@@ -21,8 +21,8 @@ extension Color {
     /// Muted foreground - #4A4A4A (WCAG AA 4.5:1 on all app backgrounds)
     static let appMutedForeground = Color(red: 0.290, green: 0.290, blue: 0.290)
 
-    /// Border color - #D4D0C6
-    static let appBorder = Color(red: 0.831, green: 0.816, blue: 0.776)
+    /// Border color - #C5C0B4 (visible on beige/white)
+    static let appBorder = Color(red: 0.773, green: 0.753, blue: 0.706)
 
     /// Error - #9B2915
     static let appError = Color(red: 0.608, green: 0.161, blue: 0.082)

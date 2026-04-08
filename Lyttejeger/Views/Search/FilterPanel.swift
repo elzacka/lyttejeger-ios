@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FilterPanel: View {
     @Environment(SearchViewModel.self) private var searchVM
+    @State private var expandedGroups: Set<String> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -91,19 +92,12 @@ struct FilterPanel: View {
                         }
                     }
 
-                    // Categories
-                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                    // Categories — grouped
+                    VStack(alignment: .leading, spacing: AppSpacing.md) {
                         filterSectionHeader("Kategorier", icon: "tag")
 
-                        FlowLayout(spacing: AppSpacing.sm) {
-                            ForEach(allCategories) { category in
-                                FilterChip(
-                                    label: category.label,
-                                    isSelected: searchVM.filters.categories.contains(category.value)
-                                ) {
-                                    searchVM.toggleCategory(category.value)
-                                }
-                            }
+                        ForEach(categoryGroups) { group in
+                            categoryGroupView(group)
                         }
                     }
                 }
@@ -114,6 +108,87 @@ struct FilterPanel: View {
         }
         .background(Color.appBackground)
     }
+
+    // MARK: - Category Group
+
+    @ViewBuilder
+    private func categoryGroupView(_ group: CategoryGroup) -> some View {
+        let isExpanded = expandedGroups.contains(group.id)
+        let activeCount = group.categories.filter { searchVM.filters.categories.contains($0.value) }.count
+
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            Button {
+                if UIAccessibility.isReduceMotionEnabled {
+                    toggleGroup(group.id)
+                } else {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        toggleGroup(group.id)
+                    }
+                }
+            } label: {
+                HStack(spacing: AppSpacing.sm) {
+                    Image(systemName: group.icon)
+                        .font(.system(size: 14))
+                        .foregroundStyle(activeCount > 0 ? Color.appAccent : Color.appMutedForeground)
+                        .frame(width: 20)
+
+                    Text(group.title)
+                        .font(.buttonText)
+                        .foregroundStyle(activeCount > 0 ? Color.appAccent : Color.appForeground)
+
+                    if activeCount > 0 {
+                        Text("\(activeCount)")
+                            .font(.badgeText)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.appAccent)
+                            .clipShape(.rect(cornerRadius: AppRadius.full))
+                    }
+
+                    Spacer()
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.appMutedForeground)
+                }
+                .frame(minHeight: AppSize.touchTarget)
+                .contentShape(Rectangle())
+            }
+            .accessibilityLabel("\(group.title), \(activeCount) valgt")
+            .accessibilityHint(isExpanded ? "Trykk for å skjule" : "Trykk for å vise")
+
+            if isExpanded {
+                FlowLayout(spacing: AppSpacing.sm) {
+                    ForEach(group.categories) { category in
+                        FilterChip(
+                            label: category.label,
+                            isSelected: searchVM.filters.categories.contains(category.value)
+                        ) {
+                            searchVM.toggleCategory(category.value)
+                        }
+                    }
+                }
+                .padding(.leading, 28)
+            }
+        }
+        .padding(.vertical, AppSpacing.xs)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.appBorder.opacity(0.3))
+                .frame(height: 0.5)
+        }
+    }
+
+    private func toggleGroup(_ id: String) {
+        if expandedGroups.contains(id) {
+            expandedGroups.remove(id)
+        } else {
+            expandedGroups.insert(id)
+        }
+    }
+
+    // MARK: - Helpers
 
     private func filterSectionHeader(_ title: String, icon: String) -> some View {
         HStack(spacing: AppSpacing.sm) {
@@ -141,6 +216,7 @@ struct FilterPanel: View {
             .background(Color.appAccent)
             .clipShape(.rect(cornerRadius: AppRadius.full))
         }
+        .accessibilityLabel("Fjern filter: \(label)")
     }
 }
 

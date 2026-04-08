@@ -5,6 +5,7 @@ struct OmLyttejegerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(AudioPlayerViewModel.self) private var playerVM
     @State private var showExportConfirmation = false
     @State private var showDeleteConfirmation = false
 
@@ -90,20 +91,34 @@ struct OmLyttejegerView: View {
                         Button {
                             openURL(guideURL)
                         } label: {
-                            Text("Brukerveiledning for søk og filter")
-                                .font(.smallText)
-                                .foregroundStyle(Color.appAccent)
-                                .underline()
+                            HStack(spacing: AppSpacing.xs) {
+                                Text("Brukerveiledning")
+                                    .font(.smallText)
+                                    .foregroundStyle(Color.appAccent)
+                                    .underline()
+                                Image(systemName: "arrow.up.right.square")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Color.appAccent)
+                            }
                         }
+                        .accessibilityLabel("Brukerveiledning")
+                        .accessibilityHint("Åpner i nettleser")
 
                         Button {
                             openURL(privacyURL)
                         } label: {
-                            Text("Personvernerklæring")
-                                .font(.smallText)
-                                .foregroundStyle(Color.appAccent)
-                                .underline()
+                            HStack(spacing: AppSpacing.xs) {
+                                Text("Personvernerklæring")
+                                    .font(.smallText)
+                                    .foregroundStyle(Color.appAccent)
+                                    .underline()
+                                Image(systemName: "arrow.up.right.square")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Color.appAccent)
+                            }
                         }
+                        .accessibilityLabel("Personvernerklæring")
+                        .accessibilityHint("Åpner i nettleser")
                     }
 
                     // Footer
@@ -251,6 +266,9 @@ struct OmLyttejegerView: View {
     // MARK: - Data Deletion
 
     private func deleteAllData() {
+        // Stop playback via ViewModel (cleans up sleep timer, tasks, and calls audioService.stop())
+        playerVM.stop()
+
         try? modelContext.delete(model: Subscription.self)
         try? modelContext.delete(model: QueueItem.self)
         try? modelContext.delete(model: PlaybackPosition.self)
@@ -260,12 +278,13 @@ struct OmLyttejegerView: View {
         UserDefaults.standard.removeObject(forKey: AppConstants.lastPlayedInfoKey)
         UserDefaults.standard.removeObject(forKey: AppConstants.showLastPlayedKey)
         UserDefaults.standard.removeObject(forKey: AppConstants.showNewFromSubscriptionsKey)
+        UserDefaults.standard.removeObject(forKey: AppConstants.podcastSpeedPrefsKey)
 
         // Clear URL caches
         URLCache.shared.removeAllCachedResponses()
         CachedAsyncImage.clearCache()
 
-        // Clear in-memory service caches
+        // Clear in-memory service caches (awaited to ensure complete deletion)
         Task {
             await ChapterService.shared.clearCache()
             await TranscriptService.shared.clearCache()

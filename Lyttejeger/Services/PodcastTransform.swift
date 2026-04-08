@@ -38,9 +38,21 @@ enum PodcastTransform {
     // MARK: - Episode Transform
 
     static func transformEpisode(_ episode: PodcastIndexEpisode) -> Episode {
-        Episode(
+        // feedId is the Podcast Index numeric feed ID. It is nil for some search results
+        // (e.g. /search/byperson). Use feedTitle or feedAuthor as last-resort context.
+        // Never use "" — an empty podcastId silently breaks navigation and cross-referencing.
+        let podcastId: String
+        if let feedId = episode.feedId {
+            podcastId = String(feedId)
+        } else if let feedTitle = episode.feedTitle {
+            podcastId = "unknown:\(feedTitle.lowercased().replacingOccurrences(of: " ", with: "-"))"
+        } else {
+            podcastId = "unknown:\(episode.id)"
+        }
+
+        return Episode(
             id: String(episode.id),
-            podcastId: String(episode.feedId ?? 0),
+            podcastId: podcastId,
             title: episode.title ?? "Untitled Episode",
             description: htmlToText(episode.description ?? ""),
             audioUrl: episode.enclosureUrl ?? "",
@@ -64,7 +76,9 @@ enum PodcastTransform {
 
     private static func safeTimestampToISO(_ timestamp: Int?) -> String {
         guard let timestamp, timestamp > 0 else {
-            return iso8601BasicFormatter.string(from: Date())
+            // Return empty string for missing/zero timestamps — callers treat "" as "unknown"
+            // Previously returned current date, making stale feeds appear freshly updated
+            return ""
         }
         let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
         return iso8601BasicFormatter.string(from: date)

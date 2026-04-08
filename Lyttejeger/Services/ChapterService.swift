@@ -1,10 +1,11 @@
 import Foundation
 
-actor ChapterService {
+actor ChapterService: ChapterFetching {
     static let shared = ChapterService()
 
     private var cache: [String: (chapters: [Chapter], timestamp: Date)] = [:]
     private let cacheTTL: TimeInterval = AppConstants.chapterCacheTTL
+    private let decoder = JSONDecoder()
 
     func fetchChapters(from url: String) async -> [Chapter] {
         guard !url.isEmpty,
@@ -21,7 +22,7 @@ actor ChapterService {
             guard let http = urlResponse as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
                 return []
             }
-            let response = try JSONDecoder().decode(ChaptersResponse.self, from: data)
+            let response = try decoder.decode(ChaptersResponse.self, from: data)
 
             let chapters = response.chapters
                 .filter { $0.startTime != nil }

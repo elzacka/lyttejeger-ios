@@ -4,6 +4,9 @@ import SwiftData
 @Observable
 @MainActor
 final class SearchViewModel {
+    let api: any PodcastSearching
+    let nrkService: any NRKSearching
+
     var filters = SearchFilters()
     var podcasts: [Podcast] = []
     var episodes: [EpisodeWithPodcast] = []
@@ -12,6 +15,14 @@ final class SearchViewModel {
     var activeTab: SearchTab = .podcasts
 
     private var searchTask: Task<Void, Never>?
+
+    init(
+        api: any PodcastSearching = PodcastIndexAPI.shared,
+        nrkService: any NRKSearching = NRKPodcastService.shared
+    ) {
+        self.api = api
+        self.nrkService = nrkService
+    }
 
     enum SearchTab: String, CaseIterable {
         case podcasts

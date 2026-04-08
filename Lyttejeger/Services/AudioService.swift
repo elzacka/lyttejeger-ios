@@ -8,13 +8,15 @@ private let audioLogger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "Au
 
 @Observable
 @MainActor
-final class AudioService {
+final class AudioService: AudioPlaying {
     static let shared = AudioService()
 
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var statusCheckTask: Task<Void, Never>?
     private var endOfPlaybackObserver: (any NSObjectProtocol)?
+    private var interruptionObserver: (any NSObjectProtocol)?
+    private var routeChangeObserver: (any NSObjectProtocol)?
 
     // MARK: - State
 
@@ -24,6 +26,7 @@ final class AudioService {
     var isLoading = false
     var hasError = false
     var playbackSpeed: Float = 1.0
+    var pausedAt: Date?
 
     // MARK: - Current Episode
 
@@ -38,6 +41,8 @@ final class AudioService {
 
     private init() {
         setupAudioSession()
+        setupInterruptionHandling()
+        setupRouteChangeHandling()
         Task.detached { [weak self] in
             self?.setupRemoteCommands()
         }
@@ -51,6 +56,70 @@ final class AudioService {
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             audioLogger.error("Audio session setup failed: \(error)")
+        }
+    }
+
+    // MARK: - Interruption & Route Change Handling
+
+    private func setupInterruptionHandling() {
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            // Extract values from notification before crossing actor boundary
+            guard let userInfo = notification.userInfo,
+                  let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+            let shouldResume: Bool = {
+                guard type == .ended,
+                      let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else { return false }
+                return AVAudioSession.InterruptionOptions(rawValue: optionsValue).contains(.shouldResume)
+            }()
+
+            Task { @MainActor in
+                guard let self else { return }
+                switch type {
+                case .began:
+                    if self.isPlaying {
+                        self.player?.pause()
+                        self.isPlaying = false
+                        self.updateNowPlaying()
+                        audioLogger.info("Playback paused due to interruption")
+                    }
+                case .ended:
+                    if shouldResume {
+                        self.player?.rate = self.playbackSpeed
+                        self.isPlaying = true
+                        self.updateNowPlaying()
+                        audioLogger.info("Playback resumed after interruption")
+                    }
+                @unknown default:
+                    break
+                }
+            }
+        }
+    }
+
+    private func setupRouteChangeHandling() {
+        routeChangeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            // Extract reason before crossing actor boundary
+            guard let userInfo = notification.userInfo,
+                  let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                  let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue),
+                  reason == .oldDeviceUnavailable else { return }
+
+            Task { @MainActor in
+                guard let self, self.isPlaying else { return }
+                self.player?.pause()
+                self.isPlaying = false
+                self.updateNowPlaying()
+                audioLogger.info("Playback paused: audio device disconnected")
+            }
         }
     }
 
@@ -70,6 +139,7 @@ final class AudioService {
         currentPodcastImage = podcastImage
         isLoading = true
         hasError = false
+        pausedAt = nil
 
         let playerItem = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: playerItem)
@@ -157,10 +227,12 @@ final class AudioService {
         if isPlaying {
             player.pause()
             isPlaying = false
+            pausedAt = Date()
         } else {
             // Setting rate to non-zero resumes at the correct speed (no need for play() + rate)
             player.rate = playbackSpeed
             isPlaying = true
+            pausedAt = nil
         }
         updateNowPlaying()
     }
@@ -169,7 +241,12 @@ final class AudioService {
         guard let player, isPlaying else { return }
         player.pause()
         isPlaying = false
+        pausedAt = Date()
         updateNowPlaying()
+    }
+
+    func setVolume(_ volume: Float) {
+        player?.volume = max(0, min(1, volume))
     }
 
     func seek(to time: TimeInterval) {
@@ -219,6 +296,7 @@ final class AudioService {
         duration = 0
         isLoading = false
         hasError = false
+        pausedAt = nil
         currentEpisode = nil
         currentPodcastTitle = nil
         currentPodcastImage = nil
@@ -261,31 +339,33 @@ final class AudioService {
             MPMediaItemPropertyArtist: podcastTitle,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: time,
             MPMediaItemPropertyPlaybackDuration: duration,
-            MPNowPlayingInfoPropertyPlaybackRate: playing ? Double(speed) : 0.0
+            MPNowPlayingInfoPropertyPlaybackRate: playing ? Double(speed) : 0.0,
+            MPNowPlayingInfoPropertyDefaultPlaybackRate: Double(speed)
         ]
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
-        // Load artwork async - use DispatchQueue.global to avoid actor context
-        if let imageUrl, let url = URL(string: imageUrl) {
-            DispatchQueue.global(qos: .userInitiated).async {
-                if let data = try? Data(contentsOf: url),
-                   let image = UIImage(data: data) {
-                    let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                    // Capture episodeTitle to verify we're updating the right episode
-                    let capturedTitle = episodeTitle
-                    DispatchQueue.main.async {
-                        // Build a fresh info dict to avoid Sendable issues
-                        let updatedInfo: [String: Any] = [
-                            MPMediaItemPropertyTitle: capturedTitle,
-                            MPMediaItemPropertyArtist: podcastTitle,
-                            MPNowPlayingInfoPropertyElapsedPlaybackTime: time,
-                            MPMediaItemPropertyPlaybackDuration: duration,
-                            MPNowPlayingInfoPropertyPlaybackRate: playing ? Double(speed) : 0.0,
-                            MPMediaItemPropertyArtwork: artwork
-                        ]
-                        MPNowPlayingInfoCenter.default().nowPlayingInfo = updatedInfo
-                    }
+        // Load artwork async - use Task.detached to avoid actor context
+        if let imageUrl, let url = URL(string: imageUrl), url.scheme == "https" {
+            Task.detached(priority: .userInitiated) {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 10
+                guard let (data, _) = try? await URLSession.shared.data(for: request),
+                      data.count <= 5_000_000,
+                      let image = UIImage(data: data) else { return }
+                let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                let capturedTitle = episodeTitle
+                await MainActor.run {
+                    let updatedInfo: [String: Any] = [
+                        MPMediaItemPropertyTitle: capturedTitle,
+                        MPMediaItemPropertyArtist: podcastTitle,
+                        MPNowPlayingInfoPropertyElapsedPlaybackTime: time,
+                        MPMediaItemPropertyPlaybackDuration: duration,
+                        MPNowPlayingInfoPropertyPlaybackRate: playing ? Double(speed) : 0.0,
+                        MPNowPlayingInfoPropertyDefaultPlaybackRate: Double(speed),
+                        MPMediaItemPropertyArtwork: artwork
+                    ]
+                    MPNowPlayingInfoCenter.default().nowPlayingInfo = updatedInfo
                 }
             }
         }
@@ -300,8 +380,10 @@ final class AudioService {
             guard let self else { return .commandFailed }
             DispatchQueue.main.async {
                 Task { @MainActor in
-                    guard self.player != nil else { return }
-                    self.togglePlayPause()
+                    guard self.player != nil, !self.isPlaying else { return }
+                    self.player?.rate = self.playbackSpeed
+                    self.isPlaying = true
+                    self.updateNowPlaying()
                     self.onRemotePlay?()
                 }
             }
@@ -312,8 +394,24 @@ final class AudioService {
             guard let self else { return .commandFailed }
             DispatchQueue.main.async {
                 Task { @MainActor in
+                    guard self.player != nil, self.isPlaying else { return }
+                    self.player?.pause()
+                    self.isPlaying = false
+                    self.updateNowPlaying()
+                }
+            }
+            return .success
+        }
+
+        center.togglePlayPauseCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            DispatchQueue.main.async {
+                Task { @MainActor in
                     guard self.player != nil else { return }
                     self.togglePlayPause()
+                    if self.isPlaying {
+                        self.onRemotePlay?()
+                    }
                 }
             }
             return .success

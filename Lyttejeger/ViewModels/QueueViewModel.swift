@@ -5,7 +5,7 @@ import os
 @Observable
 @MainActor
 final class QueueViewModel {
-    nonisolated(unsafe) private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "QueueVM")
+    private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "QueueVM")
     private var modelContext: ModelContext?
     var items: [QueueItem] = []
 
@@ -88,10 +88,17 @@ final class QueueViewModel {
         fetchQueue()
     }
 
-    func popFirst() -> QueueItem? {
+    var totalDuration: TimeInterval {
+        items.compactMap(\.duration).reduce(0, +)
+    }
+
+    func popFirst() -> (episode: Episode, podcastTitle: String, podcastImage: String?)? {
         guard let first = items.first else { return nil }
+        let episode = first.toEpisode()
+        let title = first.podcastTitle
+        let image = first.podcastImage
         remove(first)
-        return first
+        return (episode, title, image)
     }
 
     private func save() {

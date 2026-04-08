@@ -1,6 +1,6 @@
 # Personvern
 
-*Sist oppdatert: 2. mars 2026*
+*Sist oppdatert: 7. april 2026*
 
 ## Kort oppsummert
 
@@ -40,11 +40,11 @@ Lyttejeger henter NRK-podkastkatalogen og RSS-feeder fra et offentlig GitHub-rep
 
 ## Datalagring og sletting
 
-Avspillingsposisjoner for ferdige episoder slettes automatisk etter 90 dager. All annen data (abonnementer, spillekø) lagres inntil du sletter den manuelt.
+Avspillingsposisjoner for ferdige episoder slettes automatisk etter 90 dager. Posisjoner for episoder du ikke har lyttet ferdig slettes etter 180 dager. All annen data (abonnementer, spillekø) lagres inntil du sletter den manuelt.
 
 ## Dine rettigheter
 
-Ettersom Lyttejeger ikke samler inn personopplysninger sentralt, er det ingen data å be om innsyn i, rette eller slette.
+Siden Lyttejeger ikke lagrer personopplysninger sentralt, finnes det ingen sentral data å be om innsyn i, rette eller slette.
 
 Du kan når som helst slette all lokalt lagret data via innstillingene i appen (Meny > Om Lyttejeger), eller ved å slette appen fra enheten.
 
@@ -58,14 +58,14 @@ Appen bruker Apples innebygde loggfunksjon (`os.Logger`) for å registrere tekni
 
 ## Sikkerhet
 
-- All nettverkskommunikasjon skjer over HTTPS
-- API-nøkler er obfuskert i appen
+- All nettverkskommunikasjon skjer over HTTPS, med unntak av lydstrømmer der podkastutgiveren ikke tilbyr HTTPS
+- API-nøkler er skjult i appen
 - Sertifikatpinning sikrer kommunikasjon med Podcast Index
 - Appen bruker ingen tredjepartsbiblioteker
 
 ## Kontakt
 
-Har du spørsmål om personvern, kan du opprette en sak på [GitHub](https://github.com/elzacka/lyttejeger-ios/issues) eller kontakte meg på hei@tazk.no
+Har du spørsmål om personvern, kan du opprette en sak på [GitHub](https://github.com/elzacka/lyttejeger-ios/issues) eller kontakte meg på hei@tazk.no.
 
 ## Åpen kildekode
 

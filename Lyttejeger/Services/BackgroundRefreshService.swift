@@ -3,7 +3,8 @@ import os
 import SwiftData
 
 enum BackgroundRefreshService {
-    nonisolated(unsafe) private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "BackgroundRefresh")
+    private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "BackgroundRefresh")
+    private static let completionLock = OSAllocatedUnfairLock(initialState: false)
 
     static func register() {
         BGTaskScheduler.shared.register(
@@ -26,17 +27,31 @@ enum BackgroundRefreshService {
 
         // BGAppRefreshTask is not Sendable — wrap for safe capture in Task closures
         let sendableTask = UncheckedSendable(task)
+        // Thread-safe guard: setTaskCompleted must only be called once
+        let completed = completionLock
 
         let work = Task {
             logger.info("Background refresh started")
             await performRefresh()
             logger.info("Background refresh completed")
+            let alreadyDone = completed.withLock { val -> Bool in
+                if val { return true }
+                val = true
+                return false
+            }
+            guard !alreadyDone else { return }
             sendableTask.value.setTaskCompleted(success: true)
         }
 
         task.expirationHandler = {
             logger.warning("Background refresh expired")
             work.cancel()
+            let alreadyDone = completed.withLock { val -> Bool in
+                if val { return true }
+                val = true
+                return false
+            }
+            guard !alreadyDone else { return }
             sendableTask.value.setTaskCompleted(success: false)
         }
     }
@@ -45,7 +60,9 @@ enum BackgroundRefreshService {
         // Read subscriptions from a background ModelContainer
         let subscriptions: [(podcastId: String, feedUrl: String)]
         do {
-            let container = try ModelContainer(for: QueueItem.self, Subscription.self, PlaybackPosition.self)
+            // Use the same schema as the main app to ensure migration compatibility
+            let schema = Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
+            let container = try ModelContainer(for: schema)
             let context = ModelContext(container)
             let descriptor = FetchDescriptor<Subscription>()
             let subs = try context.fetch(descriptor)

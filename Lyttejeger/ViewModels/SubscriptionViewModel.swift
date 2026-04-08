@@ -5,7 +5,7 @@ import os
 @Observable
 @MainActor
 final class SubscriptionViewModel {
-    nonisolated(unsafe) private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "SubscriptionVM")
+    private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "SubscriptionVM")
     private var modelContext: ModelContext?
     var subscriptions: [Subscription] = []
 

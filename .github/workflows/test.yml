@@ -1,0 +1,69 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: macos-15
+
+    env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.4
+        run: sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Find iPhone simulator
+        id: simulator
+        run: |
+          SIMULATOR=$(xcrun simctl list devices available --json \
+            | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          devices = data.get('devices', {})
+          for runtime, device_list in sorted(devices.items(), reverse=True):
+            if 'iOS' not in runtime and 'com.apple.CoreSimulator.SimRuntime.iOS' not in runtime:
+              continue
+            for d in device_list:
+              if d.get('isAvailable') and 'iPhone' in d.get('name', ''):
+                print(d['name'])
+                sys.exit(0)
+          print('iPhone 16')
+          ")
+          echo "name=$SIMULATOR" >> "$GITHUB_OUTPUT"
+          echo "Found simulator: $SIMULATOR"
+
+      - name: Run unit tests
+        run: |
+          xcodebuild \
+            -project Lyttejeger.xcodeproj \
+            -scheme Lyttejeger \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.name }}" \
+            -testLanguage nb \
+            -testRegion NO \
+            -only-testing:LyttejegerTests \
+            -resultBundlePath TestResults.xcresult \
+            test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults.xcresult
+          retention-days: 7

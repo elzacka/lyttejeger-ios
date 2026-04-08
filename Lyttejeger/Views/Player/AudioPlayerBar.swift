@@ -58,6 +58,8 @@ struct AudioPlayerBar: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Åpne spiller")
+                    .accessibilityHint(episode.title)
 
                     Button {
                         playerVM.togglePlayPause()
@@ -95,10 +97,7 @@ struct AudioPlayerBar: View {
             .frame(height: AppSize.miniPlayerHeight, alignment: .top)
             .background(Color.appCard)
             .accessibilityElement(children: .contain)
-            .fullScreenCover(isPresented: Binding(
-                get: { playerVM.isExpanded },
-                set: { playerVM.isExpanded = $0 }
-            )) {
+            .fullScreenCover(isPresented: Bindable(playerVM).isExpanded) {
                 AudioPlayerSheet()
             }
         }
