@@ -25,7 +25,10 @@ actor TranscriptService: TranscriptFetching {
     static let shared = TranscriptService()
 
     private static let cacheTTL: TimeInterval = 30 * 60 // 30 minutes
-    private var cache: [String: (transcript: Transcript, fetchedAt: Date)] = [:]
+    private var cache = TTLCache<Transcript>(
+        ttl: TranscriptService.cacheTTL,
+        maxSize: AppConstants.transcriptCacheMaxSize
+    )
     private let decoder = JSONDecoder()
     private static let timestampRegex = try! NSRegularExpression(
         pattern: "(\\d{2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})\\s*-->\\s*(\\d{2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})"
@@ -37,9 +40,8 @@ actor TranscriptService: TranscriptFetching {
               requestUrl.scheme == "https" else { return nil }
 
         // Check cache
-        if let cached = cache[url],
-           Date().timeIntervalSince(cached.fetchedAt) < Self.cacheTTL {
-            return cached.transcript
+        if let cached = cache.value(for: url) {
+            return cached
         }
 
         do {
@@ -98,13 +100,7 @@ actor TranscriptService: TranscriptFetching {
     }
 
     private func storeInCache(url: String, transcript: Transcript) {
-        cache[url] = (transcript: transcript, fetchedAt: Date())
-        if cache.count > AppConstants.transcriptCacheMaxSize {
-            let sorted = cache.sorted { $0.value.fetchedAt < $1.value.fetchedAt }
-            for entry in sorted.prefix(cache.count - AppConstants.transcriptCacheMaxSize) {
-                cache.removeValue(forKey: entry.key)
-            }
-        }
+        cache.insert(transcript, for: url)
     }
 
     // MARK: - JSON Parser

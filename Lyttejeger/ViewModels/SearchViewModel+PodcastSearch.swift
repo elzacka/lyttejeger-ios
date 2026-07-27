@@ -63,13 +63,18 @@ extension SearchViewModel {
             // Apply local filters (date, sort override)
             results = applyLocalFilters(results)
 
-            // Merge NRK results (local, instant)
-            let nrkResults = await nrkService.searchCatalog(query: apiQuery)
-            if !nrkResults.isEmpty {
-                let piTitles = Set(results.map { $0.title.lowercased() })
-                var unique = nrkResults.filter { !piTitles.contains($0.title.lowercased()) }
-                unique = applyQueryOperators(unique, parsed: parsed)
-                results.append(contentsOf: unique)
+            // Merge NRK results (local, instant). Catalog failure is not
+            // fatal — Podcast Index results still show, with a notice.
+            do {
+                let nrkResults = try await nrkService.searchCatalog(query: apiQuery)
+                if !nrkResults.isEmpty {
+                    let piTitles = Set(results.map { $0.title.lowercased() })
+                    var unique = nrkResults.filter { !piTitles.contains($0.title.lowercased()) }
+                    unique = applyQueryOperators(unique, parsed: parsed)
+                    results.append(contentsOf: unique)
+                }
+            } catch {
+                nrkUnavailable = true
             }
 
             podcasts = results

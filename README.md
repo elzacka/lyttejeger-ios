@@ -28,7 +28,7 @@ Se [brukerveiledningen](Brukerveiledning.md) for detaljer om søk og filtrering.
 | **Minstekrav**    | iOS 26, iPhone                                |
 | **Avhengigheter** | Ingen tredjepartsbiblioteker                  |
 | **Tester**        | Swift Testing (75 tester, 16 suiter)          |
-| **Byggverktøy**   | Xcode 26.4, xcodegen                          |
+| **Byggverktøy**   | Xcode 26.6, xcodegen                          |
 | **Typografi**     | DM Mono (inkludert)                           |
 | **Design**        | Lys modus, beige/blågrønn retro               |
 
@@ -40,21 +40,25 @@ Prosjektet bruker [xcodegen](https://github.com/yonaskolb/XcodeGen) for å gener
 # Installer xcodegen (første gang)
 brew install xcodegen
 
+# Opprett Secrets.swift (første gang) og legg inn dine egne nøkler
+# NB: må gjøres før xcodegen, ellers kommer ikke filen med i prosjektet
+cp Lyttejeger/Config/Secrets.example.swift Lyttejeger/Config/Secrets.swift
+
 # Generer Xcode-prosjekt
 xcodegen generate
 
 # Bygg
 xcodebuild -project Lyttejeger.xcodeproj -scheme Lyttejeger \
   -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4' build
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build
 
 # Kjør tester
 xcodebuild -project Lyttejeger.xcodeproj -scheme Lyttejeger \
   -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4' test
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' test
 ```
 
-API-nøkler er ikke inkludert i repoet. Opprett `Lyttejeger/Config/Secrets.swift` med dine egne Podcast Index-nøkler. Se [podcastindex.org/developer](https://podcastindex.org/developer) for å registrere deg.
+API-nøkler er ikke inkludert i repoet. Kopier `Lyttejeger/Config/Secrets.example.swift` til `Lyttejeger/Config/Secrets.swift` og legg inn dine egne Podcast Index-nøkler. Se [podcastindex.org/developer](https://podcastindex.org/developer) for å registrere deg.
 
 ## Prosjektstruktur
 

@@ -40,19 +40,20 @@ extension SearchViewModel {
             let categoryFeedIds: Set<String>? = categoryMatchedPodcasts.map { Set($0.map(\.id)) }
 
             // Strategy 1: byperson search
+            // zip keeps each transformed episode paired with its API item even
+            // if the transform ever starts filtering
             let personRes = try await api.searchByPerson(apiQuery, max: 50)
             let personEps = PodcastTransform.transformEpisodes(personRes.items ?? [])
-            for (idx, ep) in personEps.enumerated() {
+            for (ep, apiEp) in zip(personEps, personRes.items ?? []) {
                 guard !existingIds.contains(ep.id) else { continue }
-                let apiEp = personRes.items?[idx]
 
                 // Category filter: only include episodes from matching feeds
                 if let feedIds = categoryFeedIds {
-                    guard let feedId = apiEp?.feedId,
+                    guard let feedId = apiEp.feedId,
                           feedIds.contains(String(feedId)) else { continue }
                 }
 
-                let feedLang = apiEp?.feedLanguage ?? ""
+                let feedLang = apiEp.feedLanguage ?? ""
                 if !filters.languages.isEmpty {
                     guard filters.languages.contains(where: { matchesLanguageFilter(feedLang, filterLabel: $0) }) else { continue }
                 } else {
@@ -62,9 +63,9 @@ extension SearchViewModel {
                 allEpisodes.append(EpisodeWithPodcast(
                     episode: ep,
                     podcast: nil,
-                    podcastTitle: apiEp?.feedTitle ?? "",
-                    podcastAuthor: apiEp?.feedAuthor ?? "",
-                    podcastImage: apiEp?.feedImage ?? "",
+                    podcastTitle: apiEp.feedTitle ?? "",
+                    podcastAuthor: apiEp.feedAuthor ?? "",
+                    podcastImage: apiEp.feedImage ?? "",
                     feedLanguage: feedLang
                 ))
                 existingIds.insert(ep.id)
@@ -81,10 +82,9 @@ extension SearchViewModel {
 
                 if let epsRes = try? await api.episodesByFeedIds(feedIds, max: 200, since: nil) {
                     let eps = PodcastTransform.transformEpisodes(epsRes.items ?? [])
-                    for (idx, ep) in eps.enumerated() {
+                    for (ep, apiEp) in zip(eps, epsRes.items ?? []) {
                         guard !existingIds.contains(ep.id) else { continue }
-                        let apiEp = epsRes.items?[idx]
-                        let podcast = podcastMap[String(apiEp?.feedId ?? 0)]
+                        let podcast = podcastMap[String(apiEp.feedId ?? 0)]
 
                         let text = "\(ep.title) \(ep.description)".lowercased()
                         let hasAllRequired = parsed.mustInclude.filter { $0.count >= 2 }.allSatisfy { text.contains($0.lowercased()) }
@@ -95,10 +95,10 @@ extension SearchViewModel {
                         allEpisodes.append(EpisodeWithPodcast(
                             episode: ep,
                             podcast: podcast,
-                            podcastTitle: podcast?.title ?? apiEp?.feedTitle ?? "",
-                            podcastAuthor: podcast?.author ?? apiEp?.feedAuthor ?? "",
-                            podcastImage: podcast?.imageUrl ?? apiEp?.feedImage ?? "",
-                            feedLanguage: podcast?.language ?? apiEp?.feedLanguage ?? ""
+                            podcastTitle: podcast?.title ?? apiEp.feedTitle ?? "",
+                            podcastAuthor: podcast?.author ?? apiEp.feedAuthor ?? "",
+                            podcastImage: podcast?.imageUrl ?? apiEp.feedImage ?? "",
+                            feedLanguage: podcast?.language ?? apiEp.feedLanguage ?? ""
                         ))
                         existingIds.insert(ep.id)
                     }

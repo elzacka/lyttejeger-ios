@@ -256,6 +256,15 @@ struct HomeView: View {
                     }
                 }
 
+                if searchVM.nrkUnavailable {
+                    Text("Fikk ikke hentet NRK-katalogen. NRK-podkaster vises ikke i resultatene.")
+                        .font(.caption2Text)
+                        .foregroundStyle(Color.appMutedForeground)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, AppSpacing.md)
+                }
+
                 Text("Søk via Podcast Index")
                     .font(.caption2Text)
                     .foregroundStyle(Color.appMutedForeground)
@@ -331,28 +340,32 @@ struct HomeView: View {
         // NRK subscriptions (concurrent with limit)
         let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 3600)
 
+        // Batch fetches to cap concurrency, same as BackgroundRefreshService
         let nrkSlugList = nrkSubs.map { String($0.podcastId.dropFirst(4)) }
-        let nrkResults = await withTaskGroup(of: [RecentEpisodeData].self) { group in
-            for slug in nrkSlugList {
-                group.addTask {
-                    guard let result = try? await NRKPodcastService.shared.fetchEpisodes(nrkSlug: slug) else { return [] }
-                    return result.episodes.compactMap { ep in
-                        guard let date = iso8601BasicFormatter.date(from: ep.publishedAt), date > sevenDaysAgo else { return nil }
-                        return RecentEpisodeData(
-                            episode: ep,
-                            podcastTitle: result.podcastTitle,
-                            podcastImage: result.podcastImageUrl
-                        )
+        for batchStart in stride(from: 0, to: nrkSlugList.count, by: AppConstants.nrkConcurrencyLimit) {
+            let batchSlugs = Array(nrkSlugList[batchStart..<min(batchStart + AppConstants.nrkConcurrencyLimit, nrkSlugList.count)])
+            let batchResults = await withTaskGroup(of: [RecentEpisodeData].self) { group in
+                for slug in batchSlugs {
+                    group.addTask {
+                        guard let result = try? await NRKPodcastService.shared.fetchEpisodes(nrkSlug: slug) else { return [] }
+                        return result.episodes.compactMap { ep in
+                            guard let date = iso8601BasicFormatter.date(from: ep.publishedAt), date > sevenDaysAgo else { return nil }
+                            return RecentEpisodeData(
+                                episode: ep,
+                                podcastTitle: result.podcastTitle,
+                                podcastImage: result.podcastImageUrl
+                            )
+                        }
                     }
                 }
+                var collected: [RecentEpisodeData] = []
+                for await batch in group {
+                    collected.append(contentsOf: batch)
+                }
+                return collected
             }
-            var collected: [RecentEpisodeData] = []
-            for await batch in group {
-                collected.append(contentsOf: batch)
-            }
-            return collected
+            results.append(contentsOf: batchResults)
         }
-        results.append(contentsOf: nrkResults)
 
         // Sort newest first (ISO8601 strings sort lexicographically)
         results.sort { $0.episode.publishedAt > $1.episode.publishedAt }

@@ -122,25 +122,25 @@ enum PodcastIndexError: Error, LocalizedError {
     }
 }
 
-// MARK: - Cache Entry
-
-private struct CacheEntry: Sendable {
-    let data: Data
-    let timestamp: Date
-}
-
 // MARK: - Certificate Pinning
 
 private final class APIPinningDelegate: NSObject, URLSessionDelegate, Sendable {
     // SHA256 hashes of the SubjectPublicKeyInfo (SPKI) for api.podcastindex.org
-    // Leaf = EC P-256, Intermediate = EC P-384
+    // Leaf = EC P-256, Intermediate = EC P-384.
+    // Pinning fails closed: if the API rotates to keys not in this set, all
+    // requests are rejected until an app update ships new pins. When adding a
+    // pin, compute it with:
+    //   openssl s_client -connect api.podcastindex.org:443 -showcerts \
+    //     | openssl x509 -pubkey -noout | openssl pkey -pubin -outform DER \
+    //     | openssl dgst -sha256 -binary | base64
     private let pinnedKeyHashes: Set<String> = [
         "QmmepH+qOl2EfJmjYMZWo/rqHf34e9zY0qIeWy+KL8E=",
         "y7xVm0TVJNahMr2sZydE2jQH8SquXV9yLF9seROHHHU=",
     ]
 
-    // ASN.1 headers to reconstruct SubjectPublicKeyInfo from raw EC key data
-    // SecKeyCopyExternalRepresentation returns raw key; openssl hashes full SPKI
+    // ASN.1 headers to reconstruct SubjectPublicKeyInfo from raw key data.
+    // SecKeyCopyExternalRepresentation returns the raw key (EC) or PKCS#1 (RSA);
+    // openssl hashes the full SPKI, so the matching header must be prepended.
     private static let ecP256SPKIHeader: [UInt8] = [
         0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
         0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03,
@@ -151,6 +151,40 @@ private final class APIPinningDelegate: NSObject, URLSessionDelegate, Sendable {
         0x30, 0x76, 0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
         0x01, 0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22, 0x03, 0x62, 0x00
     ]
+
+    private static let rsa2048SPKIHeader: [UInt8] = [
+        0x30, 0x82, 0x01, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+        0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x01, 0x0f, 0x00
+    ]
+
+    private static let rsa4096SPKIHeader: [UInt8] = [
+        0x30, 0x82, 0x02, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+        0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x02, 0x0f, 0x00
+    ]
+
+    /// Selects the SPKI header matching the key's type and size, so both EC
+    /// and RSA keys in the chain can be evaluated against the pin set.
+    private static func spkiHeader(for publicKey: SecKey) -> [UInt8]? {
+        guard let attributes = SecKeyCopyAttributes(publicKey) as? [CFString: Any],
+              let keyType = attributes[kSecAttrKeyType] as? String,
+              let keySize = attributes[kSecAttrKeySizeInBits] as? Int else { return nil }
+
+        if keyType == (kSecAttrKeyTypeECSECPrimeRandom as String) {
+            switch keySize {
+            case 256: return ecP256SPKIHeader
+            case 384: return ecP384SPKIHeader
+            default: return nil
+            }
+        }
+        if keyType == (kSecAttrKeyTypeRSA as String) {
+            switch keySize {
+            case 2048: return rsa2048SPKIHeader
+            case 4096: return rsa4096SPKIHeader
+            default: return nil
+            }
+        }
+        return nil
+    }
 
     func urlSession(
         _ session: URLSession,
@@ -175,15 +209,9 @@ private final class APIPinningDelegate: NSObject, URLSessionDelegate, Sendable {
         }
         for certificate in chain {
             guard let publicKey = SecCertificateCopyKey(certificate),
-                  let rawKeyData = SecKeyCopyExternalRepresentation(publicKey, nil) as? Data else {
+                  let rawKeyData = SecKeyCopyExternalRepresentation(publicKey, nil) as? Data,
+                  let spkiHeader = Self.spkiHeader(for: publicKey) else {
                 continue
-            }
-
-            // Reconstruct SPKI by prepending the ASN.1 header for the key type
-            let spkiHeader: [UInt8] = switch rawKeyData.count {
-            case 65: Self.ecP256SPKIHeader   // EC P-256: 1 + 32 + 32
-            case 97: Self.ecP384SPKIHeader   // EC P-384: 1 + 48 + 48
-            default: []                       // Unknown key type — skip header
             }
 
             var spkiData = Data(spkiHeader)
@@ -207,9 +235,8 @@ actor PodcastIndexAPI: PodcastSearching {
     static let shared = PodcastIndexAPI()
 
     private let session: URLSession
-    private let rateLimiter = RateLimiter(requestsPerSecond: 1.0)
-    private var cache: [String: CacheEntry] = [:]
-    private let cacheTTL: TimeInterval = AppConstants.apiCacheTTL
+    private let rateLimiter = RateLimiter(minInterval: AppConstants.podcastIndexRateLimit)
+    private var cache = TTLCache<Data>(ttl: AppConstants.apiCacheTTL, maxSize: AppConstants.apiCacheMaxSize)
     private let maxRetries = AppConstants.apiMaxRetries
     private let decoder: JSONDecoder
 
@@ -271,9 +298,8 @@ actor PodcastIndexAPI: PodcastSearching {
         let cacheKey = url.absoluteString
 
         // Check cache
-        if let cached = cache[cacheKey],
-           Date().timeIntervalSince(cached.timestamp) < cacheTTL {
-            return try decoder.decode(T.self, from: cached.data)
+        if let cached = cache.value(for: cacheKey) {
+            return try decoder.decode(T.self, from: cached)
         }
 
         // Rate limit
@@ -294,16 +320,7 @@ actor PodcastIndexAPI: PodcastSearching {
             switch httpResponse.statusCode {
             case 200...299:
                 // Cache successful response
-                cache[cacheKey] = CacheEntry(data: data, timestamp: Date())
-
-                // Trim cache if too large
-                if cache.count > AppConstants.apiCacheMaxSize {
-                    let sorted = cache.sorted { $0.value.timestamp < $1.value.timestamp }
-                    for entry in sorted.prefix(cache.count - AppConstants.apiCacheMaxSize) {
-                        cache.removeValue(forKey: entry.key)
-                    }
-                }
-
+                cache.insert(data, for: cacheKey)
                 return try decoder.decode(T.self, from: data)
 
             case 401, 403:
@@ -348,8 +365,8 @@ actor PodcastIndexAPI: PodcastSearching {
         var params: [String: String] = [
             "q": query,
             "max": String(options.max),
-            "fulltext": "",
         ]
+        if options.fulltext { params["fulltext"] = "" }
         if options.similar { params["similar"] = "" }
         if let lang = options.lang { params["lang"] = lang }
         return try await apiRequest(endpoint: "/search/bytitle", params: params)
@@ -359,8 +376,8 @@ actor PodcastIndexAPI: PodcastSearching {
         var params: [String: String] = [
             "q": query,
             "max": String(options.max),
-            "fulltext": "",
         ]
+        if options.fulltext { params["fulltext"] = "" }
         if let lang = options.lang { params["lang"] = lang }
         if let cat = options.cat { params["cat"] = cat }
         if let notcat = options.notcat { params["notcat"] = notcat }

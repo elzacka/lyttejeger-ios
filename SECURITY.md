@@ -33,7 +33,7 @@ This policy covers:
 - **API key protection:** Keys are XOR-obfuscated as byte arrays in `Config/Secrets.swift` (gitignored), decoded at runtime via computed properties — never stored as plaintext in source
 
 ### Network
-- **Certificate pinning:** SHA-256 public key pins for Podcast Index API connections (leaf + intermediate CA) via custom `URLSessionDelegate`
+- **Certificate pinning:** SHA-256 public key pins for Podcast Index API connections (leaf + intermediate CA) via custom `URLSessionDelegate`. Pin matching supports EC P-256/P-384 and RSA 2048/4096 keys, so a key-type rotation on the server can be handled by shipping a new pin without code changes. Pinning fails closed by design
 - **HTTPS enforced:** All API calls use HTTPS; `NSAllowsArbitraryLoadsForMedia` enabled only for podcast audio stream URLs
 - **Async networking:** All network calls use `URLSession` async APIs. Now Playing artwork is loaded via `Task.detached` with a 10-second timeout and 5 MB size limit
 - **Concurrency-limited fetches:** Background refresh caps NRK feed fetches to 4 parallel requests to prevent resource exhaustion
@@ -45,7 +45,7 @@ This policy covers:
 
 ### Data export
 - **File protection:** In-app JSON data export uses `.completeFileProtection` — files are only accessible while the device is unlocked
-- **Filename sanitization:** Episode audio downloads sanitize titles by stripping `/:\?%*|"<>` characters and limiting to 200 characters
+- **Filename sanitization:** Episode audio downloads sanitize titles by stripping `/:\?%*|"<>` characters, trimming leading/trailing dots, and limiting to 200 characters
 
 ### Concurrency & error handling
 - **Strict concurrency:** Full Swift 6 strict concurrency checking (`SWIFT_STRICT_CONCURRENCY: complete`) eliminates data races at compile time

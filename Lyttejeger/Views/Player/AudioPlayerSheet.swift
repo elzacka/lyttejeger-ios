@@ -170,9 +170,11 @@ struct AudioPlayerSheet: View {
     }
 
     private func downloadAndShare() async {
+        // https only — ATS blocks plain-http URLSession transfers anyway
+        // (NSAllowsArbitraryLoadsForMedia covers only AV playback)
         guard let episode = playerVM.currentEpisode,
               let url = URL(string: episode.audioUrl),
-              url.scheme == "https" || url.scheme == "http" else { return }
+              url.scheme == "https" else { return }
 
         isDownloading = true
         defer { isDownloading = false }
@@ -180,14 +182,19 @@ struct AudioPlayerSheet: View {
         do {
             let (tempURL, _) = try await URLSession.shared.download(from: url)
             let invalidChars = CharacterSet(charactersIn: "/:\\?%*|\"<>")
-            let safeName = episode.title
-                .components(separatedBy: invalidChars)
-                .joined(separator: "-")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .prefix(200)
+            var safeName = String(
+                episode.title
+                    .components(separatedBy: invalidChars)
+                    .joined(separator: "-")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .prefix(200)
+            )
+            // No leading dots — avoids hidden files and "." path components
+            safeName = safeName.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            if safeName.isEmpty { safeName = "episode" }
             let ext = url.pathExtension.isEmpty ? "mp3" : url.pathExtension
             let destURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent(String(safeName))
+                .appendingPathComponent(safeName)
                 .appendingPathExtension(ext)
             try? FileManager.default.removeItem(at: destURL)
             try FileManager.default.moveItem(at: tempURL, to: destURL)

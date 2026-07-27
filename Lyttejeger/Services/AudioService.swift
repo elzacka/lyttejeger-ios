@@ -28,6 +28,10 @@ final class AudioService: AudioPlaying {
     var playbackSpeed: Float = 1.0
     var pausedAt: Date?
 
+    private var wasPlayingBeforeInterruption = false
+    private var artworkCache: [String: MPMediaItemArtwork] = [:]
+    private var artworkFetchingUrl: String?
+
     // MARK: - Current Episode
 
     var currentEpisode: Episode?
@@ -81,6 +85,9 @@ final class AudioService: AudioPlaying {
                 guard let self else { return }
                 switch type {
                 case .began:
+                    // Remember state so .ended only resumes what the
+                    // interruption itself paused — not a manual pause
+                    self.wasPlayingBeforeInterruption = self.isPlaying
                     if self.isPlaying {
                         self.player?.pause()
                         self.isPlaying = false
@@ -88,12 +95,13 @@ final class AudioService: AudioPlaying {
                         audioLogger.info("Playback paused due to interruption")
                     }
                 case .ended:
-                    if shouldResume {
+                    if shouldResume && self.wasPlayingBeforeInterruption {
                         self.player?.rate = self.playbackSpeed
                         self.isPlaying = true
                         self.updateNowPlaying()
                         audioLogger.info("Playback resumed after interruption")
                     }
+                    self.wasPlayingBeforeInterruption = false
                 @unknown default:
                     break
                 }
@@ -306,67 +314,58 @@ final class AudioService: AudioPlaying {
     // MARK: - Now Playing
 
     private func updateNowPlaying() {
-        let episodeTitle = currentEpisode?.title ?? ""
-        let podcastTitle = currentPodcastTitle ?? ""
-        let time = currentTime
-        let dur = duration
-        let playing = isPlaying
-        let speed = playbackSpeed
-        let imageUrl = currentPodcastImage ?? currentEpisode?.imageUrl
+        guard currentEpisode != nil else { return }
 
-        updateNowPlayingOnMainThread(
-            episodeTitle: episodeTitle,
-            podcastTitle: podcastTitle,
-            time: time,
-            duration: dur,
-            playing: playing,
-            speed: speed,
-            imageUrl: imageUrl
-        )
-    }
-
-    private nonisolated func updateNowPlayingOnMainThread(
-        episodeTitle: String,
-        podcastTitle: String,
-        time: TimeInterval,
-        duration: TimeInterval,
-        playing: Bool,
-        speed: Float,
-        imageUrl: String?
-    ) {
-        let info: [String: Any] = [
-            MPMediaItemPropertyTitle: episodeTitle,
-            MPMediaItemPropertyArtist: podcastTitle,
-            MPNowPlayingInfoPropertyElapsedPlaybackTime: time,
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: currentEpisode?.title ?? "",
+            MPMediaItemPropertyArtist: currentPodcastTitle ?? "",
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime,
             MPMediaItemPropertyPlaybackDuration: duration,
-            MPNowPlayingInfoPropertyPlaybackRate: playing ? Double(speed) : 0.0,
-            MPNowPlayingInfoPropertyDefaultPlaybackRate: Double(speed)
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? Double(playbackSpeed) : 0.0,
+            MPNowPlayingInfoPropertyDefaultPlaybackRate: Double(playbackSpeed)
         ]
 
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        if let imageUrl = currentPodcastImage ?? currentEpisode?.imageUrl {
+            if let artwork = artworkCache[imageUrl] {
+                info[MPMediaItemPropertyArtwork] = artwork
+            } else {
+                fetchArtwork(imageUrl)
+            }
+        }
 
-        // Load artwork async - use Task.detached to avoid actor context
-        if let imageUrl, let url = URL(string: imageUrl), url.scheme == "https" {
-            Task.detached(priority: .userInitiated) {
-                var request = URLRequest(url: url)
-                request.timeoutInterval = 10
-                guard let (data, _) = try? await URLSession.shared.data(for: request),
-                      data.count <= 5_000_000,
-                      let image = UIImage(data: data) else { return }
-                let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                let capturedTitle = episodeTitle
-                await MainActor.run {
-                    let updatedInfo: [String: Any] = [
-                        MPMediaItemPropertyTitle: capturedTitle,
-                        MPMediaItemPropertyArtist: podcastTitle,
-                        MPNowPlayingInfoPropertyElapsedPlaybackTime: time,
-                        MPMediaItemPropertyPlaybackDuration: duration,
-                        MPNowPlayingInfoPropertyPlaybackRate: playing ? Double(speed) : 0.0,
-                        MPNowPlayingInfoPropertyDefaultPlaybackRate: Double(speed),
-                        MPMediaItemPropertyArtwork: artwork
-                    ]
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = updatedInfo
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    /// Downloads artwork once per URL and refreshes Now Playing from current
+    /// player state on completion, so a slow download can never overwrite the
+    /// info center with stale elapsed time or play state.
+    private func fetchArtwork(_ imageUrl: String) {
+        guard artworkFetchingUrl != imageUrl,
+              let url = URL(string: imageUrl), url.scheme == "https" else { return }
+        artworkFetchingUrl = imageUrl
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 10
+            let artwork: MPMediaItemArtwork?
+            if let (data, _) = try? await URLSession.shared.data(for: request),
+               data.count <= 5_000_000,
+               let image = UIImage(data: data) {
+                artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            } else {
+                artwork = nil
+            }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                if self.artworkFetchingUrl == imageUrl {
+                    self.artworkFetchingUrl = nil
                 }
+                guard let artwork else { return }
+                if self.artworkCache.count >= 20 {
+                    self.artworkCache.removeAll()
+                }
+                self.artworkCache[imageUrl] = artwork
+                self.updateNowPlaying()
             }
         }
     }

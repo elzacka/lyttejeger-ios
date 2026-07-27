@@ -3,8 +3,7 @@ import Foundation
 actor ChapterService: ChapterFetching {
     static let shared = ChapterService()
 
-    private var cache: [String: (chapters: [Chapter], timestamp: Date)] = [:]
-    private let cacheTTL: TimeInterval = AppConstants.chapterCacheTTL
+    private var cache = TTLCache<[Chapter]>(ttl: AppConstants.chapterCacheTTL, maxSize: AppConstants.chapterCacheMaxSize)
     private let decoder = JSONDecoder()
 
     func fetchChapters(from url: String) async -> [Chapter] {
@@ -13,8 +12,8 @@ actor ChapterService: ChapterFetching {
               requestUrl.scheme == "https" else { return [] }
 
         // Check cache
-        if let cached = cache[url], Date().timeIntervalSince(cached.timestamp) < cacheTTL {
-            return cached.chapters
+        if let cached = cache.value(for: url) {
+            return cached
         }
 
         do {
@@ -38,16 +37,7 @@ actor ChapterService: ChapterFetching {
                 }
                 .sorted { $0.startTime < $1.startTime }
 
-            cache[url] = (chapters, Date())
-
-            // Trim cache
-            if cache.count > AppConstants.chapterCacheMaxSize {
-                let sorted = cache.sorted { $0.value.timestamp < $1.value.timestamp }
-                for entry in sorted.prefix(cache.count - AppConstants.chapterCacheMaxSize) {
-                    cache.removeValue(forKey: entry.key)
-                }
-            }
-
+            cache.insert(chapters, for: url)
             return chapters
         } catch {
             return []

@@ -92,7 +92,8 @@ enum EpisodeType: String, Sendable {
 // MARK: - Chapter (Podcasting 2.0)
 
 struct Chapter: Identifiable, Hashable, Sendable {
-    var id: String { "\(startTime)" }
+    // Include the title so two chapters sharing a start time keep distinct IDs
+    var id: String { "\(startTime)-\(title)" }
     var startTime: TimeInterval
     var title: String
     var img: String?

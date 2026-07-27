@@ -227,7 +227,8 @@ struct PodcastDetailView: View {
     /// Checks if this podcast has an NRK equivalent by title match.
     /// The NRK catalog is cached, so this is essentially free after first search.
     private func findNRKSlug() async -> String? {
-        let matches = await NRKPodcastService.shared.searchCatalog(query: podcast.title)
+        // Catalog unavailable → no NRK match; Podcast Index episodes are used instead
+        let matches = (try? await NRKPodcastService.shared.searchCatalog(query: podcast.title)) ?? []
         return matches.first { $0.title.lowercased() == podcast.title.lowercased() }?.nrkSlug
     }
 

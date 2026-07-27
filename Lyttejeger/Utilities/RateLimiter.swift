@@ -1,12 +1,14 @@
 import Foundation
 
-/// Token bucket rate limiter (actor-based for thread safety)
+/// Minimum-interval rate limiter (actor-based for thread safety).
+/// Enforces a fixed minimum spacing between requests; concurrent callers
+/// are staggered rather than bursting.
 actor RateLimiter {
     private let interval: TimeInterval
     private var lastRequestTime: Date = .distantPast
 
-    init(requestsPerSecond: Double = 1.0) {
-        self.interval = 1.0 / requestsPerSecond
+    init(minInterval: TimeInterval) {
+        self.interval = minInterval
     }
 
     /// Wait if needed to respect rate limit, then mark request

@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.Tazk
   deploymentTarget:
     iOS: "26.0"
-  xcodeVersion: "26.4"
+  xcodeVersion: "26.6"
   developmentLanguage: nb
   generateEmptyDirectories: true
 settings:
@@ -25,6 +25,7 @@ targets:
       - path: Lyttejeger
         excludes:
           - "**/.DS_Store"
+          - "Config/Secrets.example.swift"
     resources:
       - path: Lyttejeger/Resources/Assets.xcassets
       - path: Lyttejeger/Resources/Fonts

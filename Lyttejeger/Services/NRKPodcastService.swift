@@ -27,16 +27,25 @@ actor NRKPodcastService: NRKSearching {
     static let shared = NRKPodcastService()
     private let decoder = JSONDecoder()
 
+    // NRK data comes from the community project sindrel/nrk-pod-feeds — a
+    // third-party dependency with no SLA. Failures must degrade gracefully.
     private static let catalogURL = "https://raw.githubusercontent.com/sindrel/nrk-pod-feeds/master/podcasts.json"
     private static let feedBaseURL = "https://sindrel.github.io/nrk-pod-feeds/rss/"
 
     private static let catalogTTL: TimeInterval = 24 * 60 * 60   // 24 hours
     private static let feedTTL: TimeInterval = 30 * 60            // 30 minutes
 
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        return URLSession(configuration: config)
+    }()
+
     private var catalog: [NRKCatalogEntry] = []
     private var catalogFetchedAt: Date?
 
-    private var feedCache: [String: (result: NRKFeedResult, fetchedAt: Date)] = [:]
+    private var feedCache = TTLCache<NRKFeedResult>(ttl: NRKPodcastService.feedTTL, maxSize: 30)
 
     // MARK: - Catalog
 
@@ -52,7 +61,7 @@ actor NRKPodcastService: NRKSearching {
             throw NRKError.invalidURL
         }
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
 
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw NRKError.fetchFailed
@@ -65,15 +74,12 @@ actor NRKPodcastService: NRKSearching {
     }
 
     /// Searches the cached catalog locally by title. Zero network after first load.
-    func searchCatalog(query: String) async -> [Podcast] {
+    /// Throws if the catalog cannot be fetched, so callers can tell the user
+    /// that NRK results are unavailable instead of silently omitting them.
+    func searchCatalog(query: String) async throws -> [Podcast] {
         guard !query.isEmpty else { return [] }
 
-        let entries: [NRKCatalogEntry]
-        do {
-            entries = try await ensureCatalog()
-        } catch {
-            return []
-        }
+        let entries = try await ensureCatalog()
 
         let lowered = query.lowercased()
         return entries
@@ -86,9 +92,8 @@ actor NRKPodcastService: NRKSearching {
     /// Fetches and parses an NRK podcast's RSS feed, returning metadata + episodes.
     func fetchEpisodes(nrkSlug: String) async throws -> NRKFeedResult {
         // Check cache
-        if let cached = feedCache[nrkSlug],
-           Date().timeIntervalSince(cached.fetchedAt) < Self.feedTTL {
-            return cached.result
+        if let cached = feedCache.value(for: nrkSlug) {
+            return cached
         }
 
         // Validate slug contains only safe characters (defense against path traversal)
@@ -100,7 +105,7 @@ actor NRKPodcastService: NRKSearching {
             throw NRKError.invalidURL
         }
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
 
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw NRKError.fetchFailed
@@ -113,15 +118,7 @@ actor NRKPodcastService: NRKSearching {
         guard !result.episodes.isEmpty || !result.podcastTitle.isEmpty else {
             throw NRKError.parseFailed
         }
-        feedCache[nrkSlug] = (result: result, fetchedAt: Date())
-
-        // Trim feed cache to 30 entries (LRU)
-        if feedCache.count > 30 {
-            let oldest = feedCache.sorted { $0.value.fetchedAt < $1.value.fetchedAt }
-            for entry in oldest.prefix(feedCache.count - 30) {
-                feedCache.removeValue(forKey: entry.key)
-            }
-        }
+        feedCache.insert(result, for: nrkSlug)
 
         return result
     }

@@ -12,6 +12,9 @@ final class SearchViewModel {
     var episodes: [EpisodeWithPodcast] = []
     var isLoading = false
     var error: String?
+    /// True when the NRK catalog could not be fetched, so NRK podcasts are
+    /// missing from the current results. Shown as a notice in the UI.
+    var nrkUnavailable = false
     var activeTab: SearchTab = .podcasts
 
     private var searchTask: Task<Void, Never>?
@@ -95,6 +98,7 @@ final class SearchViewModel {
         filters = SearchFilters()
         podcasts = []
         episodes = []
+        nrkUnavailable = false
     }
 
     func setActiveTab(_ tab: SearchTab) {
@@ -115,6 +119,7 @@ final class SearchViewModel {
 
     private func performSearch() async {
         let query = String(filters.query.trimmingCharacters(in: .whitespaces).prefix(AppConstants.maxSearchQueryLength))
+        nrkUnavailable = false
 
         // Empty query with active filters -> browse
         if query.isEmpty {
@@ -127,7 +132,14 @@ final class SearchViewModel {
             return
         }
 
-        guard query.count >= AppConstants.minSearchQueryLength else { return }
+        // Below the minimum query length nothing is searched — clear any
+        // previous results so the list doesn't show stale matches
+        guard query.count >= AppConstants.minSearchQueryLength else {
+            podcasts = []
+            episodes = []
+            error = nil
+            return
+        }
 
         if activeTab == .episodes {
             await searchEpisodes(query)
