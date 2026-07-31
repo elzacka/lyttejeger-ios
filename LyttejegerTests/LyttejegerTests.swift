@@ -459,7 +459,7 @@ struct QueueViewModelTests {
             description: "A test episode",
             audioUrl: "https://example.com/\(id).mp3",
             duration: 1800,
-            publishedAt: "20250101T120000Z",
+            publishedAt: "2025-01-01T12:00:00Z",
             imageUrl: nil,
             transcriptUrl: nil,
             chaptersUrl: nil,
@@ -597,7 +597,7 @@ struct SubscriptionViewModelTests {
             id: id, title: title, author: "Test Author", description: "A test podcast",
             imageUrl: "https://example.com/art.jpg", feedUrl: "https://example.com/feed.xml",
             categories: ["Technology"], language: "Norsk", episodeCount: 50,
-            lastUpdated: "20250101T000000Z", explicit: false
+            lastUpdated: "2025-01-01T00:00:00Z", explicit: false
         )
     }
 
@@ -677,11 +677,15 @@ struct SubscriptionViewModelTests {
 @MainActor
 struct SearchRankingTests {
 
+    /// Dates must be extended ISO 8601. `iso8601BasicFormatter` is configured
+    /// with default options despite its name, so a compact "20250101T000000Z"
+    /// fails to parse, silently becomes .distantPast and disables the freshness
+    /// part of the ranking these tests exercise.
     private func makePodcast(
         id: String,
         title: String,
         episodeCount: Int = 10,
-        lastUpdated: String = "20250101T000000Z"
+        lastUpdated: String = "2025-01-01T00:00:00Z"
     ) -> Podcast {
         Podcast(
             id: id, title: title, author: "", description: "",
@@ -827,12 +831,13 @@ struct SearchRankingTests {
 @MainActor
 struct EpisodeRankingTests {
 
+    /// Dates must be extended ISO 8601, see the note in SearchRankingTests.
     private func makeEpisode(
         id: String,
         title: String,
         description: String = "",
         podcastTitle: String = "En podkast",
-        publishedAt: String = "20250101T000000Z"
+        publishedAt: String = "2025-01-01T00:00:00Z"
     ) -> EpisodeWithPodcast {
         EpisodeWithPodcast(
             episode: Episode(
