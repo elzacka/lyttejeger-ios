@@ -960,6 +960,314 @@ struct EpisodeMatchesQueryTests {
     }
 }
 
+// MARK: - OPML
+
+@Suite("OPMLService.parse")
+struct OPMLParseTests {
+
+    private func data(_ xml: String) -> Data { Data(xml.utf8) }
+
+    @Test("reads title and feed URL from a standard export")
+    func readsStandardExport() {
+        let entries = OPMLService.parse(data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <opml version="2.0">
+          <body>
+            <outline type="rss" text="Abels tårn" xmlUrl="https://example.com/abels.xml"/>
+          </body>
+        </opml>
+        """))
+
+        #expect(entries == [OPMLEntry(title: "Abels tårn", feedUrl: "https://example.com/abels.xml")])
+    }
+
+    @Test("prefers title over text when both are present")
+    func prefersTitleAttribute() {
+        let entries = OPMLService.parse(data("""
+        <opml><body>
+          <outline type="rss" text="fallback" title="Ekte tittel" xmlUrl="https://example.com/a.xml"/>
+        </body></opml>
+        """))
+
+        #expect(entries.first?.title == "Ekte tittel")
+    }
+
+    @Test("finds feeds nested inside category folders")
+    func findsNestedFeeds() {
+        // Apple Podcasts and Pocket Casts both group subscriptions this way
+        let entries = OPMLService.parse(data("""
+        <opml><body>
+          <outline text="Krim">
+            <outline type="rss" text="En podkast" xmlUrl="https://example.com/a.xml"/>
+          </outline>
+        </body></opml>
+        """))
+
+        #expect(entries.count == 1)
+        #expect(entries.first?.feedUrl == "https://example.com/a.xml")
+    }
+
+    @Test("skips outlines without a feed URL")
+    func skipsFolders() {
+        let entries = OPMLService.parse(data("""
+        <opml><body>
+          <outline text="Bare en mappe"/>
+          <outline type="rss" text="Ekte" xmlUrl="https://example.com/a.xml"/>
+        </body></opml>
+        """))
+
+        #expect(entries.count == 1)
+    }
+
+    @Test("handles lowercase attribute spelling")
+    func handlesLowercaseAttributes() {
+        let entries = OPMLService.parse(data("""
+        <opml><body><outline type="rss" text="A" xmlurl="https://example.com/a.xml"/></body></opml>
+        """))
+
+        #expect(entries.count == 1)
+    }
+
+    @Test("drops duplicate feed URLs")
+    func dropsDuplicates() {
+        let entries = OPMLService.parse(data("""
+        <opml><body>
+          <outline type="rss" text="A" xmlUrl="https://example.com/a.xml"/>
+          <outline type="rss" text="A igjen" xmlUrl="https://example.com/a.xml"/>
+        </body></opml>
+        """))
+
+        #expect(entries.count == 1)
+    }
+
+    @Test("returns nothing for a file that is not OPML")
+    func rejectsNonOPML() {
+        #expect(OPMLService.parse(data("<rss><channel><title>Noe</title></channel></rss>")).isEmpty)
+    }
+}
+
+@Suite("OPMLService.makeDocument")
+struct OPMLExportTests {
+
+    private func subscription(title: String, feedUrl: String) -> Subscription {
+        Subscription(
+            podcastId: "1", title: title, author: "", imageUrl: "", feedUrl: feedUrl
+        )
+    }
+
+    @Test("round-trips through the parser")
+    func roundTrips() {
+        let subs = [
+            subscription(title: "Abels tårn", feedUrl: "https://example.com/abels.xml"),
+            subscription(title: "Ekko", feedUrl: "https://example.com/ekko.xml"),
+        ]
+
+        let document = OPMLService.makeDocument(from: subs, generatedAt: Date())
+        let parsed = OPMLService.parse(Data(document.utf8))
+
+        #expect(parsed.count == 2)
+        #expect(parsed.map(\.title) == ["Abels tårn", "Ekko"])
+    }
+
+    @Test("escapes characters that would break the XML")
+    func escapesSpecialCharacters() {
+        let subs = [subscription(title: "Ludvig & \"Co\" <live>", feedUrl: "https://example.com/a.xml?x=1&y=2")]
+
+        let document = OPMLService.makeDocument(from: subs, generatedAt: Date())
+
+        #expect(!document.contains("& "))
+        #expect(document.contains("&amp;"))
+
+        // The real check: it must survive a parse unchanged
+        let parsed = OPMLService.parse(Data(document.utf8))
+        #expect(parsed.first?.title == "Ludvig & \"Co\" <live>")
+        #expect(parsed.first?.feedUrl == "https://example.com/a.xml?x=1&y=2")
+    }
+
+    @Test("leaves out subscriptions with no feed URL")
+    func skipsSubscriptionsWithoutFeed() {
+        let subs = [
+            subscription(title: "Uten feed", feedUrl: ""),
+            subscription(title: "Med feed", feedUrl: "https://example.com/a.xml"),
+        ]
+
+        let parsed = OPMLService.parse(Data(OPMLService.makeDocument(from: subs, generatedAt: Date()).utf8))
+
+        #expect(parsed.count == 1)
+        #expect(parsed.first?.title == "Med feed")
+    }
+}
+
+@Suite("DataTransferService format detection")
+struct DataTransferFormatTests {
+
+    @Test("uses the file extension when it is known")
+    func usesExtension() {
+        let url = URL(fileURLWithPath: "/tmp/abonnementer.opml")
+        #expect(DataTransferService.detectFormat(url: url, data: Data("<opml/>".utf8)) == .opml)
+    }
+
+    @Test("sniffs the contents when the extension is generic")
+    func sniffsContents() {
+        // Several podcast apps export OPML named .xml
+        let xml = URL(fileURLWithPath: "/tmp/export.xml")
+        #expect(DataTransferService.detectFormat(url: xml, data: Data("<?xml version=\"1.0\"?><opml/>".utf8)) == .opml)
+
+        let unknown = URL(fileURLWithPath: "/tmp/backup.txt")
+        #expect(DataTransferService.detectFormat(url: unknown, data: Data("{\"app\":\"Lyttejeger\"}".utf8)) == .json)
+    }
+
+    @Test("returns nothing for an unrecognised file")
+    func rejectsUnknown() {
+        let url = URL(fileURLWithPath: "/tmp/noe.bin")
+        #expect(DataTransferService.detectFormat(url: url, data: Data("bare tekst".utf8)) == nil)
+    }
+}
+
+@Suite("DataTransferService.importJSON")
+@MainActor
+struct ImportJSONTests {
+
+    private func makeContext() throws -> ModelContext {
+        let schema = Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        return ModelContext(try ModelContainer(for: schema, configurations: [config]))
+    }
+
+    private func backup(
+        subscriptions: [[String: Any]] = [],
+        queue: [[String: Any]] = [],
+        positions: [[String: Any]] = []
+    ) -> Data {
+        try! JSONSerialization.data(withJSONObject: [
+            "app": "Lyttejeger",
+            "abonnementer": subscriptions,
+            "spillekø": queue,
+            "avspillingsposisjoner": positions,
+        ])
+    }
+
+    @Test("adds subscriptions, queue items and positions")
+    func addsEverything() throws {
+        let context = try makeContext()
+        let data = backup(
+            subscriptions: [["podcastId": "1", "tittel": "En podkast", "feedUrl": "https://a.xml"]],
+            queue: [["episodeId": "e1", "tittel": "Ep", "audioUrl": "https://a.mp3"]],
+            positions: [["episodeId": "e1", "posisjon": 42.0, "varighet": 100.0]]
+        )
+
+        let summary = try DataTransferService.importJSON(data, into: context)
+
+        #expect(summary.addedSubscriptions == 1)
+        #expect(summary.addedQueueItems == 1)
+        #expect(summary.addedPositions == 1)
+        #expect(try context.fetch(FetchDescriptor<Subscription>()).count == 1)
+    }
+
+    @Test("merges instead of replacing, so existing data survives")
+    func mergesRatherThanReplaces() throws {
+        let context = try makeContext()
+        context.insert(Subscription(
+            podcastId: "existing", title: "Fra før", author: "", imageUrl: "", feedUrl: "https://b.xml"
+        ))
+        try context.save()
+
+        _ = try DataTransferService.importJSON(
+            backup(subscriptions: [["podcastId": "1", "tittel": "Ny", "feedUrl": "https://a.xml"]]),
+            into: context
+        )
+
+        let ids = try context.fetch(FetchDescriptor<Subscription>()).map(\.podcastId).sorted()
+        #expect(ids == ["1", "existing"])
+    }
+
+    @Test("importing the same file twice changes nothing the second time")
+    func isIdempotent() throws {
+        let context = try makeContext()
+        let data = backup(
+            subscriptions: [["podcastId": "1", "tittel": "En podkast", "feedUrl": "https://a.xml"]],
+            queue: [["episodeId": "e1", "tittel": "Ep", "audioUrl": "https://a.mp3"]]
+        )
+
+        _ = try DataTransferService.importJSON(data, into: context)
+        let second = try DataTransferService.importJSON(data, into: context)
+
+        #expect(second.addedSubscriptions == 0)
+        #expect(second.addedQueueItems == 0)
+        #expect(second.skippedSubscriptions == 1)
+        #expect(try context.fetch(FetchDescriptor<Subscription>()).count == 1)
+        #expect(try context.fetch(FetchDescriptor<QueueItem>()).count == 1)
+    }
+
+    @Test("imported queue items go after the existing queue")
+    func appendsToQueue() throws {
+        let context = try makeContext()
+        context.insert(QueueItem(
+            episodeId: "old", podcastId: "p", title: "Gammel",
+            podcastTitle: "P", audioUrl: "https://old.mp3", position: 0
+        ))
+        try context.save()
+
+        _ = try DataTransferService.importJSON(
+            backup(queue: [["episodeId": "new", "tittel": "Ny", "audioUrl": "https://new.mp3"]]),
+            into: context
+        )
+
+        let items = try context.fetch(FetchDescriptor<QueueItem>(sortBy: [SortDescriptor(\.position)]))
+        #expect(items.map(\.episodeId) == ["old", "new"])
+    }
+
+    @Test("skips entries missing the fields they need")
+    func skipsIncompleteEntries() throws {
+        let context = try makeContext()
+
+        let summary = try DataTransferService.importJSON(
+            backup(
+                subscriptions: [["tittel": "Uten id"]],
+                queue: [["episodeId": "e1", "tittel": "Uten lyd"]]
+            ),
+            into: context
+        )
+
+        #expect(summary.addedSubscriptions == 0)
+        #expect(summary.addedQueueItems == 0)
+    }
+
+    @Test("rejects a JSON file that is not a Lyttejeger backup")
+    func rejectsForeignJSON() throws {
+        let context = try makeContext()
+        let data = try! JSONSerialization.data(withJSONObject: ["noe": "helt annet"])
+
+        #expect(throws: ImportError.self) {
+            try DataTransferService.importJSON(data, into: context)
+        }
+    }
+}
+
+@Suite("DataTransferService.nrkSlug")
+struct NRKSlugFromFeedUrlTests {
+
+    @Test("recognises an NRK feed URL")
+    func recognisesNRKFeed() {
+        #expect(DataTransferService.nrkSlug(
+            fromFeedUrl: "https://sindrel.github.io/nrk-pod-feeds/rss/abels_taarn.xml"
+        ) == "abels_taarn")
+    }
+
+    @Test("ignores unrelated feed URLs")
+    func ignoresOtherFeeds() {
+        #expect(DataTransferService.nrkSlug(fromFeedUrl: "https://example.com/feed.xml") == nil)
+    }
+
+    @Test("rejects a slug with unsafe characters")
+    func rejectsUnsafeSlug() {
+        // Guards the same path-traversal case the feed fetcher guards
+        #expect(DataTransferService.nrkSlug(
+            fromFeedUrl: "https://sindrel.github.io/nrk-pod-feeds/rss/../../etc/passwd.xml"
+        ) == nil)
+    }
+}
+
 // MARK: - NRK catalog tokenisation
 
 @Suite("NRKPodcastService.searchTokens")

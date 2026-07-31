@@ -1,5 +1,13 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
+
+extension UTType {
+    /// OPML has no system-declared type, so it is derived from the file
+    /// extension. `.xml` is accepted alongside it in the picker because
+    /// several podcast apps export OPML with an .xml extension.
+    static let opml = UTType(filenameExtension: "opml", conformingTo: .xml) ?? .xml
+}
 
 /// Single menu sheet opened from the tab bar. Replaces the previous
 /// three-sheet chain (menu -> Innstillinger / Om Lyttejeger) with one
@@ -8,10 +16,18 @@ struct MenuView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
     @Environment(AudioPlayerViewModel.self) private var playerVM
+    // Needed so an import shows up immediately in Mine podder and Kø
+    @Environment(SubscriptionViewModel.self) private var subscriptionVM
+    @Environment(QueueViewModel.self) private var queueVM
     @AppStorage(AppConstants.showLastPlayedKey) private var showLastPlayed = true
     @AppStorage(AppConstants.showNewFromSubscriptionsKey) private var showNewFromSubscriptions = true
     @State private var showExportConfirmation = false
+    @State private var showOPMLExportConfirmation = false
     @State private var showDeleteConfirmation = false
+    @State private var showFileImporter = false
+    /// Progress or result of the last import, shown under the card.
+    @State private var importStatus: String?
+    @State private var isImporting = false
 
     private let privacyURL = URL(string: "https://github.com/elzacka/lyttejeger-ios/blob/main/Personvern.md")!
     private let guideURL = URL(string: "https://github.com/elzacka/lyttejeger-ios/blob/main/Brukerveiledning.md")!
@@ -54,7 +70,24 @@ struct MenuView: View {
                 AppCardSection("Dine data") {
                     AppMenuRow(
                         icon: "square.and.arrow.down",
-                        label: "Eksporter som JSON",
+                        label: "Importer",
+                        subtitle: "OPML fra en annen podkastapp, eller JSON fra Lyttejeger",
+                        action: { showFileImporter = true },
+                        accessibilityHint: "Velg en OPML- eller JSON-fil å importere"
+                    )
+                    AppMenuRowDivider()
+                    AppMenuRow(
+                        icon: "square.and.arrow.up",
+                        label: "Eksporter abonnementer",
+                        subtitle: "OPML, kan leses av andre podkastapper",
+                        action: { showOPMLExportConfirmation = true },
+                        accessibilityHint: "Eksporterer abonnementene dine som OPML-fil"
+                    )
+                    AppMenuRowDivider()
+                    AppMenuRow(
+                        icon: "arrow.down.document",
+                        label: "Eksporter alle data",
+                        subtitle: "JSON, full sikkerhetskopi",
                         action: { showExportConfirmation = true },
                         accessibilityHint: "Eksporterer alle data som JSON-fil"
                     )
@@ -67,6 +100,15 @@ struct MenuView: View {
                         action: { showDeleteConfirmation = true },
                         accessibilityHint: "Sletter alle lokalt lagrede data"
                     )
+                }
+
+                if let importStatus {
+                    Text(importStatus)
+                        .font(.caption2Text)
+                        .foregroundStyle(Color.appMutedForeground)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityAddTraits(.updatesFrequently)
                 }
 
                 AppCardSection("Datakilder") {
@@ -109,6 +151,14 @@ struct MenuView: View {
             .padding(.top, AppSpacing.xl)
         }
         .background(Color.appBackground)
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.opml, .json, .xml],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case .success(let urls) = result, let url = urls.first else { return }
+            Task { await handleImport(url) }
+        }
         .alert("Eksporter data?", isPresented: $showExportConfirmation) {
             Button("Avbryt", role: .cancel) {}
             Button("Eksporter") {
@@ -116,6 +166,14 @@ struct MenuView: View {
             }
         } message: {
             Text("Eksporterer abonnementer, spillekø og avspillingsposisjoner som JSON-fil.")
+        }
+        .alert("Eksporter abonnementer?", isPresented: $showOPMLExportConfirmation) {
+            Button("Avbryt", role: .cancel) {}
+            Button("Eksporter") {
+                exportOPML()
+            }
+        } message: {
+            Text("Lager en OPML-fil med abonnementene dine. De fleste podkastapper kan lese den. Spillekø og avspillingsposisjoner er ikke med.")
         }
         .alert("Slett alle data?", isPresented: $showDeleteConfirmation) {
             Button("Avbryt", role: .cancel) {}
@@ -147,61 +205,42 @@ struct MenuView: View {
 
     private func exportData() {
         let context = modelContext
-
         let subscriptions = (try? context.fetch(FetchDescriptor<Subscription>())) ?? []
         let queueItems = (try? context.fetch(FetchDescriptor<QueueItem>(sortBy: [SortDescriptor(\.position)]))) ?? []
         let positions = (try? context.fetch(FetchDescriptor<PlaybackPosition>())) ?? []
 
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
+        guard let data = try? DataTransferService.makeJSONExport(
+            subscriptions: subscriptions,
+            queueItems: queueItems,
+            positions: positions,
+            exportedAt: Date()
+        ) else { return }
 
-        let export: [String: Any] = [
-            "app": "Lyttejeger",
-            "versjon": AppConstants.appVersion,
-            "eksportert": formatter.string(from: Date()),
-            "abonnementer": subscriptions.map { sub in
-                [
-                    "podcastId": sub.podcastId,
-                    "tittel": sub.title,
-                    "forfatter": sub.author,
-                    "feedUrl": sub.feedUrl,
-                    "abonnertDato": formatter.string(from: sub.subscribedAt),
-                ] as [String: Any]
-            },
-            "spillekø": queueItems.map { item in
-                [
-                    "episodeId": item.episodeId,
-                    "tittel": item.title,
-                    "podkast": item.podcastTitle,
-                    "audioUrl": item.audioUrl,
-                    "posisjon": item.position,
-                ] as [String: Any]
-            },
-            "avspillingsposisjoner": positions.map { pos in
-                [
-                    "episodeId": pos.episodeId,
-                    "posisjon": pos.position,
-                    "varighet": pos.duration,
-                    "fullført": pos.completed,
-                    "oppdatert": formatter.string(from: pos.updatedAt),
-                ] as [String: Any]
-            },
-            "innstillinger": [
-                "visFortsettÅLytte": UserDefaults.standard.bool(forKey: AppConstants.showLastPlayedKey),
-                "visNyttFraAbonnementer": UserDefaults.standard.bool(forKey: AppConstants.showNewFromSubscriptionsKey),
-            ] as [String: Any],
-        ]
+        share(data, filename: "lyttejeger-data.json")
+    }
 
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: export, options: [.prettyPrinted, .sortedKeys]) else {
+    private func exportOPML() {
+        let subscriptions = (try? modelContext.fetch(
+            FetchDescriptor<Subscription>(sortBy: [SortDescriptor(\.title)])
+        )) ?? []
+
+        guard !subscriptions.isEmpty else {
+            importStatus = "Du følger ingen podkaster ennå, så det er ingenting å eksportere."
             return
         }
 
-        let tempDir = FileManager.default.temporaryDirectory
-        let fileURL = tempDir.appendingPathComponent("lyttejeger-data.json")
-        try? jsonData.write(to: fileURL, options: .completeFileProtection)
+        let data = DataTransferService.makeOPMLExport(subscriptions: subscriptions, exportedAt: Date())
+        share(data, filename: "lyttejeger-abonnementer.opml")
+    }
 
-        // Present UIActivityViewController directly via UIKit
-        // (wrapping in SwiftUI .sheet causes a blank white sheet on iOS 26)
+    /// Writes to a temporary file and hands it to the share sheet.
+    ///
+    /// UIActivityViewController is presented through UIKit directly: wrapping
+    /// it in a SwiftUI .sheet renders a blank white sheet on iOS 26.
+    private func share(_ data: Data, filename: String) {
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        try? data.write(to: fileURL, options: .completeFileProtection)
+
         let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
         activityVC.completionWithItemsHandler = { _, _, _, _ in
             try? FileManager.default.removeItem(at: fileURL)
@@ -214,6 +253,81 @@ struct MenuView: View {
             }
             topVC.present(activityVC, animated: true)
         }
+    }
+
+    // MARK: - Data Import
+
+    private func handleImport(_ url: URL) async {
+        guard !isImporting else { return }
+        isImporting = true
+        defer { isImporting = false }
+
+        // Files chosen through the picker live outside the sandbox
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        guard let data = try? Data(contentsOf: url) else {
+            importStatus = "Kunne ikke lese filen."
+            return
+        }
+
+        guard let format = DataTransferService.detectFormat(url: url, data: data) else {
+            importStatus = "Filformatet er ikke støttet. Velg en OPML- eller JSON-fil."
+            return
+        }
+
+        do {
+            let summary: ImportSummary
+            switch format {
+            case .json:
+                importStatus = "Importerer…"
+                summary = try DataTransferService.importJSON(data, into: modelContext)
+            case .opml:
+                summary = try await DataTransferService.importOPML(
+                    data,
+                    into: modelContext,
+                    api: PodcastIndexAPI.shared
+                ) { done, total in
+                    importStatus = "Henter podkast \(done) av \(total)…"
+                }
+            }
+            importStatus = message(for: summary)
+            UIAccessibility.post(notification: .announcement, argument: importStatus)
+            subscriptionVM.fetchSubscriptions()
+            queueVM.fetchQueue()
+        } catch {
+            importStatus = (error as? LocalizedError)?.errorDescription ?? "Importen feilet."
+        }
+    }
+
+    /// Plain-language result, so the user knows what changed.
+    private func message(for summary: ImportSummary) -> String {
+        if summary.isEmpty && summary.skippedSubscriptions > 0 {
+            return "Alt i filen fantes fra før. Ingenting ble lagt til."
+        }
+        if summary.isEmpty {
+            return "Fant ingenting å importere i filen."
+        }
+
+        var parts: [String] = []
+        if summary.addedSubscriptions > 0 {
+            parts.append(summary.addedSubscriptions == 1 ? "1 abonnement" : "\(summary.addedSubscriptions) abonnementer")
+        }
+        if summary.addedQueueItems > 0 {
+            parts.append(summary.addedQueueItems == 1 ? "1 episode i køen" : "\(summary.addedQueueItems) episoder i køen")
+        }
+        if summary.addedPositions > 0 {
+            parts.append(summary.addedPositions == 1 ? "1 avspillingsposisjon" : "\(summary.addedPositions) avspillingsposisjoner")
+        }
+
+        var text = "La til " + parts.joined(separator: ", ") + "."
+        if summary.skippedSubscriptions > 0 {
+            text += " \(summary.skippedSubscriptions) fantes fra før."
+        }
+        if summary.failedSubscriptions > 0 {
+            text += " \(summary.failedSubscriptions) kunne ikke hentes."
+        }
+        return text
     }
 
     // MARK: - Data Deletion

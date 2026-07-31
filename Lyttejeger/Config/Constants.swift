@@ -79,6 +79,12 @@ enum AppConstants {
     /// Max podcasts to check for episode search
     static let episodeSearchPodcastLimit = 50
 
+    /// Max subscriptions accepted from one OPML import.
+    /// Each unresolved feed costs one rate-limited request, so a 500-podcast
+    /// file would otherwise hold the UI for eight minutes. Anything beyond
+    /// this is reported as skipped rather than dropped silently.
+    static let opmlImportLimit = 200
+
     /// Max OR alternatives sent to the API.
     /// Podcast Index has no OR syntax, so each alternative costs one request
     /// and the rate limiter spaces requests one second apart. Capped to keep

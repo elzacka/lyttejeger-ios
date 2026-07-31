@@ -430,6 +430,13 @@ actor PodcastIndexAPI: PodcastSearching {
         try await apiRequest(endpoint: "/podcasts/byguid", params: ["guid": guid])
     }
 
+    /// Resolves a feed URL to a full podcast record.
+    /// Used by OPML import, where the file gives a feed URL and a title but
+    /// none of the metadata the app needs.
+    func podcastByFeedUrl(_ feedUrl: String) async throws -> PodcastByIdResponse {
+        try await apiRequest(endpoint: "/podcasts/byfeedurl", params: ["url": feedUrl])
+    }
+
     // MARK: - Browse/Trending
 
     func trending(max: Int = 50, lang: String? = nil, cat: String? = nil, notcat: String? = nil) async throws -> SearchResponse {

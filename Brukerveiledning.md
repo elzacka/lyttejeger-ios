@@ -228,8 +228,16 @@ Menyknappen nederst til høyre åpner menyen. Der ligger alt som ikke hører hje
 
 ### Dine data
 
-- **Eksporter som JSON** – laster ned abonnementer, spillekø og avspillingsposisjoner som en JSON-fil
+- **Importer** – henter inn abonnementer fra en OPML-fil, eller alt fra en JSON-fil du har eksportert fra Lyttejeger
+- **Eksporter abonnementer** – lager en OPML-fil med podkastene du følger
+- **Eksporter alle data** – lager en JSON-fil med abonnementer, spillekø og avspillingsposisjoner
 - **Slett alle data** – fjerner alle lokalt lagrede data. Krever bekreftelse, og kan ikke angres.
+
+**Flytte podkaster fra en annen app:** OPML er formatet podkastapper bruker for å utveksle abonnementer. Eksporter abonnementene dine fra den andre appen, og importer filen her. Det virker begge veier, så du kan også ta abonnementene dine med videre til en annen app.
+
+**Import legger til, den erstatter aldri.** Podkaster du allerede følger blir stående, og de som finnes fra før hoppes over. Importerer du den samme filen to ganger, skjer det ingenting andre gangen. Etterpå får du vite hvor mange som ble lagt til.
+
+Spillekø og avspillingsposisjoner er ikke med i OPML. Skal du flytte alt, bruk JSON.
 
 Se [personvernerklæringen](Personvern.md) for hva appen lagrer og hvor lenge.
 

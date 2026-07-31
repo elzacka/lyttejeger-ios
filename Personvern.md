@@ -50,7 +50,11 @@ Avspillingsposisjoner for ferdige episoder slettes automatisk etter 90 dager. Po
 
 Lyttejeger lagrer ingen personopplysninger sentralt. Det finnes derfor ingen sentral data å be om innsyn i, rette eller slette.
 
-Du kan når som helst eksportere alt appen har lagret som en JSON-fil, eller slette alt. Begge deler ligger under **Dine data** i menyen i appen. Du kan også slette appen fra enheten.
+Du kan når som helst eksportere alt appen har lagret, importere data du har med deg, eller slette alt. Alle tre ligger under **Dine data** i menyen i appen. Du kan også slette appen fra enheten.
+
+Eksport gir deg enten en JSON-fil med alt, eller en OPML-fil med abonnementene dine. OPML kan leses av andre podkastapper, så du står fritt til å ta dataene dine med videre.
+
+Når du importerer en OPML-fil, sender appen feed-adressene i filen til Podcast Index for å hente tittel, bilde og annen informasjon om podkastene. Det er den eneste gangen import bruker nettet. NRK-feeder gjenkjennes lokalt og sendes ikke. Import av JSON skjer helt lokalt.
 
 ## Feilsøkingslogger
 

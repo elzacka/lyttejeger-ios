@@ -36,6 +36,7 @@ protocol PodcastSearching: Sendable {
     func episodesByFeedId(_ feedId: Int, max: Int, since: Int?) async throws -> EpisodesResponse
     func episodesByFeedIds(_ feedIds: [Int], max: Int, since: Int?) async throws -> EpisodesResponse
     func podcastByFeedId(_ feedId: Int) async throws -> PodcastByIdResponse
+    func podcastByFeedUrl(_ feedUrl: String) async throws -> PodcastByIdResponse
     func trending(max: Int, lang: String?, cat: String?, notcat: String?) async throws -> SearchResponse
     var isConfigured: Bool { get async }
 }
