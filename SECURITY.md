@@ -16,7 +16,7 @@ Lyttejeger ships through the App Store and only the latest release receives fixe
 
 | Version | Supported |
 |---------|-----------|
-| 1.0.7 (build 12) | Yes |
+| 1.0.8 (build 13) | Yes |
 | Earlier releases | No, update to the latest version |
 
 ## Scope
