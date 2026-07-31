@@ -7,23 +7,24 @@ En podkastspiller for iOS, laget i Swift. Rolig, retro design uten sporing eller
 - Søk etter podkaster via [Podcast Index](https://podcastindex.org)
 - NRK-podkaster via dedikert katalog
 - Spillekø med manuell sortering, total spilletid og automatisk avspilling av neste episode
-- Abonnementer med nytt-fra-mine-podder-visning
-- Fullskjermspiller med kapitler, transkripsjoner og søvntimer (gradvis volumnedtrapping)
-- Avspillingshastighet per podkast — appen husker valgt hastighet
-- Smart gjenopptakelse: 10 sekunders tilbakespoling etter lange pauser
-- Eksporter/lagre lydfiler direkte fra spilleren
-- Eksplisitt-merking per Apple og Podcast Index sine retningslinjer
-- Sortering og filtrering: språk, kategori (gruppert), dato, popularitet, varighet
+- Abonnementer med egen visning av nye episoder
+- Fullskjermspiller med kapitler, transkripsjoner og søvntimer
+- Avspillingshastighet per podkast, som appen husker
+- Smart gjenopptakelse med 10 sekunders tilbakespoling etter lange pauser
+- Eksport av lydfiler direkte fra spilleren
+- Eksplisitt-merking etter retningslinjene til Apple og Podcast Index
+- Sortering og filtrering på språk, kategori, dato, popularitet og varighet
 - Avansert søk med eksakte fraser (`"..."`), ekskludering (`-ord`) og OR-operator
-- Bakgrunnsoppdatering av abonnementer via Background App Refresh
-- All data lagres lokalt — ingen sky, ingen kontoer
+- Bakgrunnsoppdatering av abonnementer
+- All data lagres lokalt, uten sky og kontoer
 
-Se [brukerveiledningen](Brukerveiledning.md) for detaljer om søk og filtrering.
+Se [brukerveiledningen](Brukerveiledning.md) for hvordan appen brukes.
 
 ## Teknologi
 
-| **Språk**         | Swift 6.3, strict concurrency                 |
+| Område | Valg |
 | ----------------- | --------------------------------------------- |
+| **Språk**         | Swift 6.3, strict concurrency                 |
 | **Rammeverk**     | SwiftUI, SwiftData, AVFoundation, MediaPlayer |
 | **Minstekrav**    | iOS 26, iPhone                                |
 | **Avhengigheter** | Ingen tredjepartsbiblioteker                  |
@@ -58,7 +59,9 @@ xcodebuild -project Lyttejeger.xcodeproj -scheme Lyttejeger \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' test
 ```
 
-API-nøkler er ikke inkludert i repoet. Kopier `Lyttejeger/Config/Secrets.example.swift` til `Lyttejeger/Config/Secrets.swift` og legg inn dine egne Podcast Index-nøkler. Se [podcastindex.org/developer](https://podcastindex.org/developer) for å registrere deg.
+API-nøkler ligger ikke i repoet. Registrer deg på [podcastindex.org/developer](https://podcastindex.org/developer) og legg inn dine egne nøkler i `Lyttejeger/Config/Secrets.swift`.
+
+Sertifikatpinning mot `api.podcastindex.org` feiler lukket. Bytter Podcast Index sertifikat, må du regne ut nye pin-verdier og legge dem inn i `PodcastIndexAPI.swift`. Kommentaren i filen viser `openssl`-kommandoen.
 
 ## Prosjektstruktur
 
@@ -69,10 +72,10 @@ Lyttejeger/
   Models/          Podcast, Episode, SwiftData-modeller
   Services/        API-klienter (actor), lydtjeneste, bakgrunnsoppdatering
   Theme/           Farger, typografi, spacing
-  Utilities/       Hastighetsbegrenser, søkeparser, tidsformatering
+  Utilities/       Hastighetsbegrenser, søkeparser, tidsformatering, TTL-cache
   ViewModels/      Søk, kø, abonnementer, spiller, fremdrift
   Views/
-    Common/        Gjenbrukbare komponenter (bildecache, innstillinger, om)
+    Common/        Gjenbrukbare komponenter (bildecache, meny, kort, menyrader)
     Library/       Mine podder, kø
     Player/        Spiller, kontroller, kapitler, transkripsjoner
     Podcast/       Podkastdetaljer
@@ -83,7 +86,7 @@ LyttejegerTests/   Enhetstester (Swift Testing)
 
 ## Personvern
 
-Lyttejeger samler ikke inn personopplysninger. All data lagres lokalt på din iPhone. Les hele [personvernerklæringen](Personvern.md).
+Se [personvernerklæringen](Personvern.md).
 
 ## Sikkerhet
 
@@ -91,7 +94,7 @@ Oppdaget en sårbarhet? Se [SECURITY.md](SECURITY.md) for rapportering.
 
 ## Lisens
 
-MIT — se [LICENSE](LICENSE).
+MIT. Se [LICENSE](LICENSE).
 
 ## Kontakt
 

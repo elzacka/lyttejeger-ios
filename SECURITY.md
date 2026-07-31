@@ -1,68 +1,59 @@
 # Security Policy
 
+*Last updated: 31 July 2026*
+
 ## Reporting a vulnerability
 
-If you discover a security vulnerability in Lyttejeger, please report it responsibly.
+Report security issues privately to **hei@tazk.no**. Do not open a public issue for undisclosed vulnerabilities.
 
-**Contact:** hei@tazk.no
+Please include a description of the issue, steps to reproduce, and the impact you believe it has.
 
-Please include:
-- Description of the vulnerability
-- Steps to reproduce
-- Potential impact
+You will get an acknowledgement within 48 hours and an assessment with a fix or mitigation plan within 7 days.
 
-I will acknowledge receipt within 48 hours and aim to provide a fix or mitigation plan within 7 days.
+## Supported versions
+
+Lyttejeger ships through the App Store and only the latest release receives fixes.
+
+| Version | Supported |
+|---------|-----------|
+| 1.0.7 (build 12) | Yes |
+| Earlier releases | No, update to the latest version |
 
 ## Scope
 
-This policy covers:
-- The Lyttejeger iOS application source code
-- Build configuration and dependencies
-- API key handling and network security
+In scope:
 
-## Out of Scope
+- The Lyttejeger iOS source code in this repository
+- Build configuration (`project.yml`, CI workflow) and secret handling
+- Network security: certificate pinning, transport security, API authentication
 
-- Third-party services (Podcast Index API, NRK)
+Out of scope:
+
+- Third-party services themselves (Podcast Index, GitHub Pages, podcast hosts)
 - Apple platform vulnerabilities
-- Social engineering attacks
+- Social engineering and physical device access
+- Findings that require a jailbroken or already-compromised device
 
-## Security Practices
+## Security model
 
-### Supply chain & secrets
-- **Zero dependencies:** No third-party libraries (zero supply chain risk)
-- **API key protection:** Keys are XOR-obfuscated as byte arrays in `Config/Secrets.swift` (gitignored), decoded at runtime via computed properties — never stored as plaintext in source
+The app has no accounts, no backend of its own, and no analytics. Every piece of user data stays on the device. That removes most of the usual attack surface, and it means the remaining surface is small enough to describe in full.
 
-### Network
-- **Certificate pinning:** SHA-256 public key pins for Podcast Index API connections (leaf + intermediate CA) via custom `URLSessionDelegate`. Pin matching supports EC P-256/P-384 and RSA 2048/4096 keys, so a key-type rotation on the server can be handled by shipping a new pin without code changes. Pinning fails closed by design
-- **HTTPS enforced:** All API calls use HTTPS; `NSAllowsArbitraryLoadsForMedia` enabled only for podcast audio stream URLs
-- **Async networking:** All network calls use `URLSession` async APIs. Now Playing artwork is loaded via `Task.detached` with a 10-second timeout and 5 MB size limit
-- **Concurrency-limited fetches:** Background refresh caps NRK feed fetches to 4 parallel requests to prevent resource exhaustion
-- **Structured logging:** `BackgroundRefreshService` uses `os.Logger` (subsystem `com.Tazk.Lyttejeger`, category `BackgroundRefresh`) for auditable refresh lifecycle logging
+**Dependencies.** No third-party libraries. Nothing enters the build that Apple does not ship.
 
-### Data
-- **Local-only data:** All user data (subscriptions, queue, playback positions) stored on-device via SwiftData — no cloud sync, no analytics, no tracking
-- **iPhone-only mode:** `TARGETED_DEVICE_FAMILY: "1"` ensures the app only runs on iPhone. Portrait-only is enforced at runtime via `AppDelegate`
+**Secrets.** Podcast Index API keys live in `Config/Secrets.swift`, which is gitignored, stored as XOR-obfuscated byte arrays and decoded at runtime. This is obfuscation, not encryption. It keeps keys out of the repository and out of plain strings in the binary, but anyone with the app binary can recover them. The keys are low-privilege, read-only credentials for a public catalogue, and the threat model accepts this.
 
-### Data export
-- **File protection:** In-app JSON data export uses `.completeFileProtection` — files are only accessible while the device is unlocked
-- **Filename sanitization:** Episode audio downloads sanitize titles by stripping `/:\?%*|"<>` characters, trimming leading/trailing dots, and limiting to 200 characters
+**Transport.** Certificate pinning protects connections to `api.podcastindex.org`, matching SHA-256 hashes of the SubjectPublicKeyInfo for the leaf and intermediate certificates. Pinning fails closed: if Podcast Index rotates to a key outside the pin set, all API requests are rejected until an app update ships new pins. All other API and metadata traffic is HTTPS. `NSAllowsArbitraryLoadsForMedia` is deliberately enabled, because a large share of podcast hosts still serve audio over plain HTTP; this exception applies only to media playback and download.
 
-### Concurrency & error handling
-- **Strict concurrency:** Full Swift 6 strict concurrency checking (`SWIFT_STRICT_CONCURRENCY: complete`) eliminates data races at compile time
-- **Structured logging:** All ViewModels log SwiftData save failures via `os.Logger` (subsystem: `com.Tazk.Lyttejeger`) with `.private` redaction for user data — errors are never silently swallowed
-- **User-visible errors:** Search and episode loading surface error messages to the user instead of failing silently
+**Data at rest.** User data is stored locally via SwiftData. The JSON export written by the in-app export function uses `.completeFileProtection`, so it is readable only while the device is unlocked.
 
-### Input validation
-- **Input normalization:** Search query parser normalizes smart punctuation (curly quotes, em/en dashes) to prevent injection of unexpected Unicode
+**Concurrency.** The project builds with `SWIFT_STRICT_CONCURRENCY: complete`, which eliminates data races at compile time.
 
-### URL validation
-- **HTTPS-only:** `ChapterService`, `TranscriptService` and `CachedAsyncImage` validate that URLs use the `https` scheme before making network requests — non-HTTPS URLs are silently rejected
+### Known limitations
 
-### Background tasks
-- **Isolated context:** Background refresh uses a fresh `ModelContainer` isolated from the main app context
+- API keys are recoverable from the app binary, as described above
+- Audio streams may travel over plain HTTP when the podcast host offers nothing better
+- Protection of local data relies on iOS file protection and the device passcode
 
-### Data integrity
-- **Unique constraints:** `QueueItem.episodeId` uses `@Attribute(.unique)` in SwiftData to prevent duplicate queue entries at the database level
+## Operational note for maintainers
 
-### Testing
-- **Unit test coverage:** 75 tests across 16 suites verify pure functions (time formatting, date formatting, search query parsing, HTML-to-text conversion, duration parsing, feed transformation, chapter navigation, transcript lookup, duration filtering, NRK feed detection, queue operations, subscription management, search ranking, episode transformation) to catch regressions in input handling and data transformation
+Certificate pins are a fail-closed dependency on an external certificate chain. Before every release, verify that the pins in `PodcastIndexAPI.swift` still match the live chain. The command is documented in a comment in that file. Shipping stale pins takes the app offline for every user.
