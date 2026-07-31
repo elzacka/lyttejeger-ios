@@ -134,8 +134,8 @@ private final class APIPinningDelegate: NSObject, URLSessionDelegate, Sendable {
     //     | openssl x509 -pubkey -noout | openssl pkey -pubin -outform DER \
     //     | openssl dgst -sha256 -binary | base64
     private let pinnedKeyHashes: Set<String> = [
-        "QmmepH+qOl2EfJmjYMZWo/rqHf34e9zY0qIeWy+KL8E=",
-        "y7xVm0TVJNahMr2sZydE2jQH8SquXV9yLF9seROHHHU=",
+        "HKcoICKuDsuKqYvsKrfFMFwTJu4X3mNmNKA/B+1ybho=",
+        "brzvtCELCIZUo4sD/qPX0ccRtPsd3DY6RfmxpOU9oB4=",
     ]
 
     // ASN.1 headers to reconstruct SubjectPublicKeyInfo from raw key data.
