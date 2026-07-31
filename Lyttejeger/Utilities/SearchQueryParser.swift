@@ -87,4 +87,30 @@ enum SearchQueryParser {
 
         return result
     }
+
+    /// True when `needle` occurs in `haystack` starting at a word boundary.
+    ///
+    /// A boundary is required before the match but not after. That keeps
+    /// Norwegian inflection working (`mord` still matches "mordet") while
+    /// unrelated substrings no longer match: `app` does not match "rapport",
+    /// and the phrase `true crime` does not match "construe crime".
+    ///
+    /// Both arguments must already be lowercased.
+    static func containsTerm(_ needle: String, in haystack: String) -> Bool {
+        guard !needle.isEmpty else { return false }
+
+        var searchStart = haystack.startIndex
+        while searchStart < haystack.endIndex,
+              let found = haystack.range(of: needle, range: searchStart..<haystack.endIndex) {
+            if found.lowerBound == haystack.startIndex {
+                return true
+            }
+            let preceding = haystack[haystack.index(before: found.lowerBound)]
+            if !preceding.isLetter && !preceding.isNumber {
+                return true
+            }
+            searchStart = haystack.index(after: found.lowerBound)
+        }
+        return false
+    }
 }

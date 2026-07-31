@@ -11,7 +11,8 @@ extension SearchViewModel {
         let api = self.api
 
         let parsed = SearchQueryParser.parse(query)
-        guard let apiQuery = buildApiQuery(from: parsed) else {
+        let apiQueries = buildApiQueries(from: parsed)
+        guard let primaryQuery = apiQueries.first else {
             isLoading = false
             return
         }
@@ -20,29 +21,39 @@ extension SearchViewModel {
             var allEpisodes: [EpisodeWithPodcast] = []
             var existingIds = Set<String>()
 
-            // When categories active, find matching podcasts for episode filtering
             let hasCategory = !filters.categories.isEmpty
-            var categoryMatchedPodcasts: [Podcast]?
-            if hasCategory {
-                var catOptions = SearchOptions()
-                catOptions.max = AppConstants.searchResultsWithCategory
-                catOptions.fulltext = true
-                catOptions.lang = getApiLanguageCodes(filters.languages) ?? AppConstants.allowedLanguagesAPI
-                catOptions.cat = filters.categories.joined(separator: ",")
-                if let termRes = try? await api.searchByTerm(apiQuery, options: catOptions) {
-                    var results = PodcastTransform.transformFeeds(termRes.feeds ?? [])
-                    results = filterByCategory(results)
-                    results = filterByLanguage(results)
-                    categoryMatchedPodcasts = results
+
+            // Source podcasts for strategy 2, always derived from the query
+            // being searched right now. This previously reused `self.podcasts`,
+            // which still held whatever the Podcasts tab last searched for, so
+            // changing the query on the Episodes tab returned episodes drawn
+            // from the previous query's podcasts.
+            var sourceOptions = SearchOptions()
+            sourceOptions.max = hasCategory ? AppConstants.searchResultsWithCategory : AppConstants.searchResultsDefault
+            sourceOptions.fulltext = true
+
+            var sourcePodcasts: [Podcast] = []
+            var seenFeedIds = Set<String>()
+            for apiQuery in apiQueries {
+                if let termRes = try? await api.searchByTerm(apiQuery, options: sourceOptions) {
+                    var branch = PodcastTransform.transformFeeds(termRes.feeds ?? [])
+                    branch = filterByCategory(branch)
+                    branch = filterByLanguage(branch)
+                    for podcast in branch where seenFeedIds.insert(podcast.id).inserted {
+                        sourcePodcasts.append(podcast)
+                    }
                 }
                 guard !Task.isCancelled else { return }
             }
-            let categoryFeedIds: Set<String>? = categoryMatchedPodcasts.map { Set($0.map(\.id)) }
+
+            // Only constrain byperson hits to these feeds when the user picked
+            // a category; otherwise byperson should stay as broad as it is.
+            let categoryFeedIds: Set<String>? = hasCategory ? seenFeedIds : nil
 
             // Strategy 1: byperson search
             // zip keeps each transformed episode paired with its API item even
             // if the transform ever starts filtering
-            let personRes = try await api.searchByPerson(apiQuery, max: 50)
+            let personRes = try await api.searchByPerson(primaryQuery, max: 50)
             let personEps = PodcastTransform.transformEpisodes(personRes.items ?? [])
             for (ep, apiEp) in zip(personEps, personRes.items ?? []) {
                 guard !existingIds.contains(ep.id) else { continue }
@@ -74,9 +85,8 @@ extension SearchViewModel {
             guard !Task.isCancelled else { return }
 
             // Strategy 2: episodes from matching podcasts
-            let episodeSourcePodcasts = categoryMatchedPodcasts ?? Array(podcasts.prefix(AppConstants.episodeSearchPodcastLimit))
-            if !episodeSourcePodcasts.isEmpty {
-                let topPodcasts = Array(episodeSourcePodcasts.prefix(AppConstants.episodeSearchPodcastLimit))
+            if !sourcePodcasts.isEmpty {
+                let topPodcasts = Array(sourcePodcasts.prefix(AppConstants.episodeSearchPodcastLimit))
                 let feedIds = topPodcasts.compactMap { Int($0.id) }
                 let podcastMap = Dictionary(uniqueKeysWithValues: topPodcasts.map { ($0.id, $0) })
 
@@ -86,10 +96,19 @@ extension SearchViewModel {
                         guard !existingIds.contains(ep.id) else { continue }
                         let podcast = podcastMap[String(apiEp.feedId ?? 0)]
 
+                        // Episodes come back per feed, not per query, so the
+                        // operators have to be enforced here. Word-boundary
+                        // matching, same as applyQueryOperators.
                         let text = "\(ep.title) \(ep.description)".lowercased()
-                        let hasAllRequired = parsed.mustInclude.filter { $0.count >= 2 }.allSatisfy { text.contains($0.lowercased()) }
-                        let hasAnyShouldInclude = parsed.shouldInclude.isEmpty || parsed.shouldInclude.contains { text.contains($0.lowercased()) }
-                        let hasAllPhrases = parsed.exactPhrases.allSatisfy { text.contains($0.lowercased()) }
+                        let hasAllRequired = parsed.mustInclude
+                            .filter { $0.count >= 2 }
+                            .allSatisfy { SearchQueryParser.containsTerm($0.lowercased(), in: text) }
+                        let hasAnyShouldInclude = parsed.shouldInclude.isEmpty || parsed.shouldInclude.contains {
+                            SearchQueryParser.containsTerm($0.lowercased(), in: text)
+                        }
+                        let hasAllPhrases = parsed.exactPhrases.allSatisfy {
+                            SearchQueryParser.containsTerm($0.lowercased(), in: text)
+                        }
                         guard hasAllRequired && hasAnyShouldInclude && hasAllPhrases else { continue }
 
                         allEpisodes.append(EpisodeWithPodcast(

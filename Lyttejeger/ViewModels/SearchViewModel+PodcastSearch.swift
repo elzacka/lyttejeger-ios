@@ -12,7 +12,8 @@ extension SearchViewModel {
 
         do {
             let parsed = SearchQueryParser.parse(query)
-            guard let apiQuery = buildApiQuery(from: parsed) else {
+            let apiQueries = buildApiQueries(from: parsed)
+            guard let primaryQuery = apiQueries.first else {
                 isLoading = false
                 return
             }
@@ -22,33 +23,37 @@ extension SearchViewModel {
             var options = SearchOptions()
             options.max = hasCategory ? AppConstants.searchResultsWithCategory : AppConstants.searchResultsDefault
             options.fulltext = true
-            options.lang = getApiLanguageCodes(filters.languages) ?? AppConstants.allowedLanguagesAPI
-            if hasCategory { options.cat = filters.categories.joined(separator: ",") }
 
             // Hybrid: title search + term search, deduplicated
             var allFeeds: [PodcastIndexFeed] = []
             var seenIds = Set<Int>()
 
-            // Title search first
-            if let titleRes = try? await api.searchByTitle(apiQuery, options: SearchOptions(max: 50, fulltext: true, lang: options.lang)) {
-                for feed in titleRes.feeds ?? [] {
-                    if seenIds.insert(feed.id).inserted {
-                        allFeeds.append(feed)
-                    }
-                }
-            }
-
-            guard !Task.isCancelled else { return }
-
-            // Term search
-            let termRes = try await api.searchByTerm(apiQuery, options: options)
-            for feed in termRes.feeds ?? [] {
-                if seenIds.insert(feed.id).inserted {
+            func collect(_ feeds: [PodcastIndexFeed]?) {
+                for feed in feeds ?? [] where seenIds.insert(feed.id).inserted {
                     allFeeds.append(feed)
                 }
             }
 
+            // Title search runs on the primary branch only. It exists to boost
+            // exact title hits, and repeating it per OR branch would double the
+            // rate-limited request count for very little extra recall.
+            if let titleRes = try? await api.searchByTitle(primaryQuery, options: SearchOptions(max: 50, fulltext: true)) {
+                collect(titleRes.feeds)
+            }
+
             guard !Task.isCancelled else { return }
+
+            // One term search per OR branch, unioned. The primary branch is
+            // allowed to throw so a failed search reports an error; additional
+            // branches are best-effort, so a partial result still shows.
+            for (index, apiQuery) in apiQueries.enumerated() {
+                if index == 0 {
+                    collect(try await api.searchByTerm(apiQuery, options: options).feeds)
+                } else if let branchRes = try? await api.searchByTerm(apiQuery, options: options) {
+                    collect(branchRes.feeds)
+                }
+                guard !Task.isCancelled else { return }
+            }
 
             var results = PodcastTransform.transformFeeds(allFeeds)
             results = filterByLanguage(results)
@@ -58,7 +63,7 @@ extension SearchViewModel {
             results = applyQueryOperators(results, parsed: parsed)
 
             // Composite ranking
-            results = rankResults(results, query: apiQuery, parsed: parsed)
+            results = rankResults(results, query: primaryQuery, parsed: parsed)
 
             // Apply local filters (date, sort override)
             results = applyLocalFilters(results)
@@ -66,10 +71,17 @@ extension SearchViewModel {
             // Merge NRK results (local, instant). Catalog failure is not
             // fatal — Podcast Index results still show, with a notice.
             do {
-                let nrkResults = try await nrkService.searchCatalog(query: apiQuery)
-                if !nrkResults.isEmpty {
+                var nrkMatches: [Podcast] = []
+                var seenNrkIds = Set<String>()
+                for apiQuery in apiQueries {
+                    for match in try await nrkService.searchCatalog(query: apiQuery)
+                    where seenNrkIds.insert(match.id).inserted {
+                        nrkMatches.append(match)
+                    }
+                }
+                if !nrkMatches.isEmpty {
                     let piTitles = Set(results.map { $0.title.lowercased() })
-                    var unique = nrkResults.filter { !piTitles.contains($0.title.lowercased()) }
+                    var unique = nrkMatches.filter { !piTitles.contains($0.title.lowercased()) }
                     unique = applyQueryOperators(unique, parsed: parsed)
                     results.append(contentsOf: unique)
                 }
@@ -92,36 +104,55 @@ extension SearchViewModel {
 
     // MARK: - API Query Builder
 
-    func buildApiQuery(from parsed: ParsedQuery) -> String? {
-        var parts: [String] = []
-
+    /// Builds one API query per OR alternative.
+    ///
+    /// Podcast Index has no OR syntax and treats spaces as AND, so joining
+    /// alternatives into a single query turns `a OR b` into `a AND b` — the
+    /// opposite of what the user asked for. Instead each alternative becomes
+    /// its own query, and the caller unions the responses.
+    ///
+    /// `krim OR true crime` parses to shouldInclude [krim, true] plus
+    /// mustInclude [crime], and yields ["crime krim", "crime true"].
+    ///
+    /// Excluded terms are never sent: the API treats `-term` as a literal
+    /// string and returns nothing. They are enforced in `applyQueryOperators`.
+    func buildApiQueries(from parsed: ParsedQuery) -> [String] {
+        var base: [String] = []
         for phrase in parsed.exactPhrases {
-            parts.append("\"\(phrase)\"")
+            base.append("\"\(phrase)\"")
         }
-        parts.append(contentsOf: parsed.mustInclude.filter { $0.count >= 2 })
-        parts.append(contentsOf: parsed.shouldInclude.filter { $0.count >= 2 })
+        base.append(contentsOf: parsed.mustInclude.filter { $0.count >= 2 })
 
-        // No positive terms → nothing useful to search for
-        guard !parts.isEmpty else { return nil }
+        let alternatives = parsed.shouldInclude.filter { $0.count >= 2 }
 
-        // Exclude terms are NOT sent to API — Podcast Index doesn't support
-        // them and treats "-term" as a literal search string, causing zero results.
-        // Exclusions are enforced client-side in applyQueryOperators().
+        guard !alternatives.isEmpty else {
+            // No OR: a single query, or nothing worth searching for
+            return base.isEmpty ? [] : [base.joined(separator: " ")]
+        }
 
-        return parts.joined(separator: " ")
+        return alternatives
+            .prefix(AppConstants.maxOrBranches)
+            .map { (base + [$0]).joined(separator: " ") }
     }
 
     // MARK: - Query Operator Enforcement
 
+    /// Enforces the operators the API cannot express. `text` must be lowercased.
+    ///
+    /// Matching is word-boundary based, so `-app` no longer discards every
+    /// podcast whose description happens to contain "rapport".
     func matchesQueryOperators(_ text: String, parsed: ParsedQuery) -> Bool {
         for term in parsed.mustExclude where term.count >= 2 {
-            if text.contains(term.lowercased()) { return false }
+            if SearchQueryParser.containsTerm(term.lowercased(), in: text) { return false }
         }
         for phrase in parsed.exactPhrases {
-            if !text.contains(phrase.lowercased()) { return false }
+            if !SearchQueryParser.containsTerm(phrase.lowercased(), in: text) { return false }
         }
         if !parsed.shouldInclude.isEmpty {
-            if !parsed.shouldInclude.contains(where: { text.contains($0.lowercased()) }) { return false }
+            let matchesAny = parsed.shouldInclude.contains {
+                SearchQueryParser.containsTerm($0.lowercased(), in: text)
+            }
+            if !matchesAny { return false }
         }
         return true
     }

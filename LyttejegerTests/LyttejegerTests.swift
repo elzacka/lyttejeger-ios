@@ -745,24 +745,127 @@ struct SearchRankingTests {
         #expect(result.first?.id == "1")
     }
 
-    @Test("buildApiQuery returns nil for empty parsed query")
-    func buildApiQueryReturnsNilForEmpty() {
+    @Test("buildApiQueries returns nothing for empty parsed query")
+    func buildApiQueriesEmptyForEmptyQuery() {
         let vm = SearchViewModel()
         let parsed = SearchQueryParser.parse("")
 
-        let result = vm.buildApiQuery(from: parsed)
-
-        #expect(result == nil)
+        #expect(vm.buildApiQueries(from: parsed).isEmpty)
     }
 
-    @Test("buildApiQuery returns nil for exclusion-only query")
-    func buildApiQueryReturnsNilForExclusionOnly() {
+    @Test("buildApiQueries returns nothing for exclusion-only query")
+    func buildApiQueriesEmptyForExclusionOnly() {
         let vm = SearchViewModel()
         let parsed = SearchQueryParser.parse("-news")
 
-        let result = vm.buildApiQuery(from: parsed)
+        #expect(vm.buildApiQueries(from: parsed).isEmpty)
+    }
 
-        #expect(result == nil)
+    @Test("query without OR produces exactly one API query")
+    func singleBranchForPlainQuery() {
+        let vm = SearchViewModel()
+        let parsed = SearchQueryParser.parse("true crime")
+
+        let queries = vm.buildApiQueries(from: parsed)
+
+        #expect(queries == ["true crime"])
+    }
+
+    @Test("OR produces one query per alternative instead of collapsing to AND")
+    func orProducesOneQueryPerAlternative() {
+        let vm = SearchViewModel()
+        let parsed = SearchQueryParser.parse("krim OR mystery")
+
+        let queries = vm.buildApiQueries(from: parsed)
+
+        // The API treats spaces as AND, so a single "krim mystery" query would
+        // require both terms — the opposite of what OR means.
+        #expect(queries.count == 2)
+        #expect(queries.contains("krim"))
+        #expect(queries.contains("mystery"))
+    }
+
+    @Test("required terms are repeated in every OR branch")
+    func requiredTermsRepeatInEachBranch() {
+        let vm = SearchViewModel()
+        // Parses as (krim OR true) AND crime
+        let parsed = SearchQueryParser.parse("krim OR true crime")
+
+        let queries = vm.buildApiQueries(from: parsed)
+
+        #expect(queries.count == 2)
+        #expect(queries.allSatisfy { $0.contains("crime") })
+        #expect(queries.contains { $0.contains("krim") })
+        #expect(queries.contains { $0.contains("true") })
+    }
+
+    @Test("OR branches are capped so a broad query cannot stall the UI")
+    func orBranchesAreCapped() {
+        let vm = SearchViewModel()
+        let parsed = SearchQueryParser.parse("a1 OR b2 OR c3 OR d4 OR e5")
+
+        let queries = vm.buildApiQueries(from: parsed)
+
+        #expect(queries.count == AppConstants.maxOrBranches)
+    }
+
+    @Test("exact phrases are quoted and kept in every branch")
+    func exactPhraseIsQuotedInEachBranch() {
+        let vm = SearchViewModel()
+        let parsed = SearchQueryParser.parse("\"true crime\" krim OR mystery")
+
+        let queries = vm.buildApiQueries(from: parsed)
+
+        #expect(queries.count == 2)
+        #expect(queries.allSatisfy { $0.contains("\"true crime\"") })
+    }
+}
+
+// MARK: - Word-boundary matching
+
+@Suite("SearchQueryParser.containsTerm")
+struct ContainsTermTests {
+
+    @Test("matches a standalone word")
+    func matchesStandaloneWord() {
+        #expect(SearchQueryParser.containsTerm("krim", in: "en podkast om krim og drama"))
+    }
+
+    @Test("matches at the start of the text")
+    func matchesAtStart() {
+        #expect(SearchQueryParser.containsTerm("krim", in: "krim og drama"))
+    }
+
+    @Test("does not match a substring inside a longer word")
+    func rejectsSubstringInsideWord() {
+        // The bug this replaced: `-app` discarded every result mentioning
+        // "rapport", because "rapport" contains "app".
+        #expect(!SearchQueryParser.containsTerm("app", in: "en grundig rapport"))
+    }
+
+    @Test("still matches inflected forms")
+    func matchesInflectedForms() {
+        // Boundary is required before the match but not after, so Norwegian
+        // inflection keeps working.
+        #expect(SearchQueryParser.containsTerm("mord", in: "mordet ble oppklart"))
+    }
+
+    @Test("phrase does not match across a word boundary violation")
+    func phraseRejectsPartialWordStart() {
+        #expect(!SearchQueryParser.containsTerm("true crime", in: "construe crime"))
+        #expect(SearchQueryParser.containsTerm("true crime", in: "a true crime story"))
+    }
+
+    @Test("handles Norwegian letters as word characters")
+    func handlesNorwegianLetters() {
+        // "året" must not be treated as a boundary before "ret"
+        #expect(!SearchQueryParser.containsTerm("ret", in: "året som gikk"))
+        #expect(SearchQueryParser.containsTerm("året", in: "året som gikk"))
+    }
+
+    @Test("empty needle never matches")
+    func emptyNeedleNeverMatches() {
+        #expect(!SearchQueryParser.containsTerm("", in: "noe tekst"))
     }
 }
 

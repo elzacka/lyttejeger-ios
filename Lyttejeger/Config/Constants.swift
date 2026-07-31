@@ -66,14 +66,24 @@ enum AppConstants {
     /// Max search query length
     static let maxSearchQueryLength = 200
 
-    /// Default search result limit
+    /// Default search result limit.
+    /// The search endpoints cannot filter by language or category server-side,
+    /// so these caps are deliberately generous: narrowing happens client-side
+    /// and needs enough candidates to work with. API allows up to 1000.
     static let searchResultsDefault = 200
 
-    /// Search result limit when category filter is active
+    /// Search result limit when category filter is active. Higher than the
+    /// default because category narrowing discards most of the response.
     static let searchResultsWithCategory = 400
 
     /// Max podcasts to check for episode search
     static let episodeSearchPodcastLimit = 50
+
+    /// Max OR alternatives sent to the API.
+    /// Podcast Index has no OR syntax, so each alternative costs one request
+    /// and the rate limiter spaces requests one second apart. Capped to keep
+    /// a deliberately broad query from stalling the UI.
+    static let maxOrBranches = 3
 
     // MARK: - Image Cache
 
@@ -161,7 +171,4 @@ enum AppConstants {
     static let apiBase = "https://api.podcastindex.org/api/1.0"
     static let appName = "Lyttejeger"
     static let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-
-    /// Default allowed language codes
-    static let allowedLanguagesAPI = "no,nb,nn,da,sv,en"
 }

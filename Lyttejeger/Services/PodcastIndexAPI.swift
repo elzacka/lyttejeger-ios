@@ -88,14 +88,17 @@ struct PodcastByIdResponse: Decodable, Sendable {
 
 // MARK: - Search Options
 
+/// Options for `/search/byterm` and `/search/bytitle`.
+///
+/// Deliberately has no `lang`/`cat`/`notcat`: neither search endpoint accepts
+/// them. Only `/podcasts/trending` does. Sending them was silently ignored by
+/// the server, so language and category narrowing happens client-side and the
+/// result caps are sized to leave enough candidates for that.
 struct SearchOptions: Sendable {
     var max: Int = 30
     var clean: Bool = false
     var similar: Bool = false
     var fulltext: Bool = true
-    var lang: String? = nil
-    var cat: String? = nil
-    var notcat: String? = nil
 }
 
 // MARK: - API Errors
@@ -368,7 +371,6 @@ actor PodcastIndexAPI: PodcastSearching {
         ]
         if options.fulltext { params["fulltext"] = "" }
         if options.similar { params["similar"] = "" }
-        if let lang = options.lang { params["lang"] = lang }
         return try await apiRequest(endpoint: "/search/bytitle", params: params)
     }
 
@@ -378,9 +380,7 @@ actor PodcastIndexAPI: PodcastSearching {
             "max": String(options.max),
         ]
         if options.fulltext { params["fulltext"] = "" }
-        if let lang = options.lang { params["lang"] = lang }
-        if let cat = options.cat { params["cat"] = cat }
-        if let notcat = options.notcat { params["notcat"] = notcat }
+        if options.similar { params["similar"] = "" }
         if options.clean { params["clean"] = "" }
         return try await apiRequest(endpoint: "/search/byterm", params: params)
     }
