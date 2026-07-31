@@ -821,6 +821,173 @@ struct SearchRankingTests {
     }
 }
 
+// MARK: - Episode ranking
+
+@Suite("SearchViewModel.rankEpisodes")
+@MainActor
+struct EpisodeRankingTests {
+
+    private func makeEpisode(
+        id: String,
+        title: String,
+        description: String = "",
+        podcastTitle: String = "En podkast",
+        publishedAt: String = "20250101T000000Z"
+    ) -> EpisodeWithPodcast {
+        EpisodeWithPodcast(
+            episode: Episode(
+                id: id, podcastId: "p", title: title, description: description,
+                audioUrl: "", duration: 0, publishedAt: publishedAt
+            ),
+            podcast: nil,
+            podcastTitle: podcastTitle,
+            podcastAuthor: "",
+            podcastImage: "",
+            feedLanguage: "Norsk"
+        )
+    }
+
+    @Test("episode title match outranks podcast title match")
+    func episodeTitleBeatsPodcastTitle() {
+        let vm = SearchViewModel()
+        let inPodcastTitle = makeEpisode(id: "1", title: "Ukens gjest", podcastTitle: "Klimapodden")
+        let inEpisodeTitle = makeEpisode(id: "2", title: "Klima og kraft", podcastTitle: "Ukeslutt")
+        let parsed = SearchQueryParser.parse("klima")
+
+        let ranked = vm.rankEpisodes([inPodcastTitle, inEpisodeTitle], query: "klima", parsed: parsed)
+
+        #expect(ranked.first?.id == "2")
+    }
+
+    @Test("title match outranks description match")
+    func titleBeatsDescription() {
+        let vm = SearchViewModel()
+        let inDescription = makeEpisode(id: "1", title: "Ukens gjest", description: "Vi snakker om klima")
+        let inTitle = makeEpisode(id: "2", title: "Klima og kraft")
+        let parsed = SearchQueryParser.parse("klima")
+
+        let ranked = vm.rankEpisodes([inDescription, inTitle], query: "klima", parsed: parsed)
+
+        #expect(ranked.first?.id == "2")
+    }
+
+    @Test("recent episodes outrank old ones when the text match is equal")
+    func recencyBreaksTies() {
+        let vm = SearchViewModel()
+        // Use the app's own formatter: despite the name it is configured with
+        // default options, so it reads "2025-01-01T00:00:00Z", not the compact
+        // basic format. Hand-written basic-format literals silently fail to
+        // parse and collapse to .distantPast.
+        let recent = iso8601BasicFormatter.string(from: Date().addingTimeInterval(-2 * 86400))
+        let old = iso8601BasicFormatter.string(from: Date().addingTimeInterval(-800 * 86400))
+
+        let oldEpisode = makeEpisode(id: "1", title: "Klima og kraft", publishedAt: old)
+        let recentEpisode = makeEpisode(id: "2", title: "Klima og kraft", publishedAt: recent)
+        let parsed = SearchQueryParser.parse("klima")
+
+        let ranked = vm.rankEpisodes([oldEpisode, recentEpisode], query: "klima", parsed: parsed)
+
+        #expect(ranked.first?.id == "2")
+    }
+
+    @Test("ranking keeps every episode, it only reorders")
+    func rankingIsNotAFilter() {
+        let vm = SearchViewModel()
+        let matching = makeEpisode(id: "1", title: "Klima og kraft")
+        let unrelated = makeEpisode(id: "2", title: "Noe helt annet")
+        let parsed = SearchQueryParser.parse("klima")
+
+        let ranked = vm.rankEpisodes([matching, unrelated], query: "klima", parsed: parsed)
+
+        #expect(ranked.count == 2)
+    }
+}
+
+// MARK: - Episode text matching
+
+@Suite("SearchViewModel.episodeMatchesQuery")
+@MainActor
+struct EpisodeMatchesQueryTests {
+
+    private func makeEpisode(title: String, description: String = "") -> Episode {
+        Episode(
+            id: "1", podcastId: "p", title: title, description: description,
+            audioUrl: "", duration: 0, publishedAt: "2025-01-01T00:00:00Z"
+        )
+    }
+
+    @Test("requires every plain term to appear in the episode text")
+    func requiresAllTerms() {
+        let vm = SearchViewModel()
+        let parsed = SearchQueryParser.parse("klima kraft")
+
+        #expect(vm.episodeMatchesQuery(makeEpisode(title: "Klima og kraft"), parsed: parsed))
+        #expect(!vm.episodeMatchesQuery(makeEpisode(title: "Klima og natur"), parsed: parsed))
+    }
+
+    @Test("one OR alternative is enough")
+    func orAlternativeIsEnough() {
+        let vm = SearchViewModel()
+        let parsed = SearchQueryParser.parse("klima OR kraft")
+
+        #expect(vm.episodeMatchesQuery(makeEpisode(title: "Om kraft"), parsed: parsed))
+        #expect(!vm.episodeMatchesQuery(makeEpisode(title: "Om noe annet"), parsed: parsed))
+    }
+
+    @Test("matches terms found in the description")
+    func matchesDescription() {
+        let vm = SearchViewModel()
+        let parsed = SearchQueryParser.parse("klima")
+
+        #expect(vm.episodeMatchesQuery(
+            makeEpisode(title: "Ukens gjest", description: "Vi snakker om klima"),
+            parsed: parsed
+        ))
+    }
+
+    @Test("requires the exact phrase when one is given")
+    func requiresExactPhrase() {
+        let vm = SearchViewModel()
+        let parsed = SearchQueryParser.parse("\"grønn omstilling\"")
+
+        #expect(vm.episodeMatchesQuery(makeEpisode(title: "Om grønn omstilling"), parsed: parsed))
+        #expect(!vm.episodeMatchesQuery(makeEpisode(title: "Omstilling som er grønn"), parsed: parsed))
+    }
+}
+
+// MARK: - NRK catalog tokenisation
+
+@Suite("NRKPodcastService.searchTokens")
+struct NRKSearchTokensTests {
+
+    @Test("splits a query into separate words")
+    func splitsIntoWords() {
+        #expect(NRKPodcastService.searchTokens(from: "Abels tårn") == ["abels", "tårn"])
+    }
+
+    @Test("word order no longer decides the outcome")
+    func orderIndependent() {
+        let forward = NRKPodcastService.searchTokens(from: "abels tårn")
+        let reversed = NRKPodcastService.searchTokens(from: "tårn abels")
+
+        // Both token sets must match the same title, which the old raw
+        // substring match could not do.
+        let title = "abels tårn"
+        #expect(forward.allSatisfy { title.contains($0) })
+        #expect(reversed.allSatisfy { title.contains($0) })
+    }
+
+    @Test("strips the quotes an exact phrase still carries")
+    func stripsQuotes() {
+        #expect(NRKPodcastService.searchTokens(from: "\"abels tårn\"") == ["abels", "tårn"])
+    }
+
+    @Test("collapses extra whitespace")
+    func collapsesWhitespace() {
+        #expect(NRKPodcastService.searchTokens(from: "  abels   tårn  ") == ["abels", "tårn"])
+    }
+}
+
 // MARK: - Word-boundary matching
 
 @Suite("SearchQueryParser.containsTerm")

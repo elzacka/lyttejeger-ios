@@ -5,7 +5,6 @@ extension SearchViewModel {
     // MARK: - Podcast Search
 
     func searchPodcasts(_ query: String) async {
-        isLoading = true
         error = nil
 
         let api = self.api
@@ -13,16 +12,18 @@ extension SearchViewModel {
         do {
             let parsed = SearchQueryParser.parse(query)
             let apiQueries = buildApiQueries(from: parsed)
-            guard let primaryQuery = apiQueries.first else {
-                isLoading = false
-                return
-            }
+            guard let primaryQuery = apiQueries.first else { return }
 
             let hasCategory = !filters.categories.isEmpty
 
             var options = SearchOptions()
             options.max = hasCategory ? AppConstants.searchResultsWithCategory : AppConstants.searchResultsDefault
             options.fulltext = true
+            // `similar` widens the response with near matches, which is what
+            // makes a misspelled query still find the podcast. Safe here
+            // because nothing is truncated: everything is filtered and ranked
+            // client-side, so weaker matches simply sort to the bottom.
+            options.similar = true
 
             // Hybrid: title search + term search, deduplicated
             var allFeeds: [PodcastIndexFeed] = []
@@ -37,7 +38,10 @@ extension SearchViewModel {
             // Title search runs on the primary branch only. It exists to boost
             // exact title hits, and repeating it per OR branch would double the
             // rate-limited request count for very little extra recall.
-            if let titleRes = try? await api.searchByTitle(primaryQuery, options: SearchOptions(max: 50, fulltext: true)) {
+            if let titleRes = try? await api.searchByTitle(
+                primaryQuery,
+                options: SearchOptions(max: 50, similar: true, fulltext: true)
+            ) {
                 collect(titleRes.feeds)
             }
 
@@ -95,10 +99,6 @@ extension SearchViewModel {
             if !Task.isCancelled {
                 self.error = "Søket feilet. Prøv igjen."
             }
-        }
-
-        if !Task.isCancelled {
-            isLoading = false
         }
     }
 

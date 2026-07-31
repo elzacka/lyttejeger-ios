@@ -73,6 +73,21 @@ actor NRKPodcastService: NRKSearching {
         return catalog
     }
 
+    /// Splits a query into the words used for catalog title matching.
+    ///
+    /// Matching each word on its own, rather than the whole query as a single
+    /// substring, is what lets word order stop deciding the outcome: with the
+    /// old behaviour "abels tårn" found the podcast but "tårn abels" did not,
+    /// and any query carrying an extra required term matched nothing at all.
+    /// Quotes are separators too, since exact phrases reach here still quoted.
+    nonisolated static func searchTokens(from query: String) -> [String] {
+        query
+            .lowercased()
+            .split { $0 == " " || $0 == "\"" }
+            .map(String.init)
+            .filter { !$0.isEmpty }
+    }
+
     /// Searches the cached catalog locally by title. Zero network after first load.
     /// Throws if the catalog cannot be fetched, so callers can tell the user
     /// that NRK results are unavailable instead of silently omitting them.
@@ -81,9 +96,14 @@ actor NRKPodcastService: NRKSearching {
 
         let entries = try await ensureCatalog()
 
-        let lowered = query.lowercased()
+        let tokens = Self.searchTokens(from: query)
+        guard !tokens.isEmpty else { return [] }
+
         return entries
-            .filter { cleanTitle($0.title).lowercased().contains(lowered) }
+            .filter { entry in
+                let title = cleanTitle(entry.title).lowercased()
+                return tokens.allSatisfy { title.contains($0) }
+            }
             .map { toPodcast($0) }
     }
 

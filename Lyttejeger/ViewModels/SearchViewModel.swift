@@ -117,9 +117,20 @@ final class SearchViewModel {
         }
     }
 
+    /// Owns the `isLoading` lifecycle for every search path.
+    ///
+    /// The individual search functions used to set the flag themselves and
+    /// skip clearing it when cancelled, so a search that was cancelled mid
+    /// flight left the spinner on. Deleting down to one character then hit an
+    /// early return that also left it on, and the spinner never stopped.
+    /// Clearing it here in a `defer` covers every exit, including the early
+    /// returns and the cancellation guards further down the call chain.
     private func performSearch() async {
         let query = String(filters.query.trimmingCharacters(in: .whitespaces).prefix(AppConstants.maxSearchQueryLength))
         nrkUnavailable = false
+
+        isLoading = true
+        defer { isLoading = false }
 
         // Empty query with active filters -> browse
         if query.isEmpty {

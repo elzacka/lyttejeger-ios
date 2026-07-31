@@ -92,13 +92,12 @@ Kun på Episoder-fanen: under 15 min, 15–30 min, 30–60 min, over 60 min.
 
 ### NRK-podkaster
 
-NRK-podkaster vises sammen med øvrige resultater, men har noen begrensninger:
+NRK-podkaster vises sammen med øvrige resultater på begge fanene. Ordrekkefølgen spiller ingen rolle, så «tårn abels» finner det samme som «abels tårn».
 
-- Kategorier har ingen effekt
-- Sortering er begrenset
-- Søkeoperatorer matcher kun mot tittel
+To begrensninger gjelder fortsatt, fordi NRK-podkastene kommer fra en egen kilde:
 
-For best resultat med NRK: bruk enkle søkeord og eventuelt språkfilteret Norsk.
+- Kategorifilteret har ingen effekt på NRK-treff
+- På Podkaster-fanen matcher søkeord bare mot tittelen. På Episoder-fanen søkes det i episodetittel og beskrivelse som ellers.
 
 ## Podkastside
 

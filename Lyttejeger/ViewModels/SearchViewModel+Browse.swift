@@ -5,7 +5,6 @@ extension SearchViewModel {
     // MARK: - Browse
 
     func browse() async {
-        isLoading = true
         error = nil
 
         let api = self.api
@@ -28,10 +27,6 @@ extension SearchViewModel {
             if !Task.isCancelled {
                 self.error = "Kunne ikke hente innhold. Prøv igjen."
             }
-        }
-
-        if !Task.isCancelled {
-            isLoading = false
         }
     }
 
