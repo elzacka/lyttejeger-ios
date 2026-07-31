@@ -1,0 +1,138 @@
+import SwiftUI
+
+/// Standard menu row used across menu/settings sheets: one consistent
+/// anatomy (optional icon, label, optional subtitle, trailing glyph) so
+/// every row shares height, padding, fonts and colors.
+///
+/// Trailing glyph vocabulary:
+/// - `AppMenuRowChevron`: tapping navigates within the app
+/// - `AppMenuRowExternal`: tapping opens something outside the app
+/// - `AppMenuRowValue`: static right-aligned info (e.g. version)
+struct AppMenuRow<Trailing: View>: View {
+    var icon: String? = nil
+    let label: String
+    var subtitle: String? = nil
+    var iconColor: Color = .appAccent
+    var labelColor: Color = .appForeground
+    var action: (() -> Void)? = nil
+    /// Extra value VoiceOver should read, typically the content of a
+    /// trailing `AppMenuRowValue`.
+    var accessibilityValue: String? = nil
+    var accessibilityHint: String? = nil
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        if let action {
+            Button(action: action) {
+                content
+            }
+            .accessibilityLabel(accessibilityText)
+            .accessibilityHint(accessibilityHint ?? "")
+        } else {
+            content
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(accessibilityText)
+        }
+    }
+
+    private var content: some View {
+        HStack(spacing: AppSpacing.md) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 24)
+                    .accessibilityHidden(true)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.smallText)
+                    .foregroundStyle(labelColor)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption2Text)
+                        .foregroundStyle(Color.appMutedForeground)
+                }
+            }
+            .multilineTextAlignment(.leading)
+
+            Spacer()
+
+            trailing()
+        }
+        .padding(.vertical, AppSpacing.sm)
+        .frame(minHeight: AppSize.touchTarget)
+        .contentShape(Rectangle())
+    }
+
+    private var accessibilityText: String {
+        var parts: [String] = [label]
+        if let subtitle, !subtitle.isEmpty { parts.append(subtitle) }
+        if let accessibilityValue, !accessibilityValue.isEmpty { parts.append(accessibilityValue) }
+        return parts.joined(separator: ". ")
+    }
+}
+
+extension AppMenuRow where Trailing == EmptyView {
+    init(
+        icon: String? = nil,
+        label: String,
+        subtitle: String? = nil,
+        iconColor: Color = .appAccent,
+        labelColor: Color = .appForeground,
+        action: (() -> Void)? = nil,
+        accessibilityHint: String? = nil
+    ) {
+        self.icon = icon
+        self.label = label
+        self.subtitle = subtitle
+        self.iconColor = iconColor
+        self.labelColor = labelColor
+        self.action = action
+        self.accessibilityHint = accessibilityHint
+        self.trailing = { EmptyView() }
+    }
+}
+
+/// Chevron: tapping the row navigates within the app.
+struct AppMenuRowChevron: View {
+    var body: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.appBorder)
+            .accessibilityHidden(true)
+    }
+}
+
+/// External-link arrow: tapping the row opens outside the app.
+struct AppMenuRowExternal: View {
+    var body: some View {
+        Image(systemName: "arrow.up.right")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.appMutedForeground)
+            .accessibilityHidden(true)
+    }
+}
+
+/// Right-aligned static value (e.g. version number). Pair with
+/// `accessibilityValue` on the row so VoiceOver reads it.
+struct AppMenuRowValue: View {
+    let value: String
+
+    var body: some View {
+        Text(value)
+            .font(.smallText)
+            .foregroundStyle(Color.appMutedForeground)
+            .accessibilityHidden(true)
+    }
+}
+
+/// Standard divider between rows in a card.
+struct AppMenuRowDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.appBorder.opacity(0.3))
+            .frame(height: 1)
+    }
+}

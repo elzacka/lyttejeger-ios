@@ -12,8 +12,6 @@ struct ContentView: View {
     @State private var homePath = NavigationPath()
     @State private var myPodsPath = NavigationPath()
     @State private var showMenu = false
-    @State private var showInnstillinger = false
-    @State private var showOmLyttejeger = false
 
     enum Tab: Int, CaseIterable {
         case home, myPods, queue
@@ -130,20 +128,8 @@ struct ContentView: View {
         }
         .background(Color.appBackground)
         .sheet(isPresented: $showMenu) {
-            MenuSheet(showInnstillinger: $showInnstillinger, showOmLyttejeger: $showOmLyttejeger)
-                .presentationDetents([.height(160)])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(Color.appBackground)
-        }
-        .sheet(isPresented: $showInnstillinger) {
-            InnstillingerView()
-                .presentationDetents([.height(320), .large])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(Color.appBackground)
-        }
-        .sheet(isPresented: $showOmLyttejeger) {
-            OmLyttejegerView()
-                .presentationDetents([.fraction(0.75)])
+            MenuView()
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Color.appBackground)
         }
@@ -173,66 +159,6 @@ struct ContentView: View {
             playerVM.setup(modelContext, queueVM: queueVM)
             progressVM.setup(modelContext)
         }
-    }
-}
-
-// MARK: - Menu Sheet
-
-private struct MenuSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var showInnstillinger: Bool
-    @Binding var showOmLyttejeger: Bool
-
-    var body: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 0) {
-                menuRow("Innstillinger", icon: "gearshape") {
-                    dismiss()
-                    showInnstillinger = true
-                }
-
-                menuDivider
-
-                menuRow("Om Lyttejeger", icon: "headphones") {
-                    dismiss()
-                    showOmLyttejeger = true
-                }
-            }
-            .padding(.top, AppSpacing.sm)
-        }
-        .frame(maxWidth: .infinity)
-        .background(Color.appBackground)
-    }
-
-    private var menuDivider: some View {
-        Rectangle()
-            .fill(Color.appBorder.opacity(0.3))
-            .frame(height: 1)
-            .padding(.horizontal, AppSpacing.lg)
-    }
-
-    private func menuRow(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: AppSpacing.md) {
-                Image(systemName: icon)
-                    .font(.system(size: 16))
-                    .foregroundStyle(Color.appAccent)
-                    .frame(width: 24)
-                    .accessibilityHidden(true)
-                Text(title)
-                    .font(.bodyText)
-                    .foregroundStyle(Color.appForeground)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.appBorder)
-                    .accessibilityHidden(true)
-            }
-            .padding(.horizontal, AppSpacing.xl)
-            .frame(height: AppSize.touchTarget)
-            .contentShape(Rectangle())
-        }
-        .accessibilityLabel(title)
     }
 }
 
