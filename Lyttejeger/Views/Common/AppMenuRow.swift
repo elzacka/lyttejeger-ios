@@ -14,6 +14,9 @@ struct AppMenuRow<Trailing: View>: View {
     var subtitle: String? = nil
     var iconColor: Color = .appAccent
     var labelColor: Color = .appForeground
+    /// Dimmed and untappable while false, so a row that is busy says so
+    /// instead of silently swallowing taps.
+    var isEnabled: Bool = true
     var action: (() -> Void)? = nil
     /// Extra value VoiceOver should read, typically the content of a
     /// trailing `AppMenuRowValue`.
@@ -26,6 +29,8 @@ struct AppMenuRow<Trailing: View>: View {
             Button(action: action) {
                 content
             }
+            .disabled(!isEnabled)
+            .opacity(isEnabled ? 1 : 0.4)
             .accessibilityLabel(accessibilityText)
             .accessibilityHint(accessibilityHint ?? "")
         } else {
@@ -39,7 +44,7 @@ struct AppMenuRow<Trailing: View>: View {
         HStack(spacing: AppSpacing.md) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 16))
+                    .font(.system(.callout))
                     .foregroundStyle(iconColor)
                     .frame(width: 24)
                     .accessibilityHidden(true)
@@ -81,6 +86,7 @@ extension AppMenuRow where Trailing == EmptyView {
         subtitle: String? = nil,
         iconColor: Color = .appAccent,
         labelColor: Color = .appForeground,
+        isEnabled: Bool = true,
         action: (() -> Void)? = nil,
         accessibilityHint: String? = nil
     ) {
@@ -89,6 +95,7 @@ extension AppMenuRow where Trailing == EmptyView {
         self.subtitle = subtitle
         self.iconColor = iconColor
         self.labelColor = labelColor
+        self.isEnabled = isEnabled
         self.action = action
         self.accessibilityHint = accessibilityHint
         self.trailing = { EmptyView() }
@@ -99,8 +106,8 @@ extension AppMenuRow where Trailing == EmptyView {
 struct AppMenuRowChevron: View {
     var body: some View {
         Image(systemName: "chevron.right")
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(Color.appBorder)
+            .font(.system(.caption, weight: .semibold))
+            .foregroundStyle(Color.appMutedForeground)
             .accessibilityHidden(true)
     }
 }
@@ -109,7 +116,7 @@ struct AppMenuRowChevron: View {
 struct AppMenuRowExternal: View {
     var body: some View {
         Image(systemName: "arrow.up.right")
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(.caption, weight: .semibold))
             .foregroundStyle(Color.appMutedForeground)
             .accessibilityHidden(true)
     }

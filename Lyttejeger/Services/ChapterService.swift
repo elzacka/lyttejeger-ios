@@ -1,15 +1,19 @@
 import Foundation
 
+enum ChapterError: Error {
+    case unavailable
+}
+
 actor ChapterService: ChapterFetching {
     static let shared = ChapterService()
 
     private var cache = TTLCache<[Chapter]>(ttl: AppConstants.chapterCacheTTL, maxSize: AppConstants.chapterCacheMaxSize)
     private let decoder = JSONDecoder()
 
-    func fetchChapters(from url: String) async -> [Chapter] {
+    func fetchChapters(from url: String) async throws -> [Chapter] {
         guard !url.isEmpty,
               let requestUrl = URL(string: url),
-              requestUrl.scheme == "https" else { return [] }
+              requestUrl.scheme == "https" else { throw ChapterError.unavailable }
 
         // Check cache
         if let cached = cache.value(for: url) {
@@ -19,7 +23,7 @@ actor ChapterService: ChapterFetching {
         do {
             let (data, urlResponse) = try await URLSession.shared.data(from: requestUrl)
             guard let http = urlResponse as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                return []
+                throw ChapterError.unavailable
             }
             let response = try decoder.decode(ChaptersResponse.self, from: data)
 
@@ -40,7 +44,7 @@ actor ChapterService: ChapterFetching {
             cache.insert(chapters, for: url)
             return chapters
         } catch {
-            return []
+            throw ChapterError.unavailable
         }
     }
 

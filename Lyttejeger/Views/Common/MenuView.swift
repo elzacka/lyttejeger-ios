@@ -27,13 +27,16 @@ struct MenuView: View {
     @State private var showFileImporter = false
     /// Progress or result of the last import, shown under the card.
     @State private var importStatus: String?
+    /// Whether `importStatus` reports a failure, so it can be styled as one.
+    @State private var importStatusIsError = false
     @State private var isImporting = false
 
     private let privacyURL = URL(string: "https://github.com/elzacka/lyttejeger-ios/blob/main/Personvern.md")!
     private let guideURL = URL(string: "https://github.com/elzacka/lyttejeger-ios/blob/main/Brukerveiledning.md")!
 
     var body: some View {
-        ScrollView {
+        VStack(spacing: 0) {
+            ScrollView {
             VStack(spacing: AppSpacing.xl) {
                 // Hero
                 VStack(spacing: AppSpacing.sm) {
@@ -69,25 +72,26 @@ struct MenuView: View {
 
                 AppCardSection("Dine data") {
                     AppMenuRow(
-                        icon: "square.and.arrow.down",
+                        icon: "square.and.arrow.up",
                         label: "Importer",
-                        subtitle: "OPML fra en annen podkastapp, eller JSON fra Lyttejeger",
+                        subtitle: "Legger til fra en OPML- eller JSON-fil. Du beholder det du har fra før.",
+                        isEnabled: !isImporting,
                         action: { showFileImporter = true },
                         accessibilityHint: "Velg en OPML- eller JSON-fil å importere"
                     )
                     AppMenuRowDivider()
                     AppMenuRow(
-                        icon: "square.and.arrow.up",
+                        icon: "square.and.arrow.down",
                         label: "Eksporter abonnementer",
-                        subtitle: "OPML, kan leses av andre podkastapper",
+                        subtitle: "OPML-fil andre podkastapper kan lese. Bare abonnementer.",
                         action: { showOPMLExportConfirmation = true },
                         accessibilityHint: "Eksporterer abonnementene dine som OPML-fil"
                     )
                     AppMenuRowDivider()
                     AppMenuRow(
-                        icon: "arrow.down.document",
+                        icon: "square.and.arrow.down",
                         label: "Eksporter alle data",
-                        subtitle: "JSON, full sikkerhetskopi",
+                        subtitle: "JSON-fil bare Lyttejeger kan lese. Abonnementer, kø og hvor langt du har hørt.",
                         action: { showExportConfirmation = true },
                         accessibilityHint: "Eksporterer alle data som JSON-fil"
                     )
@@ -95,6 +99,7 @@ struct MenuView: View {
                     AppMenuRow(
                         icon: "trash",
                         label: "Slett alle data",
+                        subtitle: "Sletter alt appen har lagret på enheten. Kan ikke angres.",
                         iconColor: .appError,
                         labelColor: .appError,
                         action: { showDeleteConfirmation = true },
@@ -105,7 +110,7 @@ struct MenuView: View {
                 if let importStatus {
                     Text(importStatus)
                         .font(.caption2Text)
-                        .foregroundStyle(Color.appMutedForeground)
+                        .foregroundStyle(importStatusIsError ? Color.appError : Color.appMutedForeground)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                         .accessibilityAddTraits(.updatesFrequently)
@@ -148,7 +153,8 @@ struct MenuView: View {
                 Spacer(minLength: AppSpacing.xxl)
             }
             .padding(.horizontal, AppSpacing.lg)
-            .padding(.top, AppSpacing.xl)
+            .padding(.top, AppSpacing.lg)
+            }
         }
         .background(Color.appBackground)
         .fileImporter(
@@ -205,32 +211,39 @@ struct MenuView: View {
 
     private func exportData() {
         let context = modelContext
-        let subscriptions = (try? context.fetch(FetchDescriptor<Subscription>())) ?? []
-        let queueItems = (try? context.fetch(FetchDescriptor<QueueItem>(sortBy: [SortDescriptor(\.position)]))) ?? []
-        let positions = (try? context.fetch(FetchDescriptor<PlaybackPosition>())) ?? []
-
-        guard let data = try? DataTransferService.makeJSONExport(
-            subscriptions: subscriptions,
-            queueItems: queueItems,
-            positions: positions,
-            exportedAt: Date()
-        ) else { return }
-
-        share(data, filename: "lyttejeger-data.json")
+        do {
+            let subscriptions = try context.fetch(FetchDescriptor<Subscription>())
+            let queueItems = try context.fetch(FetchDescriptor<QueueItem>(sortBy: [SortDescriptor(\.position)]))
+            let positions = try context.fetch(FetchDescriptor<PlaybackPosition>())
+            let data = try DataTransferService.makeJSONExport(
+                subscriptions: subscriptions,
+                queueItems: queueItems,
+                positions: positions,
+                exportedAt: Date()
+            )
+            share(data, filename: "lyttejeger-data.json")
+        } catch {
+            importStatus = "Kunne ikke eksportere dataene. Prøv igjen."
+            importStatusIsError = true
+        }
     }
 
     private func exportOPML() {
-        let subscriptions = (try? modelContext.fetch(
-            FetchDescriptor<Subscription>(sortBy: [SortDescriptor(\.title)])
-        )) ?? []
-
-        guard !subscriptions.isEmpty else {
-            importStatus = "Du følger ingen podkaster ennå, så det er ingenting å eksportere."
-            return
+        do {
+            let subscriptions = try modelContext.fetch(
+                FetchDescriptor<Subscription>(sortBy: [SortDescriptor(\.title)])
+            )
+            guard !subscriptions.isEmpty else {
+                importStatus = "Du følger ingen podkaster ennå, så det er ingenting å eksportere."
+            importStatusIsError = false
+                return
+            }
+            let data = DataTransferService.makeOPMLExport(subscriptions: subscriptions, exportedAt: Date())
+            share(data, filename: "lyttejeger-abonnementer.opml")
+        } catch {
+            importStatus = "Kunne ikke eksportere dataene. Prøv igjen."
+            importStatusIsError = true
         }
-
-        let data = DataTransferService.makeOPMLExport(subscriptions: subscriptions, exportedAt: Date())
-        share(data, filename: "lyttejeger-abonnementer.opml")
     }
 
     /// Writes to a temporary file and hands it to the share sheet.
@@ -239,7 +252,13 @@ struct MenuView: View {
     /// it in a SwiftUI .sheet renders a blank white sheet on iOS 26.
     private func share(_ data: Data, filename: String) {
         let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-        try? data.write(to: fileURL, options: .completeFileProtection)
+        do {
+            try data.write(to: fileURL, options: .completeFileProtection)
+        } catch {
+            importStatus = "Kunne ikke lagre filen. Prøv igjen."
+            importStatusIsError = true
+            return
+        }
 
         let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
         activityVC.completionWithItemsHandler = { _, _, _, _ in
@@ -268,11 +287,13 @@ struct MenuView: View {
 
         guard let data = try? Data(contentsOf: url) else {
             importStatus = "Kunne ikke lese filen."
+            importStatusIsError = true
             return
         }
 
         guard let format = DataTransferService.detectFormat(url: url, data: data) else {
             importStatus = "Filformatet er ikke støttet. Velg en OPML- eller JSON-fil."
+            importStatusIsError = true
             return
         }
 
@@ -281,6 +302,7 @@ struct MenuView: View {
             switch format {
             case .json:
                 importStatus = "Importerer…"
+            importStatusIsError = false
                 summary = try DataTransferService.importJSON(data, into: modelContext)
             case .opml:
                 summary = try await DataTransferService.importOPML(
@@ -292,11 +314,13 @@ struct MenuView: View {
                 }
             }
             importStatus = message(for: summary)
+            importStatusIsError = false
             UIAccessibility.post(notification: .announcement, argument: importStatus)
             subscriptionVM.fetchSubscriptions()
             queueVM.fetchQueue()
         } catch {
             importStatus = (error as? LocalizedError)?.errorDescription ?? "Importen feilet."
+            importStatusIsError = true
         }
     }
 
@@ -336,10 +360,22 @@ struct MenuView: View {
         // Stop playback via ViewModel (cleans up sleep timer, tasks, and calls audioService.stop())
         playerVM.stop()
 
-        try? modelContext.delete(model: Subscription.self)
-        try? modelContext.delete(model: QueueItem.self)
-        try? modelContext.delete(model: PlaybackPosition.self)
-        try? modelContext.save()
+        do {
+            try DataTransferService.deleteAllUserData(in: modelContext)
+        } catch {
+            importStatus = "Kunne ikke slette alle data. Prøv igjen."
+            importStatusIsError = true
+            UIAccessibility.post(notification: .announcement, argument: importStatus)
+            return
+        }
+
+        // The list views hold their own fetched copies, so refresh them or the
+        // deleted items stay on screen until the next relaunch.
+        subscriptionVM.fetchSubscriptions()
+        queueVM.fetchQueue()
+        importStatus = "Alle data er slettet."
+            importStatusIsError = false
+        UIAccessibility.post(notification: .announcement, argument: importStatus)
 
         // Clear UserDefaults
         UserDefaults.standard.removeObject(forKey: AppConstants.lastPlayedInfoKey)

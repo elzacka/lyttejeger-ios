@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ChapterPanel: View {
     @Environment(AudioPlayerViewModel.self) private var playerVM
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,14 +15,22 @@ struct ChapterPanel: View {
 
                 Spacer()
             }
-            .overlay(alignment: .trailing) {
-                Button("Ferdig") { dismiss() }
-                    .font(.buttonText)
-                    .foregroundStyle(Color.appAccent)
-                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-            }
             .padding(.horizontal, AppSpacing.xl)
             .padding(.top, AppSpacing.xl)
+
+            if playerVM.chaptersFailed {
+                stateMessage(
+                    icon: "exclamationmark.triangle",
+                    text: "Kunne ikke laste kapitlene.",
+                    retry: { playerVM.retryChapters() }
+                )
+            } else if playerVM.chapters.isEmpty {
+                stateMessage(
+                    icon: "list.number",
+                    text: "Denne episoden har ingen kapitler.",
+                    retry: nil
+                )
+            } else {
 
             // Chapter list
             ScrollView {
@@ -75,8 +82,42 @@ struct ChapterPanel: View {
                     }
                 }
             }
+            }
         }
         .background(Color.appBackground)
+    }
+
+    /// Shared empty/failure body, so both states look like the same surface.
+    @ViewBuilder
+    private func stateMessage(icon: String, text: String, retry: (() -> Void)?) -> some View {
+        Spacer()
+
+        VStack(spacing: AppSpacing.md) {
+            Image(systemName: icon)
+                .font(.system(.largeTitle, weight: .light))
+                .foregroundStyle(retry == nil ? Color.appMutedForeground : Color.appError)
+
+            Text(text)
+                .font(.bodyText)
+                .foregroundStyle(Color.appMutedForeground)
+                .multilineTextAlignment(.center)
+
+            if let retry {
+                Button {
+                    retry()
+                } label: {
+                    Text("Prøv igjen")
+                        .font(.buttonText)
+                        .foregroundStyle(Color.appAccent)
+                        .padding(.horizontal, AppSpacing.lg)
+                        .frame(minHeight: AppSize.touchTarget)
+                        .contentShape(Rectangle())
+                }
+            }
+        }
+        .padding(AppSpacing.xl)
+
+        Spacer()
     }
 }
 

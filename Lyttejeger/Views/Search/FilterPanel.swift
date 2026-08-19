@@ -5,6 +5,9 @@ struct FilterPanel: View {
     @State private var expandedGroups: Set<String> = []
 
     var body: some View {
+        // No title and no "Ferdig" button: the sheet is reached from the filter
+        // icon and carries a drag indicator, so both only repeated what the
+        // user already knew.
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.xl) {
@@ -14,9 +17,15 @@ struct FilterPanel: View {
                             HStack {
                                 filterSectionHeader("Aktive filter", icon: "line.3.horizontal.decrease.circle.fill")
                                 Spacer()
-                                Button("Nullstill") { searchVM.clearFilters() }
-                                    .font(.buttonText)
-                                    .foregroundStyle(Color.appAccent)
+                                Button {
+                                    searchVM.clearFilters()
+                                } label: {
+                                    Text("Nullstill")
+                                        .font(.buttonText)
+                                        .foregroundStyle(Color.appAccent)
+                                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                                        .contentShape(Rectangle())
+                                }
                             }
 
                             FlowLayout(spacing: AppSpacing.sm) {
@@ -102,7 +111,7 @@ struct FilterPanel: View {
                     }
                 }
                 .padding(.horizontal, AppSpacing.lg)
-                .padding(.top, AppSpacing.xxl)
+                .padding(.top, AppSpacing.lg)
                 .padding(.bottom, AppSpacing.lg)
             }
         }
@@ -128,7 +137,7 @@ struct FilterPanel: View {
             } label: {
                 HStack(spacing: AppSpacing.sm) {
                     Image(systemName: group.icon)
-                        .font(.system(size: 14))
+                        .font(.system(.subheadline))
                         .foregroundStyle(activeCount > 0 ? Color.appAccent : Color.appMutedForeground)
                         .frame(width: 20)
 
@@ -149,7 +158,7 @@ struct FilterPanel: View {
                     Spacer()
 
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(.caption, weight: .medium))
                         .foregroundStyle(Color.appMutedForeground)
                 }
                 .frame(minHeight: AppSize.touchTarget)
@@ -193,7 +202,7 @@ struct FilterPanel: View {
     private func filterSectionHeader(_ title: String, icon: String) -> some View {
         HStack(spacing: AppSpacing.sm) {
             Image(systemName: icon)
-                .font(.system(size: 13))
+                .font(.system(.footnote))
                 .foregroundStyle(Color.appAccent)
             Text(title)
                 .font(.cardTitle)
@@ -208,13 +217,15 @@ struct FilterPanel: View {
                 Text(label)
                     .font(.badgeText)
                 Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(.caption2, weight: .bold))
             }
             .foregroundStyle(.white)
             .padding(.horizontal, AppSpacing.md)
             .padding(.vertical, AppSpacing.sm)
             .background(Color.appAccent)
             .clipShape(.rect(cornerRadius: AppRadius.full))
+            .frame(minHeight: AppSize.touchTarget)
+            .contentShape(Rectangle())
         }
         .accessibilityLabel("Fjern filter: \(label)")
     }
@@ -236,8 +247,9 @@ struct FilterChip: View {
                 .padding(.vertical, AppSpacing.sm)
                 .background(isSelected ? Color.appAccent : Color.appMuted)
                 .clipShape(.rect(cornerRadius: AppRadius.full))
+                .frame(minHeight: AppSize.touchTarget)
+                .contentShape(Rectangle())
         }
-        .frame(minHeight: AppSize.touchTarget)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

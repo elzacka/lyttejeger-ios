@@ -1244,6 +1244,142 @@ struct ImportJSONTests {
     }
 }
 
+@Suite("DataTransferService JSON round-trip")
+@MainActor
+struct JSONRoundTripTests {
+
+    private func makeContext() throws -> ModelContext {
+        let schema = Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        return ModelContext(try ModelContainer(for: schema, configurations: [config]))
+    }
+
+    @Test("every QueueItem field survives export and import")
+    func queueItemFieldsSurvive() throws {
+        let source = try makeContext()
+        // Whole seconds: the backup's ISO 8601 formatter has no fractional
+        // seconds, so dates with sub-second parts cannot round-trip exactly.
+        let added = Date(timeIntervalSince1970: 1_700_000_000)
+        let subscribed = Date(timeIntervalSince1970: 1_690_000_000)
+        let updated = Date(timeIntervalSince1970: 1_695_000_000)
+
+        source.insert(Subscription(
+            podcastId: "42", title: "Podden", author: "Forfatter",
+            imageUrl: "https://example.com/pod.jpg", feedUrl: "https://example.com/feed.xml",
+            subscribedAt: subscribed
+        ))
+        source.insert(QueueItem(
+            episodeId: "e1", podcastId: "42", title: "Episode en",
+            episodeDescription: "Full beskrivelse",
+            podcastTitle: "Podden", audioUrl: "https://example.com/e1.mp3",
+            imageUrl: "https://example.com/e1.jpg",
+            podcastImage: "https://example.com/pod.jpg",
+            duration: 1234,
+            transcriptUrl: "https://example.com/e1.vtt",
+            chaptersUrl: "https://example.com/e1.json",
+            publishedAt: "2026-08-01T10:00:00Z",
+            season: 2, episode: 7,
+            addedAt: added, position: 0
+        ))
+        source.insert(QueueItem(
+            episodeId: "e2", podcastId: "42", title: "Episode to",
+            podcastTitle: "Podden", audioUrl: "https://example.com/e2.mp3",
+            position: 1
+        ))
+        source.insert(PlaybackPosition(
+            episodeId: "e1", position: 600, duration: 1234,
+            updatedAt: updated, completed: false
+        ))
+        try source.save()
+
+        let data = try DataTransferService.makeJSONExport(
+            subscriptions: try source.fetch(FetchDescriptor<Subscription>()),
+            queueItems: try source.fetch(FetchDescriptor<QueueItem>(sortBy: [SortDescriptor(\.position)])),
+            positions: try source.fetch(FetchDescriptor<PlaybackPosition>()),
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_100)
+        )
+
+        let target = try makeContext()
+        let summary = try DataTransferService.importJSON(data, into: target)
+        #expect(summary.addedSubscriptions == 1)
+        #expect(summary.addedQueueItems == 2)
+        #expect(summary.addedPositions == 1)
+
+        let items = try target.fetch(FetchDescriptor<QueueItem>(sortBy: [SortDescriptor(\.position)]))
+        #expect(items.map(\.episodeId) == ["e1", "e2"])
+
+        let e1 = try #require(items.first)
+        #expect(e1.podcastId == "42")
+        #expect(e1.title == "Episode en")
+        #expect(e1.episodeDescription == "Full beskrivelse")
+        #expect(e1.podcastTitle == "Podden")
+        #expect(e1.audioUrl == "https://example.com/e1.mp3")
+        #expect(e1.imageUrl == "https://example.com/e1.jpg")
+        #expect(e1.podcastImage == "https://example.com/pod.jpg")
+        #expect(e1.duration == 1234)
+        #expect(e1.transcriptUrl == "https://example.com/e1.vtt")
+        #expect(e1.chaptersUrl == "https://example.com/e1.json")
+        #expect(e1.publishedAt == "2026-08-01T10:00:00Z")
+        #expect(e1.season == 2)
+        #expect(e1.episode == 7)
+        #expect(e1.addedAt == added)
+
+        let sub = try #require(try target.fetch(FetchDescriptor<Subscription>()).first)
+        #expect(sub.subscribedAt == subscribed)
+        let pos = try #require(try target.fetch(FetchDescriptor<PlaybackPosition>()).first)
+        #expect(pos.position == 600)
+        #expect(pos.updatedAt == updated)
+    }
+
+    @Test("a legacy backup without the new queue fields still imports")
+    func legacyBackupImports() throws {
+        let context = try makeContext()
+        let data = try! JSONSerialization.data(withJSONObject: [
+            "app": "Lyttejeger",
+            "spillekø": [[
+                "episodeId": "e1", "podcastId": "42", "tittel": "Gammel episode",
+                "podkast": "Podden", "audioUrl": "https://example.com/e1.mp3",
+                "posisjon": 0,
+            ] as [String: Any]],
+        ])
+
+        let summary = try DataTransferService.importJSON(data, into: context)
+
+        #expect(summary.addedQueueItems == 1)
+        let item = try #require(try context.fetch(FetchDescriptor<QueueItem>()).first)
+        #expect(item.episodeDescription == nil)
+        #expect(item.duration == nil)
+        #expect(item.season == nil)
+    }
+}
+
+@Suite("DataTransferService.deleteAllUserData")
+@MainActor
+struct DeleteAllUserDataTests {
+
+    @Test("removes every stored model")
+    func removesEverything() throws {
+        let schema = Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let context = ModelContext(try ModelContainer(for: schema, configurations: [config]))
+        context.insert(Subscription(
+            podcastId: "1", title: "P", author: "", imageUrl: "", feedUrl: "https://a.xml"
+        ))
+        context.insert(QueueItem(
+            episodeId: "e1", podcastId: "1", title: "E", podcastTitle: "P",
+            audioUrl: "https://a.mp3", position: 0
+        ))
+        context.insert(PlaybackPosition(episodeId: "e1", position: 10, duration: 100))
+        try context.save()
+
+        try DataTransferService.deleteAllUserData(in: context)
+
+        #expect(try context.fetch(FetchDescriptor<Subscription>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<QueueItem>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<PlaybackPosition>()).isEmpty)
+    }
+}
+
 @Suite("DataTransferService.nrkSlug")
 struct NRKSlugFromFeedUrlTests {
 
@@ -1432,5 +1568,147 @@ struct TransformEpisodeTests {
         #expect(episode.podcastId == "42")
         #expect(episode.id == "100")
         #expect(episode.duration == 3600)
+    }
+}
+
+// MARK: - Category filter
+
+@Suite("SearchViewModel.filterByCategory")
+@MainActor
+struct CategoryFilterTests {
+
+    private func makePodcast(categories: [String]) -> Podcast {
+        Podcast(
+            id: "1", title: "Test", author: "", description: "",
+            imageUrl: "", feedUrl: "", categories: categories,
+            language: "Norsk", episodeCount: 10,
+            lastUpdated: "2025-01-01T00:00:00Z", explicit: false
+        )
+    }
+
+    /// `/categories/list` spells it with a hyphen, a feed spells it with a
+    /// space. Matching the two literally discarded every result.
+    @Test("hyphenated filter matches the spaced name a feed reports")
+    func hyphenMatchesSpace() {
+        let vm = SearchViewModel()
+        vm.filters.categories = ["Self-Improvement"]
+
+        let matching = vm.filterByCategory([makePodcast(categories: ["Health", "Self Improvement"])])
+
+        #expect(matching.count == 1)
+    }
+
+    @Test("the same holds for the other affected categories")
+    func hyphenMatchesSpaceForAllAffected() {
+        let cases = [
+            ("Video-Games", "Video Games"),
+            ("How-To", "How To"),
+            ("Role-Playing", "Role Playing"),
+        ]
+
+        for (filter, reported) in cases {
+            let vm = SearchViewModel()
+            vm.filters.categories = [filter]
+            let matching = vm.filterByCategory([makePodcast(categories: [reported])])
+            #expect(matching.count == 1, "\(filter) should match \(reported)")
+        }
+    }
+
+    @Test("categories spelled the same way still match")
+    func unaffectedCategoriesStillMatch() {
+        let vm = SearchViewModel()
+        vm.filters.categories = ["After-Shows"]
+
+        let matching = vm.filterByCategory([makePodcast(categories: ["After-Shows"])])
+
+        #expect(matching.count == 1)
+    }
+
+    @Test("an unrelated category is still filtered out")
+    func unrelatedCategoryIsExcluded() {
+        let vm = SearchViewModel()
+        vm.filters.categories = ["Self-Improvement"]
+
+        let matching = vm.filterByCategory([makePodcast(categories: ["News", "Politics"])])
+
+        #expect(matching.isEmpty)
+    }
+
+    @Test("no category filter lets everything through")
+    func noFilterPassesEverything() {
+        let vm = SearchViewModel()
+        let all = vm.filterByCategory([makePodcast(categories: ["News"])])
+        #expect(all.count == 1)
+    }
+}
+
+// MARK: - Episode de-duplication
+
+@Suite("SearchViewModel.episodeDedupeKey")
+@MainActor
+struct EpisodeDedupeTests {
+
+    private func makeEpisode(id: String, audioUrl: String) -> Episode {
+        Episode(
+            id: id, podcastId: "1", title: "Operation Candy",
+            description: "", audioUrl: audioUrl, duration: 1560,
+            publishedAt: "2025-01-01T00:00:00Z"
+        )
+    }
+
+    /// The same audio indexed under two feeds gets two episode ids, which is
+    /// how a duplicate reached the results list.
+    @Test("same audio under different ids collapses to one key")
+    func sameAudioSameKey() {
+        let vm = SearchViewModel()
+        let a = makeEpisode(id: "100", audioUrl: "https://cdn.example/candy.mp3")
+        let b = makeEpisode(id: "200", audioUrl: "https://cdn.example/candy.mp3")
+
+        #expect(vm.episodeDedupeKey(a) == vm.episodeDedupeKey(b))
+    }
+
+    @Test("different audio stays distinct")
+    func differentAudioDifferentKey() {
+        let vm = SearchViewModel()
+        let a = makeEpisode(id: "100", audioUrl: "https://cdn.example/one.mp3")
+        let b = makeEpisode(id: "100", audioUrl: "https://cdn.example/two.mp3")
+
+        #expect(vm.episodeDedupeKey(a) != vm.episodeDedupeKey(b))
+    }
+
+    @Test("episodes without audio fall back to the id")
+    func missingAudioFallsBackToId() {
+        let vm = SearchViewModel()
+        let a = makeEpisode(id: "100", audioUrl: "")
+        let b = makeEpisode(id: "200", audioUrl: "")
+
+        #expect(vm.episodeDedupeKey(a) == "100")
+        #expect(vm.episodeDedupeKey(a) != vm.episodeDedupeKey(b))
+    }
+}
+
+// MARK: - Clearing filters
+
+@Suite("SearchViewModel.clearFilters")
+@MainActor
+struct ClearFiltersTests {
+
+    /// The button sits under "Aktive filter", so it must not throw away what
+    /// the user typed.
+    @Test("the query survives clearing the filters")
+    func queryIsPreserved() {
+        let vm = SearchViewModel()
+        vm.filters.query = "krim"
+        vm.filters.categories = ["Documentary"]
+        vm.filters.languages = ["Norsk"]
+        vm.filters.sortBy = .newest
+
+        vm.clearFilters()
+
+        #expect(vm.filters.query == "krim")
+        #expect(vm.filters.categories.isEmpty)
+        #expect(vm.filters.languages.isEmpty)
+        #expect(vm.filters.sortBy == .relevance)
+        #expect(vm.hasActiveFilters == false)
     }
 }

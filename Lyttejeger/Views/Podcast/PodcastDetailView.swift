@@ -15,6 +15,13 @@ struct PodcastDetailView: View {
     @State private var nrkDescription: String?
     @State private var toastMessage: String?
     @State private var toastTask: Task<Void, Never>?
+    /// The header already shows the title, so the navigation bar only repeats
+    /// it once the header has scrolled away.
+    @State private var showNavTitle = false
+
+    /// Roughly the height of the artwork row: past this the header title is
+    /// behind the navigation bar.
+    private static let navTitleScrollThreshold: CGFloat = 130
 
     /// Enriched podcast data (fetched from API when initial data is incomplete)
     private var pod: Podcast { podcastInfo ?? podcast }
@@ -28,6 +35,10 @@ struct PodcastDetailView: View {
                     HStack(alignment: .top, spacing: AppSpacing.lg) {
                         CachedAsyncImage(url: nrkImageUrl ?? pod.imageUrl, size: AppSize.artworkMedium)
 
+                        // Follow sits here rather than on its own line below:
+                        // title and author only fill about 76 of the artwork's
+                        // 120pt, and the button is the height of what was left
+                        // over.
                         VStack(alignment: .leading, spacing: AppSpacing.sm) {
                             Text(pod.title)
                                 .font(.sectionTitle)
@@ -36,49 +47,18 @@ struct PodcastDetailView: View {
                             Text(pod.author)
                                 .font(.bodyText)
                                 .foregroundStyle(Color.appMutedForeground)
+
+                            subscribeButton
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
-
-                    // Subscribe button
-                    Button {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        let wasSubscribed = subscriptionVM.isSubscribed(pod.id)
-                        subscriptionVM.toggleSubscription(podcast: pod)
-                        let message = wasSubscribed ? "Fjernet fra Mine podder" : "Lagt til Mine podder"
-                        if UIAccessibility.isReduceMotionEnabled {
-                            toastMessage = message
-                        } else {
-                            withAnimation(.easeOut(duration: 0.25)) { toastMessage = message }
-                        }
-                        UIAccessibility.post(notification: .announcement, argument: message)
-                        toastTask?.cancel()
-                        toastTask = Task {
-                            try? await Task.sleep(for: .seconds(2))
-                            guard !Task.isCancelled else { return }
-                            if UIAccessibility.isReduceMotionEnabled {
-                                toastMessage = nil
-                            } else {
-                                withAnimation { toastMessage = nil }
-                            }
-                        }
-                    } label: {
-                        Text(subscriptionVM.isSubscribed(pod.id) ? "Slutt å følge" : "Følg")
-                            .font(.buttonText)
-                            .foregroundStyle(subscriptionVM.isSubscribed(pod.id) ? Color.appMutedForeground : .white)
-                            .padding(.horizontal, AppSpacing.lg)
-                            .padding(.vertical, AppSpacing.sm)
-                            .background(subscriptionVM.isSubscribed(pod.id) ? Color.appMuted : Color.appAccent)
-                            .clipShape(.rect(cornerRadius: AppRadius.md))
-                    }
-                    .frame(minHeight: AppSize.touchTarget)
 
                     // Categories & explicit
                     if !pod.categories.isEmpty || pod.explicit {
                         HStack(spacing: AppSpacing.xs) {
                             if pod.explicit {
                                 Text("E")
-                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                    .font(.badgeText)
                                     .foregroundStyle(Color.appMutedForeground)
                                     .padding(.horizontal, 5)
                                     .padding(.vertical, 2)
@@ -122,22 +102,43 @@ struct PodcastDetailView: View {
                 } else if let error {
                     VStack(spacing: AppSpacing.md) {
                         Image(systemName: "wifi.exclamationmark")
-                            .font(.system(size: 24))
-                            .foregroundStyle(Color.appBorder)
+                            .font(.system(.title2))
+                            .foregroundStyle(Color.appError)
 
                         Text(error)
                             .font(.bodyText)
                             .foregroundStyle(Color.appError)
                             .multilineTextAlignment(.center)
 
-                        Button("Prøv igjen") {
+                        Button {
                             self.error = nil
                             isLoading = true
                             Task { await loadEpisodes() }
+                        } label: {
+                            Text("Prøv igjen")
+                                .font(.buttonText)
+                                .foregroundStyle(Color.appAccent)
+                                .padding(.horizontal, AppSpacing.lg)
+                                .frame(minHeight: AppSize.touchTarget)
+                                .contentShape(Rectangle())
                         }
-                        .font(.buttonText)
-                        .foregroundStyle(Color.appAccent)
-                        .frame(minHeight: AppSize.touchTarget)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(AppSpacing.xl)
+                } else if episodes.isEmpty {
+                    VStack(spacing: AppSpacing.md) {
+                        Image(systemName: "waveform")
+                            .font(.system(.largeTitle, weight: .light))
+                            .foregroundStyle(Color.appMutedForeground)
+
+                        Text("Ingen episoder ennå")
+                            .font(.bodyText)
+                            .foregroundStyle(Color.appMutedForeground)
+
+                        Text("Denne podkasten har ikke publisert episoder vi kan vise.")
+                            .font(.caption2Text)
+                            .foregroundStyle(Color.appMutedForeground)
+                            .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(AppSpacing.xl)
@@ -148,7 +149,8 @@ struct PodcastDetailView: View {
                                 episode: episode,
                                 podcastTitle: pod.title,
                                 podcastImage: nrkImageUrl ?? pod.imageUrl,
-                                showArtwork: false
+                                showArtwork: false,
+                                showDescription: true
                             )
                             .id(episode.id)
                         }
@@ -172,6 +174,23 @@ struct PodcastDetailView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .animation(
+            UIAccessibility.isReduceMotionEnabled ? nil : .easeInOut(duration: 0.2),
+            value: isLoading
+        )
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentOffset.y > Self.navTitleScrollThreshold
+        } action: { _, isScrolledPastHeader in
+            guard showNavTitle != isScrolledPastHeader else { return }
+            if UIAccessibility.isReduceMotionEnabled {
+                showNavTitle = isScrolledPastHeader
+            } else {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showNavTitle = isScrolledPastHeader
+                }
+            }
+        }
+        .navigationTitle(showNavTitle ? podcast.title : "")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             #if DEBUG
@@ -210,6 +229,40 @@ struct PodcastDetailView: View {
         if let response = try? await PodcastIndexAPI.shared.podcastByFeedId(feedId),
            let feed = response.feed {
             podcastInfo = PodcastTransform.transformFeed(feed)
+        }
+    }
+
+    private var subscribeButton: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            let wasSubscribed = subscriptionVM.isSubscribed(pod.id)
+            subscriptionVM.toggleSubscription(podcast: pod)
+            let message = wasSubscribed ? "Fjernet fra Mine podder" : "Lagt til Mine podder"
+            if UIAccessibility.isReduceMotionEnabled {
+                toastMessage = message
+            } else {
+                withAnimation(.easeOut(duration: 0.25)) { toastMessage = message }
+            }
+            UIAccessibility.post(notification: .announcement, argument: message)
+            toastTask?.cancel()
+            toastTask = Task {
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled else { return }
+                if UIAccessibility.isReduceMotionEnabled {
+                    toastMessage = nil
+                } else {
+                    withAnimation { toastMessage = nil }
+                }
+            }
+        } label: {
+            Text(subscriptionVM.isSubscribed(pod.id) ? "Slutt å følge" : "Følg")
+                .font(.cardTitle)
+                .foregroundStyle(subscriptionVM.isSubscribed(pod.id) ? Color.appMutedForeground : .white)
+                .padding(.horizontal, AppSpacing.lg)
+                .frame(minHeight: AppSize.touchTarget)
+                .background(subscriptionVM.isSubscribed(pod.id) ? Color.appMuted : Color.appAccent)
+                .clipShape(.rect(cornerRadius: AppRadius.md))
+                .contentShape(Rectangle())
         }
     }
 

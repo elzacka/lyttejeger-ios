@@ -30,21 +30,7 @@ struct AudioPlayerBar: View {
                 MiniProgressBar()
 
                 HStack(spacing: AppSpacing.md) {
-                    // Artwork — navigates to podcast detail
-                    Button {
-                        playerVM.pendingPodcastRoute = PodcastRoute(
-                            podcast: .minimal(
-                                id: episode.podcastId,
-                                title: playerVM.podcastTitle ?? "",
-                                imageUrl: playerVM.podcastImage ?? episode.imageUrl ?? ""
-                            ),
-                            focusEpisodeId: episode.id
-                        )
-                    } label: {
-                        CachedAsyncImage(url: playerVM.podcastImage ?? episode.imageUrl, size: 48)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Vis podcast")
+                    artworkPlayButton(for: episode)
 
                     // Title — expands player
                     Button {
@@ -57,50 +43,92 @@ struct AudioPlayerBar: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(CardButtonStyle())
                     .accessibilityLabel("Åpne spiller")
                     .accessibilityHint(episode.title)
-
-                    Button {
-                        playerVM.togglePlayPause()
-                    } label: {
-                        Image(systemName: playerVM.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(Color.appAccent)
-                    }
-                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                    .accessibilityLabel(playerVM.isPlaying ? "Pause" : "Spill av")
 
                     Button {
                         playerVM.skipForward()
                     } label: {
                         Image(systemName: "goforward.30")
-                            .font(.system(size: 18))
+                            .font(.system(.body))
                             .foregroundStyle(Color.appMutedForeground)
+                            .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                            .contentShape(Rectangle())
                     }
-                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                     .accessibilityLabel("Spol 30 sekunder frem")
 
                     Button {
                         playerVM.stop()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(.subheadline, weight: .semibold))
                             .foregroundStyle(Color.appMutedForeground)
+                            .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                            .contentShape(Rectangle())
                     }
-                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                     .accessibilityLabel("Stopp avspilling")
                 }
                 .padding(.horizontal, AppSpacing.lg)
                 .padding(.vertical, AppSpacing.sm)
             }
-            .frame(height: AppSize.miniPlayerHeight, alignment: .top)
+            .frame(minHeight: AppSize.miniPlayerHeight, alignment: .top)
             .background(Color.appCard)
             .accessibilityElement(children: .contain)
             .fullScreenCover(isPresented: Bindable(playerVM).isExpanded) {
                 AudioPlayerSheet()
             }
         }
+    }
+
+    /// The artwork is the transport, as in `EpisodeCard`. It replaces a
+    /// separate play button that took ~52pt from a title already clipped at two
+    /// lines, and the podcast stays reachable through the full player, where
+    /// the podcast name is its own link. The overlay circle is opaque so
+    /// contrast does not depend on the artwork behind it.
+    private func artworkPlayButton(for episode: Episode) -> some View {
+        Button {
+            // On error the transport is inert (AudioService guards
+            // togglePlayPause on hasError), so the same control retries the
+            // episode instead of doing nothing.
+            if playerVM.hasError {
+                let title = playerVM.podcastTitle
+                let image = playerVM.podcastImage
+                playerVM.play(episode: episode, podcastTitle: title, podcastImage: image)
+            } else {
+                playerVM.togglePlayPause()
+            }
+        } label: {
+            CachedAsyncImage(url: playerVM.podcastImage ?? episode.imageUrl, size: 48)
+                .overlay {
+                    ZStack {
+                        Circle()
+                            .fill(playerVM.hasError ? Color.appError : Color.appAccent)
+                            .frame(width: 26, height: 26)
+
+                        if playerVM.isLoading {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .tint(.white)
+                        } else {
+                            Image(
+                                systemName: playerVM.hasError
+                                    ? "exclamationmark"
+                                    : playerVM.isPlaying ? "pause.fill" : "play.fill"
+                            )
+                            .font(.system(.caption, weight: .bold))
+                            .foregroundStyle(.white)
+                        }
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(CardButtonStyle())
+        .accessibilityLabel(
+            playerVM.isLoading ? "Laster episoden"
+                : playerVM.hasError ? "Kunne ikke spille av episoden. Prøv igjen"
+                : playerVM.isPlaying ? "Pause" : "Spill av"
+        )
     }
 }
 

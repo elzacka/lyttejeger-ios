@@ -79,6 +79,14 @@ enum AppConstants {
     /// Max podcasts to check for episode search
     static let episodeSearchPodcastLimit = 50
 
+    /// Result limit when browsing with filters but no query.
+    static let browseResultsDefault = 100
+
+    /// Browse limit when a category filter is active. Trending treats `cat` as
+    /// a hint and returns feeds outside the category, and the narrowing is
+    /// redone client-side, so the response has to be large enough to survive it.
+    static let browseResultsWithCategory = 200
+
     /// Max subscriptions accepted from one OPML import.
     /// Each unresolved feed costs one rate-limited request, so a 500-podcast
     /// file would otherwise hold the UI for eight minutes. Anything beyond

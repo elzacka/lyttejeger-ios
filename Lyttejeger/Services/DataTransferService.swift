@@ -94,14 +94,27 @@ enum DataTransferService {
                 ] as [String: Any]
             },
             "spillekø": queueItems.map { item in
-                [
+                // JSONSerialization cannot encode nil, so optional fields are
+                // only present when they hold a value; import defaults the rest.
+                var entry: [String: Any] = [
                     "episodeId": item.episodeId,
                     "podcastId": item.podcastId,
                     "tittel": item.title,
                     "podkast": item.podcastTitle,
                     "audioUrl": item.audioUrl,
                     "posisjon": item.position,
-                ] as [String: Any]
+                    "lagtTil": formatter.string(from: item.addedAt),
+                ]
+                entry["beskrivelse"] = item.episodeDescription
+                entry["bildeUrl"] = item.imageUrl
+                entry["podkastBilde"] = item.podcastImage
+                entry["varighet"] = item.duration
+                entry["transkripsjonUrl"] = item.transcriptUrl
+                entry["kapitlerUrl"] = item.chaptersUrl
+                entry["publisert"] = item.publishedAt
+                entry["sesong"] = item.season
+                entry["episodeNr"] = item.episode
+                return entry
             },
             "avspillingsposisjoner": positions.map { pos in
                 [
@@ -180,8 +193,18 @@ enum DataTransferService {
                 episodeId: episodeId,
                 podcastId: raw["podcastId"] as? String ?? "",
                 title: raw["tittel"] as? String ?? "",
+                episodeDescription: raw["beskrivelse"] as? String,
                 podcastTitle: raw["podkast"] as? String ?? "",
                 audioUrl: audioUrl,
+                imageUrl: raw["bildeUrl"] as? String,
+                podcastImage: raw["podkastBilde"] as? String,
+                duration: raw["varighet"] as? TimeInterval,
+                transcriptUrl: raw["transkripsjonUrl"] as? String,
+                chaptersUrl: raw["kapitlerUrl"] as? String,
+                publishedAt: raw["publisert"] as? String,
+                season: raw["sesong"] as? Int,
+                episode: raw["episodeNr"] as? Int,
+                addedAt: (raw["lagtTil"] as? String).flatMap(formatter.date(from:)) ?? Date(),
                 position: nextPosition
             )
             context.insert(item)
@@ -297,6 +320,18 @@ enum DataTransferService {
             imageUrl: "",
             feedUrl: entry.feedUrl
         )
+    }
+
+    // MARK: - Delete
+
+    /// Deletes every stored model. Throws instead of guessing, so the caller
+    /// can tell the user whether the deletion actually happened.
+    @MainActor
+    static func deleteAllUserData(in context: ModelContext) throws {
+        try context.delete(model: Subscription.self)
+        try context.delete(model: QueueItem.self)
+        try context.delete(model: PlaybackPosition.self)
+        try context.save()
     }
 
     /// Recognises an NRK feed URL and returns its slug.

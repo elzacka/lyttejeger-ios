@@ -94,11 +94,26 @@ final class SearchViewModel {
         debounceSearch()
     }
 
+    /// Clears the filters and keeps the query.
+    ///
+    /// The button sits under the "Aktive filter" heading, so it reads as
+    /// "remove the filters" — it used to reset the whole `SearchFilters`,
+    /// which threw away the search term too and left the screen blank. The
+    /// search is re-run so the results widen to the unfiltered query instead
+    /// of disappearing.
     func clearFilters() {
+        let query = filters.query
         filters = SearchFilters()
-        podcasts = []
-        episodes = []
+        filters.query = query
         nrkUnavailable = false
+        debounceSearch()
+    }
+
+    /// Re-runs the current search. The error copy says "Prøv igjen", so the
+    /// screen needs a control that actually does.
+    func retrySearch() {
+        error = nil
+        debounceSearch()
     }
 
     func setActiveTab(_ tab: SearchTab) {
@@ -139,6 +154,9 @@ final class SearchViewModel {
             } else {
                 podcasts = []
                 episodes = []
+                // Clearing the field is how people back out of a failed
+                // search, so the error has to go with it.
+                error = nil
             }
             return
         }

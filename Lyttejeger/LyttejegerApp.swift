@@ -40,6 +40,16 @@ struct LyttejegerApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSplash = true
 
+    /// Built once. `.modelContainer(for:)` has no migrationPlan overload, so the
+    /// container is constructed explicitly and handed to the scene.
+    private let modelContainer: ModelContainer = {
+        do {
+            return try LyttejegerStore.makeContainer()
+        } catch {
+            fatalError("Could not create ModelContainer: \(error)")
+        }
+    }()
+
     var body: some Scene {
         WindowGroup {
             ZStack {
@@ -53,7 +63,7 @@ struct LyttejegerApp: App {
             }
             .preferredColorScheme(.light)
         }
-        .modelContainer(for: [QueueItem.self, Subscription.self, PlaybackPosition.self])
+        .modelContainer(modelContainer)
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
                 BackgroundRefreshService.scheduleNext()

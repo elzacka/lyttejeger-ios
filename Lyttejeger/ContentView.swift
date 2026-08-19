@@ -11,7 +11,12 @@ struct ContentView: View {
     @State private var selectedTab = Tab.home
     @State private var homePath = NavigationPath()
     @State private var myPodsPath = NavigationPath()
+    @State private var queuePath = NavigationPath()
     @State private var showMenu = false
+    /// Guards the delayed cross-hierarchy push against double taps: two taps
+    /// inside the delay used to stack two copies of the same detail screen.
+    @State private var routeNavigationTask: Task<Void, Never>?
+    @State private var lastPushedRoute: PodcastRoute?
 
     enum Tab: Int, CaseIterable {
         case home, myPods, queue
@@ -57,16 +62,21 @@ struct ContentView: View {
                 .opacity(selectedTab == .myPods ? 1 : 0)
                 .zIndex(selectedTab == .myPods ? 1 : 0)
 
-                NavigationStack {
+                NavigationStack(path: $queuePath) {
                     QueueView()
                 }
                 .opacity(selectedTab == .queue ? 1 : 0)
                 .zIndex(selectedTab == .queue ? 1 : 0)
             }
+            .animation(
+                UIAccessibility.isReduceMotionEnabled ? nil : .easeInOut(duration: 0.15),
+                value: selectedTab
+            )
 
             // Audio player bar
             if playerVM.currentEpisode != nil {
                 AudioPlayerBar()
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
             // Custom tab bar
@@ -78,22 +88,18 @@ struct ContentView: View {
                             switch tab {
                             case .home: homePath = NavigationPath()
                             case .myPods: myPodsPath = NavigationPath()
-                            case .queue: break
+                            case .queue: queuePath = NavigationPath()
                             }
                         } else {
                             selectedTab = tab
                         }
                     } label: {
-                        VStack(spacing: 2) {
-                            Image(systemName: selectedTab == tab ? tab.iconFilled : tab.icon)
-                                .font(.system(size: 18, weight: selectedTab == tab ? .semibold : .regular))
-                            Text(tab.label)
-                                .font(.system(.caption2, weight: selectedTab == tab ? .medium : .regular))
-                        }
-                        .foregroundStyle(selectedTab == tab ? Color.appAccent : Color.appMutedForeground)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .contentShape(Rectangle())
+                        Image(systemName: selectedTab == tab ? tab.iconFilled : tab.icon)
+                            .font(.system(.title2, weight: selectedTab == tab ? .semibold : .regular))
+                            .foregroundStyle(selectedTab == tab ? Color.appAccent : Color.appMutedForeground)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: AppSize.touchTarget)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel(tab.label)
                     .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
@@ -109,16 +115,19 @@ struct ContentView: View {
                     showMenu = true
                 } label: {
                     Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 20))
+                        .font(.system(.title2))
                         .foregroundStyle(Color.appMutedForeground)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 44)
+                        .frame(height: AppSize.touchTarget)
                         .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Meny")
             }
-            .padding(.top, AppSpacing.xs)
-            .safeAreaPadding(.bottom)
+            // The full home-indicator inset (34pt) under a label-less row left
+            // more empty space than the icons themselves take. The bar reaches
+            // into the safe area instead, keeping just enough clearance to stay
+            // off the indicator.
+            .padding(.bottom, AppSpacing.lg)
             .overlay(alignment: .top) {
                 Rectangle()
                     .fill(Color.appBorder)
@@ -126,7 +135,12 @@ struct ContentView: View {
             }
             .background(Color.appBackground)
         }
+        .ignoresSafeArea(.container, edges: .bottom)
         .background(Color.appBackground)
+        .animation(
+            UIAccessibility.isReduceMotionEnabled ? nil : .easeInOut(duration: 0.2),
+            value: playerVM.currentEpisode?.id
+        )
         .sheet(isPresented: $showMenu) {
             MenuView()
                 .presentationDetents([.large])
@@ -141,17 +155,40 @@ struct ContentView: View {
         .onChange(of: playerVM.pendingPodcastRoute) { _, route in
             guard let route else { return }
             playerVM.pendingPodcastRoute = nil
-            // Delay to allow fullScreenCover dismissal to complete
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(AppConstants.routeNavigationDelayMs))
-                switch selectedTab {
+
+            // The tab is captured now, not after the sleep: reading it later
+            // sent the push to whichever tab the user had switched to during
+            // the delay, and forced the Kø tab back to Hjem behind their back.
+            let originTab = selectedTab
+            // Only the player sheet needs the delay — it has to finish
+            // dismissing first. A tap on the mini bar can push immediately.
+            let needsDismissDelay = playerVM.isExpanded
+
+            routeNavigationTask?.cancel()
+            routeNavigationTask = Task { @MainActor in
+                if needsDismissDelay {
+                    try? await Task.sleep(for: .milliseconds(AppConstants.routeNavigationDelayMs))
+                    guard !Task.isCancelled else { return }
+                }
+                guard lastPushedRoute != route else { return }
+                lastPushedRoute = route
+                switch originTab {
                 case .home: homePath.append(route)
                 case .myPods: myPodsPath.append(route)
-                case .queue:
-                    selectedTab = .home
-                    homePath.append(route)
+                case .queue: queuePath.append(route)
+                }
+
+                // Release the guard shortly after, so the same podcast can be
+                // opened again once the user has navigated back. Deliberately
+                // its own task: cancelling the push must not strand the guard.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(600))
+                    lastPushedRoute = nil
                 }
             }
+        }
+        .onChange(of: selectedTab) { _, _ in
+            lastPushedRoute = nil
         }
         .onAppear {
             queueVM.setup(modelContext)

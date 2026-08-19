@@ -1,6 +1,6 @@
 # Personvern
 
-*Sist oppdatert: 31. juli 2026*
+*Sist oppdatert: 18. august 2026*
 
 ## Kort oppsummert
 
@@ -39,7 +39,7 @@ Når du spiller av eller laster ned en episode, hentes lydfilen direkte fra utgi
 - Bruker ingen annonseringsnettverk
 - Synkroniserer ingen data til skytjenester
 - Deler ingen data med tredjeparter
-- Bruker ingen informasjonskapsler
+- Bruker ingen informasjonskapsler til å identifisere eller spore deg
 - Krever ingen innlogging
 
 ## Hvor lenge data lagres
@@ -63,7 +63,7 @@ Appen bruker den innebygde loggfunksjonen til Apple (`os.Logger`) for tekniske f
 ## Sikkerhet
 
 - All nettverkskommunikasjon skjer over HTTPS, med unntak av lydstrømmer fra utgivere som ikke tilbyr HTTPS
-- Sertifikatpinning sikrer kommunikasjonen med Podcast Index
+- App Transport Security håndhever TLS 1.2 eller nyere, gyldig sertifikatkjede og kontroll av vertsnavn
 - API-nøkler er skjult i appen
 - Appen bruker ingen tredjepartsbiblioteker
 

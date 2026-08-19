@@ -1,6 +1,6 @@
 # Brukerveiledning
 
-*Sist oppdatert: 31. juli 2026*
+*Sist oppdatert: 18. august 2026*
 
 ## Kom i gang
 
@@ -14,11 +14,12 @@ Det er alt du trenger. Resten av veiledningen er for deg som vil utforske mer.
 
 ## Oversikt
 
-Lyttejeger har tre faner nederst på skjermen:
+Lyttejeger har tre faner nederst på skjermen. De vises som ikoner, og aktiv fane
+er markert i teal:
 
-- **Hjem** – søk og oppdagelse av podkaster
-- **Mine podder** – podkaster du følger
-- **Kø** – episoder du har lagt til for senere lytting
+- **Hjem** (hus) – søk og oppdagelse av podkaster
+- **Mine podder** (hjerte) – podkaster du følger
+- **Kø** (nummerert liste) – episoder du har lagt til for senere lytting
 
 Menyknappen til høyre for fanene åpner menyen, der du finner innstillinger, dine data og informasjon om appen.
 
@@ -65,11 +66,11 @@ Operatorer kan kombineres: `"true crime" -mord` gir nøyaktig frase uten resulta
 
 ### Bla uten søkeord
 
-Aktiverer du filter uten å skrive et søkeord, viser Lyttejeger populære podkaster som matcher filtrene. Nyttig for å utforske nye kategorier.
+Aktiverer du filter uten å skrive et søkeord, viser Lyttejeger innhold som matcher filtrene. På Podkaster-fanen får du populære podkaster, på Episoder-fanen ferske episoder. Nyttig for å utforske nye kategorier.
 
 ## Filter
 
-Trykk på filterknappen ved siden av søkefeltet. Aktive filter vises som merkede knapper og kan fjernes enkeltvis. Trykk **Nullstill** for å fjerne alle.
+Trykk på filterknappen ved siden av søkefeltet. Aktive filter vises som merkede knapper og kan fjernes enkeltvis. Trykk **Nullstill** for å fjerne alle. Dra panelet ned for å lukke det.
 
 ### Språk
 
@@ -94,10 +95,13 @@ Kun på Episoder-fanen: under 15 min, 15–30 min, 30–60 min, over 60 min.
 
 NRK-podkaster vises sammen med øvrige resultater på begge fanene. Ordrekkefølgen spiller ingen rolle, så «tårn abels» finner det samme som «abels tårn».
 
-To begrensninger gjelder fortsatt, fordi NRK-podkastene kommer fra en egen kilde:
+Fordi NRK-podkastene kommer fra en egen kilde, oppfører de seg litt annerledes:
 
-- Kategorifilteret har ingen effekt på NRK-treff
+- NRK-feedene har ingen kategoridata. Velger du et kategorifilter, faller NRK-treffene derfor ut av resultatet.
+- NRK-innhold er norsk. Filtrerer du på et annet språk, vises det ikke.
 - På Podkaster-fanen matcher søkeord bare mot tittelen. På Episoder-fanen søkes det i episodetittel og beskrivelse som ellers.
+
+Hvis NRK-katalogen ikke lar seg hente, sier appen fra øverst i resultatlisten, slik at du vet at NRK-treff mangler.
 
 ## Podkastside
 
@@ -109,23 +113,30 @@ Trykk **Følg** for å legge podkasten til i Mine podder. Trykk **Slutt å følg
 
 ### Episodekort
 
-Hvert episodekort kan vise:
+Hvert episodekort viser tittel, dato og lengde. Lange titler klippes etter to
+linjer. Kortet kan i tillegg vise:
 
 - Avspillingsfremdrift (prosentlinje og prosent)
 - Avhakingsikon for ferdighørte episoder
 - Kapittelikon hvis episoden har kapitler
 - Tekstikon hvis episoden har transkripsjon
 
-Trykk på beskrivelsen for å utvide den.
+Episodebeskrivelsen vises bare på podkastsiden. Trykk på beskrivelsen for å
+utvide den.
+
+I lister der episodene kommer fra flere podkaster – på Hjem, i søkeresultatene
+og i køen – er episodebildet avspillingsknappen, og du trykker på tittelen for
+å åpne podkasten.
 
 ## Avspilling
 
 ### Starte avspilling
 
-- Trykk **avspillingsknappen** (▶) på et episodekort
-- Hold inne et episodekort og velg **Spill**
+- Trykk **avspillingsknappen** (▶) på et episodekort. På podkastsiden ligger den
+  til høyre på kortet; i andre lister ligger den oppå episodebildet
+- Hold inne kortet og velg **Spill**
 
-### Hold inne et episodekort
+### Hold inne episodekortet
 
 Holder du inne et episodekort, får du en meny med:
 
@@ -133,15 +144,20 @@ Holder du inne et episodekort, får du en meny med:
 - **Spill neste** – legger episoden først i køen
 - **Legg i kø** – legger episoden sist i køen
 
+I køen fungerer det annerledes: der er det menyknappen (**…**) på kortet som gir
+valgene, fordi å holde inne brukes til å flytte episoden i køen.
+
 ### Minispilleren
 
 Når en episode spilles, vises en spillerbar nederst. Fremdriftslinjen øverst viser hvor langt du har kommet.
 
-- **Podkastbilde** – trykk for å gå til podkastsiden
+- **Podkastbilde** – trykk for å starte eller pause avspilling
 - **Episodetittel** – trykk for å åpne fullskjermspilleren
-- **Spill/Pause** – starter eller pauser avspilling
 - **Spol frem** – spoler 30 sekunder frem
 - **Stopp** (✕) – stopper avspillingen
+
+Vil du til podkastsiden, åpner du fullskjermspilleren og trykker på
+podkastnavnet eller podkastbildet der.
 
 ### Fullskjermspilleren
 
@@ -149,6 +165,7 @@ Trykk på episodetittelen i minispilleren for å åpne fullskjermspilleren.
 
 **Navigering:**
 
+- Lukk spilleren med pilen øverst til venstre, eller dra toppen av spilleren nedover
 - Trykk på podkastbildet eller podkastnavnet for å gå til podkastsiden
 - Eksportknappen (øverst til høyre) laster ned lydfilen og åpner delingsmenyen der du kan lagre til Filer, sende via AirDrop eller dele videre
 
@@ -161,11 +178,19 @@ Trykk på episodetittelen i minispilleren for å åpne fullskjermspilleren.
 - **Søvntimer** (måneikon) – velg mellom 15, 30, 45 eller 60 minutter, eller at avspillingen stopper ved slutten av episoden. Volumet senkes gradvis de siste 30 sekundene for en mykere overgang.
 - **Fremdriftslinje** – dra for å spole til ønsket tidspunkt
 
+### Hvis avspillingen svikter
+
+Får ikke appen spilt av episoden, sier den fra i stedet for å stå stille: minispilleren viser et varselikon, og fullskjermspilleren skriver **Kunne ikke spille av episoden** med en **Prøv igjen**-knapp. Trykk på varselikonet i minispilleren for å forsøke på nytt.
+
+Det samme gjelder søk: feiler et søk, får du en **Prøv igjen**-knapp.
+
 ### Kapitler
 
 Hvis episoden har kapitler (fra podkastens utgiver), vises en **Kapitler**-knapp under kontrollene. Trykk for å åpne kapittellisten og trykk på et kapittel for å spole dit. Aktivt kapittel er markert.
 
 Merk: Kapitler krever at podkastens utgiver leverer strukturerte kapitteldata. Tidsstempler i episodebeskrivelsen er vanlig tekst og gir ikke tilgang til kapittelfunksjonen.
+
+Klarte ikke appen å hente kapitlene, står det **Kunne ikke laste kapitlene** med en **Prøv igjen**-knapp. Har episoden rett og slett ingen kapitler, sier panelet det i stedet. Transkripsjon fungerer på samme måte.
 
 ### Transkripsjon
 
@@ -194,19 +219,21 @@ Trykk **Spill alle** for å starte avspilling fra første episode i køen. Når 
 
 ### Legge til
 
-Hold inne et episodekort og velg:
+Trykk menyknappen (**…**) på et episodekort og velg:
 
 - **Spill neste** – legger episoden først i køen
 - **Legg i kø** – legger episoden sist i køen
 
 ### Endre rekkefølge
 
-- **Dra og slipp** – hold inne og dra et episodekort opp eller ned
-- Hold inne et køelement og velg **Flytt øverst** eller **Flytt nederst**
+- **Dra og slipp** – hold inne og dra et køelement opp eller ned
+- Menyknappen (**…**) på køelementet: **Flytt øverst** eller **Flytt nederst**
+
+I køen er hold inne forbeholdt flytting. Alle andre valg ligger i menyknappen.
 
 ### Fjerne
 
-- Hold inne et køelement og velg **Fjern fra kø**
+- Menyknappen (**…**) på køelementet: **Fjern fra kø**
 - Trykk **Tøm** øverst for å fjerne alle (krever bekreftelse)
 
 Når du spiller en episode fra køen, fjernes den automatisk.
@@ -219,7 +246,7 @@ Hold inne en podkast og velg **Slutt å følge** for å fjerne den. Du kan også
 
 ## Menyen
 
-Menyknappen nederst til høyre åpner menyen. Der ligger alt som ikke hører hjemme i de tre fanene.
+Menyknappen nederst til høyre åpner menyen. Der ligger alt som ikke hører hjemme i de tre fanene. Dra menyen ned for å lukke den.
 
 ### Hjem-skjerm
 

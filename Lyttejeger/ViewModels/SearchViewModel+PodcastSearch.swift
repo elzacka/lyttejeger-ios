@@ -69,9 +69,6 @@ extension SearchViewModel {
             // Composite ranking
             results = rankResults(results, query: primaryQuery, parsed: parsed)
 
-            // Apply local filters (date, sort override)
-            results = applyLocalFilters(results)
-
             // Merge NRK results (local, instant). Catalog failure is not
             // fatal — Podcast Index results still show, with a notice.
             do {
@@ -86,12 +83,21 @@ extension SearchViewModel {
                 if !nrkMatches.isEmpty {
                     let piTitles = Set(results.map { $0.title.lowercased() })
                     var unique = nrkMatches.filter { !piTitles.contains($0.title.lowercased()) }
+                    // NRK matches must clear the same narrowing as Podcast
+                    // Index results, or a filtered search appends unfiltered
+                    // NRK shows to the list.
+                    unique = filterByLanguage(unique)
+                    unique = filterByCategory(unique)
                     unique = applyQueryOperators(unique, parsed: parsed)
                     results.append(contentsOf: unique)
                 }
             } catch {
                 nrkUnavailable = true
             }
+
+            // Apply local filters (date, sort override) after the merge so
+            // they see NRK entries too.
+            results = applyLocalFilters(results)
 
             podcasts = results
 
@@ -181,13 +187,23 @@ extension SearchViewModel {
         }
     }
 
+    /// Podcast Index spells the same category two ways: `/categories/list`
+    /// returns `Self-Improvement`, while the `categories` map on a feed returns
+    /// `Self Improvement`. The filter values come from the former and are
+    /// matched against the latter, so the separator has to be normalised or
+    /// every hyphenated category matches nothing at all. Verified affected:
+    /// Self-Improvement, Video-Games, How-To and Role-Playing.
+    func normalizedCategory(_ category: String) -> String {
+        category.lowercased().replacingOccurrences(of: "-", with: " ")
+    }
+
     func filterByCategory(_ podcasts: [Podcast]) -> [Podcast] {
         guard !filters.categories.isEmpty else { return podcasts }
-        let lowerFilters = filters.categories.map { $0.lowercased() }
+        let normalizedFilters = filters.categories.map(normalizedCategory)
         return podcasts.filter { p in
             p.categories.contains { cat in
-                let lowerCat = cat.lowercased()
-                return lowerFilters.contains { lowerCat.contains($0) || $0.contains(lowerCat) }
+                let normalizedCat = normalizedCategory(cat)
+                return normalizedFilters.contains { normalizedCat.contains($0) || $0.contains(normalizedCat) }
             }
         }
     }

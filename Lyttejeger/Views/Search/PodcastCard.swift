@@ -32,7 +32,7 @@ struct PodcastCard: View {
             HStack(spacing: AppSpacing.xs) {
                 if podcast.explicit {
                     Text("E")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .font(.badgeText)
                         .foregroundStyle(Color.appMutedForeground)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
@@ -89,6 +89,7 @@ struct PodcastCard: View {
                         }
                     }
                 }
+                .frame(minHeight: AppSize.touchTarget, alignment: .topLeading)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     if UIAccessibility.isReduceMotionEnabled {

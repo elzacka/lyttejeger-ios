@@ -4,7 +4,6 @@ import SwiftData
 
 enum BackgroundRefreshService {
     private static let logger = Logger(subsystem: "com.Tazk.Lyttejeger", category: "BackgroundRefresh")
-    private static let completionLock = OSAllocatedUnfairLock(initialState: false)
 
     static func register() {
         BGTaskScheduler.shared.register(
@@ -27,8 +26,11 @@ enum BackgroundRefreshService {
 
         // BGAppRefreshTask is not Sendable — wrap for safe capture in Task closures
         let sendableTask = UncheckedSendable(task)
-        // Thread-safe guard: setTaskCompleted must only be called once
-        let completed = completionLock
+        // Thread-safe guard: setTaskCompleted must only be called once per task.
+        // The lock must be local: a static would keep its true state for the whole
+        // process, so a refresh delivered to a resumed (suspended) process would
+        // never call setTaskCompleted and get the app watchdog-killed.
+        let completed = OSAllocatedUnfairLock(initialState: false)
 
         let work = Task {
             logger.info("Background refresh started")
@@ -56,13 +58,28 @@ enum BackgroundRefreshService {
         }
     }
 
+    /// Splits stored podcast ids into Podcast Index feed ids and NRK slugs.
+    /// Ids that are neither — "feed:<url>" from OPML import, or malformed —
+    /// are dropped: the refresh has no way to fetch them.
+    static func splitSubscriptionIds(_ podcastIds: [String]) -> (feedIds: [Int], nrkSlugs: [String]) {
+        var feedIds: [Int] = []
+        var nrkSlugs: [String] = []
+        for id in podcastIds {
+            if id.hasPrefix("nrk:") {
+                nrkSlugs.append(String(id.dropFirst(4)))
+            } else if let feedId = Int(id) {
+                feedIds.append(feedId)
+            }
+        }
+        return (feedIds, nrkSlugs)
+    }
+
     private static func performRefresh() async {
         // Read subscriptions from a background ModelContainer
         let subscriptions: [(podcastId: String, feedUrl: String)]
         do {
-            // Use the same schema as the main app to ensure migration compatibility
-            let schema = Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
-            let container = try ModelContainer(for: schema)
+            // Same schema and migration plan as the main app
+            let container = try LyttejegerStore.makeContainer()
             let context = ModelContext(container)
             let descriptor = FetchDescriptor<Subscription>()
             let subs = try context.fetch(descriptor)
@@ -79,21 +96,9 @@ enum BackgroundRefreshService {
 
         logger.debug("Refreshing \(subscriptions.count) subscriptions")
 
-        // Split into Podcast Index feeds vs NRK feeds
-        var podcastIndexFeedIds: [Int] = []
-        var nrkSlugs: [String] = []
-
-        for sub in subscriptions {
-            if sub.podcastId.hasPrefix("nrk:") {
-                nrkSlugs.append(String(sub.podcastId.dropFirst(4)))
-            } else if let feedId = Int(sub.podcastId) {
-                podcastIndexFeedIds.append(feedId)
-            }
-        }
-
-        // Capture as let for Sendable closure compatibility
-        let feedIds = podcastIndexFeedIds
-        let slugs = nrkSlugs
+        // Split into Podcast Index feeds vs NRK feeds; let-bound tuple members
+        // double as the Sendable closure captures below.
+        let (feedIds, slugs) = splitSubscriptionIds(subscriptions.map(\.podcastId))
 
         // Fetch Podcast Index feeds
         if !feedIds.isEmpty {

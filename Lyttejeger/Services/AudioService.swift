@@ -55,9 +55,11 @@ final class AudioService: AudioPlaying {
     // MARK: - Audio Session
 
     private nonisolated func setupAudioSession() {
+        // Category only. Activation happens in play(): activating a
+        // non-mixable session here would stop other apps' audio the moment
+        // the app launches, before the user has played anything.
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
-            try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             audioLogger.error("Audio session setup failed: \(error)")
         }
@@ -96,6 +98,9 @@ final class AudioService: AudioPlaying {
                     }
                 case .ended:
                     if shouldResume && self.wasPlayingBeforeInterruption {
+                        // The system may have deactivated the session during
+                        // the interruption; reactivate before resuming.
+                        try? AVAudioSession.sharedInstance().setActive(true)
                         self.player?.rate = self.playbackSpeed
                         self.isPlaying = true
                         self.updateNowPlaying()
@@ -148,6 +153,12 @@ final class AudioService: AudioPlaying {
         isLoading = true
         hasError = false
         pausedAt = nil
+
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            audioLogger.error("Audio session activation failed: \(error)")
+        }
 
         let playerItem = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: playerItem)

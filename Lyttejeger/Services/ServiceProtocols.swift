@@ -38,6 +38,7 @@ protocol PodcastSearching: Sendable {
     func podcastByFeedId(_ feedId: Int) async throws -> PodcastByIdResponse
     func podcastByFeedUrl(_ feedUrl: String) async throws -> PodcastByIdResponse
     func trending(max: Int, lang: String?, cat: String?, notcat: String?) async throws -> SearchResponse
+    func recentEpisodes(max: Int, lang: String?) async throws -> EpisodesResponse
     var isConfigured: Bool { get async }
 }
 
@@ -65,9 +66,13 @@ protocol NRKSearching: Sendable {
 }
 
 protocol ChapterFetching: Sendable {
-    func fetchChapters(from url: String) async -> [Chapter]
+    /// Throws when the chapters could not be fetched. An empty array means the
+    /// feed genuinely declares no chapters — the UI has to tell those apart.
+    func fetchChapters(from url: String) async throws -> [Chapter]
 }
 
 protocol TranscriptFetching: Sendable {
-    func fetchTranscript(from url: String) async -> Transcript?
+    /// Throws when the transcript could not be fetched. `nil` means the feed
+    /// declares one but it holds no usable segments.
+    func fetchTranscript(from url: String) async throws -> Transcript?
 }

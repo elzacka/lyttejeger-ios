@@ -88,10 +88,15 @@ final class AudioPlayerViewModel {
 
     // Chapters
     var chapters: [Chapter] = []
+    /// True when the episode declares chapters but they could not be fetched,
+    /// so the UI can say so instead of pretending there are none.
+    var chaptersFailed = false
     var currentChapter: Chapter?
 
     // Transcript
     var transcript: Transcript?
+    /// Same distinction as `chaptersFailed`, for the transcript.
+    var transcriptFailed = false
 
     func setup(_ context: ModelContext, queueVM: QueueViewModel? = nil) {
         self.modelContext = context
@@ -175,20 +180,60 @@ final class AudioPlayerViewModel {
         startSaveTimer()
 
         // Load chapters and transcript
+        loadChapters(for: episode)
+        loadTranscript(for: episode)
+    }
+
+    // MARK: - Chapters & Transcript
+
+    func loadChapters(for episode: Episode) {
+        chapterTask?.cancel()
+        guard let chaptersUrl = episode.chaptersUrl else {
+            chapters = []
+            chaptersFailed = false
+            return
+        }
+        chaptersFailed = false
         chapterTask = Task { @MainActor in
-            if let chaptersUrl = episode.chaptersUrl {
-                chapters = await chapterService.fetchChapters(from: chaptersUrl)
-            } else {
+            do {
+                chapters = try await chapterService.fetchChapters(from: chaptersUrl)
+            } catch {
+                guard !Task.isCancelled else { return }
                 chapters = []
+                chaptersFailed = true
             }
         }
+    }
+
+    func loadTranscript(for episode: Episode) {
+        transcriptTask?.cancel()
+        guard let transcriptUrl = episode.transcriptUrl else {
+            transcript = nil
+            transcriptFailed = false
+            return
+        }
+        transcriptFailed = false
         transcriptTask = Task { @MainActor in
-            if let transcriptUrl = episode.transcriptUrl {
-                transcript = await transcriptService.fetchTranscript(from: transcriptUrl)
-            } else {
+            do {
+                transcript = try await transcriptService.fetchTranscript(from: transcriptUrl)
+            } catch {
+                guard !Task.isCancelled else { return }
                 transcript = nil
+                transcriptFailed = true
             }
         }
+    }
+
+    /// Re-runs a failed chapter fetch for the episode that is playing.
+    func retryChapters() {
+        guard let episode = currentEpisode else { return }
+        loadChapters(for: episode)
+    }
+
+    /// Re-runs a failed transcript fetch for the episode that is playing.
+    func retryTranscript() {
+        guard let episode = currentEpisode else { return }
+        loadTranscript(for: episode)
     }
 
     func stop() {
@@ -211,8 +256,10 @@ final class AudioPlayerViewModel {
         }
         isExpanded = false
         chapters = []
+        chaptersFailed = false
         currentChapter = nil
         transcript = nil
+        transcriptFailed = false
         sleepTimerMinutes = 0
         sleepTimerEndTime = nil
         sleepTimerRemaining = 0

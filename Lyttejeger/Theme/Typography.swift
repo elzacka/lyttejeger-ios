@@ -9,8 +9,10 @@ extension Font {
     /// Section heading - 18pt medium
     static let sectionTitle = Font.custom("DMMono-Medium", size: 18, relativeTo: .headline)
 
-    /// Card title - 13pt medium
-    static let cardTitle = Font.custom("DMMono-Medium", size: 13, relativeTo: .subheadline)
+    /// Card title - 15pt medium. Primary list content (episode and podcast
+    /// titles), so it sits at body scale rather than below the captions
+    /// describing it.
+    static let cardTitle = Font.custom("DMMono-Medium", size: 15, relativeTo: .subheadline)
 
     /// Body text - 15pt regular
     static let bodyText = Font.custom("DMMono-Regular", size: 15, relativeTo: .body)

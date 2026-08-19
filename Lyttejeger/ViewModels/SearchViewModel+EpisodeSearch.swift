@@ -50,13 +50,19 @@ extension SearchViewModel {
             // a category; otherwise byperson should stay as broad as it is.
             let categoryFeedIds: Set<String>? = hasCategory ? seenFeedIds : nil
 
+            // byperson returns no feed record, only loose feed fields. Where the
+            // term search already resolved that feed, reuse it: it carries the
+            // artwork, author and episode count the bare fields lack, and the
+            // "Populære" sort has nothing to rank on without it.
+            let podcastsByFeedId = Dictionary(uniqueKeysWithValues: sourcePodcasts.map { ($0.id, $0) })
+
             // Strategy 1: byperson search
             // zip keeps each transformed episode paired with its API item even
             // if the transform ever starts filtering
             let personRes = try await api.searchByPerson(primaryQuery, max: 50)
             let personEps = PodcastTransform.transformEpisodes(personRes.items ?? [])
             for (ep, apiEp) in zip(personEps, personRes.items ?? []) {
-                guard !existingIds.contains(ep.id) else { continue }
+                guard !existingIds.contains(episodeDedupeKey(ep)) else { continue }
 
                 // Category filter: only include episodes from matching feeds
                 if let feedIds = categoryFeedIds {
@@ -64,7 +70,8 @@ extension SearchViewModel {
                           feedIds.contains(String(feedId)) else { continue }
                 }
 
-                let feedLang = apiEp.feedLanguage ?? ""
+                let podcast = apiEp.feedId.flatMap { podcastsByFeedId[String($0)] }
+                let feedLang = podcast?.language ?? apiEp.feedLanguage ?? ""
                 if !filters.languages.isEmpty {
                     guard filters.languages.contains(where: { matchesLanguageFilter(feedLang, filterLabel: $0) }) else { continue }
                 } else {
@@ -73,13 +80,13 @@ extension SearchViewModel {
 
                 allEpisodes.append(EpisodeWithPodcast(
                     episode: ep,
-                    podcast: nil,
-                    podcastTitle: apiEp.feedTitle ?? "",
-                    podcastAuthor: apiEp.feedAuthor ?? "",
-                    podcastImage: apiEp.feedImage ?? "",
+                    podcast: podcast,
+                    podcastTitle: podcast?.title ?? apiEp.feedTitle ?? "",
+                    podcastAuthor: podcast?.author ?? apiEp.feedAuthor ?? "",
+                    podcastImage: podcast?.imageUrl ?? apiEp.feedImage ?? "",
                     feedLanguage: feedLang
                 ))
-                existingIds.insert(ep.id)
+                existingIds.insert(episodeDedupeKey(ep))
             }
 
             guard !Task.isCancelled else { return }
@@ -93,7 +100,7 @@ extension SearchViewModel {
                 if let epsRes = try? await api.episodesByFeedIds(feedIds, max: 200, since: nil) {
                     let eps = PodcastTransform.transformEpisodes(epsRes.items ?? [])
                     for (ep, apiEp) in zip(eps, epsRes.items ?? []) {
-                        guard !existingIds.contains(ep.id) else { continue }
+                        guard !existingIds.contains(episodeDedupeKey(ep)) else { continue }
                         let podcast = podcastMap[String(apiEp.feedId ?? 0)]
 
                         guard episodeMatchesQuery(ep, parsed: parsed) else { continue }
@@ -106,7 +113,7 @@ extension SearchViewModel {
                             podcastImage: podcast?.imageUrl ?? apiEp.feedImage ?? "",
                             feedLanguage: podcast?.language ?? apiEp.feedLanguage ?? ""
                         ))
-                        existingIds.insert(ep.id)
+                        existingIds.insert(episodeDedupeKey(ep))
                     }
                 }
             }
@@ -116,13 +123,21 @@ extension SearchViewModel {
             // the Episodes tab could never surface an NRK episode even though
             // the Podcasts tab finds the show. Catalog failure is not fatal:
             // Podcast Index episodes still show, with a notice.
+            // NRK content is always Norwegian and carries no categories, so
+            // any category filter and any language filter that excludes
+            // Norwegian rule the whole strategy out before it fetches.
+            let nrkPassesFilters = filters.categories.isEmpty
+                && (filters.languages.isEmpty
+                    || filters.languages.contains { matchesLanguageFilter("Norsk", filterLabel: $0) })
             do {
                 var nrkPodcasts: [Podcast] = []
                 var seenNrkIds = Set<String>()
-                for apiQuery in apiQueries {
-                    for match in try await nrkService.searchCatalog(query: apiQuery)
-                    where seenNrkIds.insert(match.id).inserted {
-                        nrkPodcasts.append(match)
+                if nrkPassesFilters {
+                    for apiQuery in apiQueries {
+                        for match in try await nrkService.searchCatalog(query: apiQuery)
+                        where seenNrkIds.insert(match.id).inserted {
+                            nrkPodcasts.append(match)
+                        }
                     }
                 }
 
@@ -156,7 +171,7 @@ extension SearchViewModel {
                     // reason enough to list all of its episodes.
                     for (podcast, feed) in fetched {
                         for ep in feed.episodes
-                        where !existingIds.contains(ep.id) && episodeMatchesQuery(ep, parsed: parsed) {
+                        where !existingIds.contains(episodeDedupeKey(ep)) && episodeMatchesQuery(ep, parsed: parsed) {
                             allEpisodes.append(EpisodeWithPodcast(
                                 episode: ep,
                                 podcast: podcast,
@@ -165,7 +180,7 @@ extension SearchViewModel {
                                 podcastImage: feed.podcastImageUrl,
                                 feedLanguage: podcast.language
                             ))
-                            existingIds.insert(ep.id)
+                            existingIds.insert(episodeDedupeKey(ep))
                         }
                     }
                 }
@@ -178,47 +193,8 @@ extension SearchViewModel {
             // Apply query operators (exclude, exact phrase, OR)
             allEpisodes = applyQueryOperators(allEpisodes, parsed: parsed)
 
-            // Apply duration filter
-            if let durationFilter = filters.durationFilter {
-                allEpisodes = allEpisodes.filter { durationFilter.matches(duration: $0.episode.duration) }
-            }
-
-            // Apply date filter
-            if let dateFrom = filters.dateFrom {
-                let fromDate = dateFrom.date
-                allEpisodes = allEpisodes.filter {
-                    (iso8601BasicFormatter.date(from: $0.episode.publishedAt) ?? .distantPast) >= fromDate
-                }
-            }
-            if let dateTo = filters.dateTo {
-                let toDate = dateTo.date
-                allEpisodes = allEpisodes.filter {
-                    (iso8601BasicFormatter.date(from: $0.episode.publishedAt) ?? .distantFuture) <= toDate
-                }
-            }
-
-            // Sort
-            switch filters.sortBy {
-            case .newest:
-                allEpisodes.sort { a, b in
-                    let dateA = iso8601BasicFormatter.date(from: a.episode.publishedAt) ?? .distantPast
-                    let dateB = iso8601BasicFormatter.date(from: b.episode.publishedAt) ?? .distantPast
-                    return dateA > dateB
-                }
-            case .oldest:
-                allEpisodes.sort { a, b in
-                    let dateA = iso8601BasicFormatter.date(from: a.episode.publishedAt) ?? .distantPast
-                    let dateB = iso8601BasicFormatter.date(from: b.episode.publishedAt) ?? .distantPast
-                    return dateA < dateB
-                }
-            case .popular:
-                allEpisodes.sort { a, b in
-                    let countA = a.podcast?.episodeCount ?? 0
-                    let countB = b.podcast?.episodeCount ?? 0
-                    return countA > countB
-                }
-            case .relevance:
-                allEpisodes = rankEpisodes(allEpisodes, query: primaryQuery, parsed: parsed)
+            allEpisodes = applyEpisodeFilters(allEpisodes) { [self] ranked in
+                rankEpisodes(ranked, query: primaryQuery, parsed: parsed)
             }
 
             episodes = allEpisodes
@@ -228,6 +204,77 @@ extension SearchViewModel {
                 self.error = "Episodesøket feilet. Prøv igjen."
             }
         }
+    }
+
+    // MARK: - Episode Identity
+
+    /// Identity used to de-duplicate episodes across the search strategies.
+    ///
+    /// The Podcast Index episode id alone is not enough. The same episode
+    /// reachable through two feeds — a show and a compilation, or a feed
+    /// indexed twice — carries a different id in each, and the list showed it
+    /// twice in a row. The audio file is the same either way, so the enclosure
+    /// URL is the stronger key; the id remains the fallback for the NRK
+    /// episodes and anything else without one.
+    func episodeDedupeKey(_ episode: Episode) -> String {
+        episode.audioUrl.isEmpty ? episode.id : episode.audioUrl.lowercased()
+    }
+
+    // MARK: - Shared Episode Filters
+
+    /// Duration, date and sort, shared by episode search and episode browse so
+    /// the two cannot drift apart.
+    ///
+    /// `rankByRelevance` is supplied only by the search path: browsing has no
+    /// query to rank against, so relevance falls back to newest instead.
+    func applyEpisodeFilters(
+        _ episodes: [EpisodeWithPodcast],
+        rankByRelevance: (([EpisodeWithPodcast]) -> [EpisodeWithPodcast])? = nil
+    ) -> [EpisodeWithPodcast] {
+        var result = episodes
+
+        if let durationFilter = filters.durationFilter {
+            result = result.filter { durationFilter.matches(duration: $0.episode.duration) }
+        }
+
+        if let dateFrom = filters.dateFrom {
+            let fromDate = dateFrom.date
+            result = result.filter { (publishedDate($0) ?? .distantPast) >= fromDate }
+        }
+        if let dateTo = filters.dateTo {
+            let toDate = dateTo.date
+            result = result.filter { (publishedDate($0) ?? .distantFuture) <= toDate }
+        }
+
+        switch filters.sortBy {
+        case .newest:
+            result.sort { (publishedDate($0) ?? .distantPast) > (publishedDate($1) ?? .distantPast) }
+        case .oldest:
+            result.sort { (publishedDate($0) ?? .distantPast) < (publishedDate($1) ?? .distantPast) }
+        case .popular:
+            // The API has no popularity signal per episode, so the show's
+            // episode count stands in. Episodes whose show is unknown used to
+            // score 0 and land at the bottom in arbitrary order; they now fall
+            // back to recency, which is the best available ordering for them.
+            result.sort { a, b in
+                let countA = a.podcast?.episodeCount ?? 0
+                let countB = b.podcast?.episodeCount ?? 0
+                if countA != countB { return countA > countB }
+                return (publishedDate(a) ?? .distantPast) > (publishedDate(b) ?? .distantPast)
+            }
+        case .relevance:
+            if let rankByRelevance {
+                result = rankByRelevance(result)
+            } else {
+                result.sort { (publishedDate($0) ?? .distantPast) > (publishedDate($1) ?? .distantPast) }
+            }
+        }
+
+        return result
+    }
+
+    private func publishedDate(_ item: EpisodeWithPodcast) -> Date? {
+        iso8601BasicFormatter.date(from: item.episode.publishedAt)
     }
 
     // MARK: - Episode Matching

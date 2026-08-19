@@ -5,6 +5,9 @@ struct PlayerControls: View {
     @State private var showSleepTimer = false
     @State private var isSeeking = false
     @State private var seekPosition: TimeInterval = 0
+    /// When the slider was last moved. Used to detect that a drag has ended
+    /// even when SwiftUI never delivers the end-of-drag callback.
+    @State private var lastSliderInteraction = Date.distantPast
     @State private var skipOverlay: String?
     @State private var skipOverlayTask: Task<Void, Never>?
 
@@ -30,13 +33,28 @@ struct PlayerControls: View {
                 Slider(
                     value: Binding(
                         get: { displayTime },
-                        set: { seekPosition = $0 }
+                        set: { newValue in
+                            // isSeeking is set here as well as in
+                            // onEditingChanged: the begin callback is not
+                            // guaranteed either, and the thumb must still
+                            // follow the finger without it.
+                            seekPosition = newValue
+                            lastSliderInteraction = Date()
+                            isSeeking = true
+                        }
                     ),
                     in: 0...max(playerVM.duration, 0.1),
                     onEditingChanged: { editing in
-                        isSeeking = editing
-                        if !editing {
-                            playerVM.seek(to: seekPosition)
+                        if editing {
+                            // Seed from the live position: seekPosition
+                            // otherwise still holds the previous drag's value
+                            // (0 the first time), so releasing without moving
+                            // would jump to the start of the episode.
+                            seekPosition = playerVM.currentTime
+                            lastSliderInteraction = Date()
+                            isSeeking = true
+                        } else {
+                            commitSeek()
                         }
                     }
                 )
@@ -55,8 +73,9 @@ struct PlayerControls: View {
                 }
             }
 
-            // Main controls
-            HStack(spacing: AppSpacing.xxl) {
+            // Main controls. xl rather than xxl: five fixed-width controls plus
+            // xxl spacing exceeded the usable width of a 375pt screen.
+            HStack(spacing: AppSpacing.xl) {
                 // Speed
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -65,9 +84,12 @@ struct PlayerControls: View {
                     Text(String(format: "%.2gx", playerVM.playbackSpeed))
                         .font(.speedText)
                         .foregroundStyle(Color.appMutedForeground)
-                        .frame(width: 44)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(minWidth: AppSize.touchTarget)
+                        .frame(minHeight: AppSize.touchTarget)
+                        .contentShape(Rectangle())
                 }
-                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                 .accessibilityLabel("Hastighet \(String(format: "%.2g", playerVM.playbackSpeed)) ganger")
                 .accessibilityHint("Trykk for å endre avspillingshastighet")
 
@@ -78,10 +100,11 @@ struct PlayerControls: View {
                     showSkipOverlay("-10s")
                 } label: {
                     Image(systemName: "gobackward.10")
-                        .font(.system(size: 28))
+                        .font(.system(.title))
                         .foregroundStyle(Color.appForeground)
+                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                        .contentShape(Rectangle())
                 }
-                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                 .accessibilityLabel("Spol 10 sekunder tilbake")
 
                 // Play/Pause
@@ -89,18 +112,31 @@ struct PlayerControls: View {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     playerVM.togglePlayPause()
                 } label: {
-                    Image(systemName: playerVM.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: AppSize.playerMainButton))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [Color.appAccent, Color.appAccentHover],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
+                    Group {
+                        if playerVM.isLoading {
+                            ProgressView()
+                                .tint(Color.appAccent)
+                                .frame(width: AppSize.playerMainButton, height: AppSize.playerMainButton)
+                        } else {
+                            Image(systemName: playerVM.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                                .font(.system(size: AppSize.playerMainButton))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [Color.appAccent, Color.appAccentHover],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                        }
+                    }
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                    .contentShape(Rectangle())
                 }
-                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                .accessibilityLabel(playerVM.isPlaying ? "Pause" : "Spill av")
+                .disabled(playerVM.isLoading)
+                .accessibilityLabel(
+                    playerVM.isLoading ? "Laster episoden"
+                        : playerVM.isPlaying ? "Pause" : "Spill av"
+                )
 
                 // Skip forward
                 Button {
@@ -109,10 +145,11 @@ struct PlayerControls: View {
                     showSkipOverlay("+30s")
                 } label: {
                     Image(systemName: "goforward.30")
-                        .font(.system(size: 28))
+                        .font(.system(.title))
                         .foregroundStyle(Color.appForeground)
+                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                        .contentShape(Rectangle())
                 }
-                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                 .accessibilityLabel("Spol 30 sekunder frem")
 
                 // Sleep timer
@@ -121,7 +158,7 @@ struct PlayerControls: View {
                 } label: {
                     VStack(spacing: 1) {
                         Image(systemName: playerVM.sleepTimerMinutes != 0 ? "moon.fill" : "moon")
-                            .font(.system(size: 20))
+                            .font(.system(.title3))
                             .foregroundStyle(playerVM.sleepTimerMinutes != 0 ? Color.appAccent : Color.appMutedForeground)
 
                         if let label = sleepTimerLabel {
@@ -130,8 +167,9 @@ struct PlayerControls: View {
                                 .foregroundStyle(Color.appAccent)
                         }
                     }
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                    .contentShape(Rectangle())
                 }
-                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                 .accessibilityLabel(playerVM.sleepTimerMinutes != 0 ? "Søvntimer aktiv" : "Søvntimer")
                 .accessibilityHint("Trykk for å stille søvntimer")
             }
@@ -157,6 +195,19 @@ struct PlayerControls: View {
                     .lineLimit(1)
             }
         }
+        .onChange(of: playerVM.currentTime) { _, _ in
+            // SwiftUI does not guarantee the end-of-drag callback: when another
+            // gesture recogniser takes over the touch it is simply never
+            // delivered. Relying on it left the position frozen on screen while
+            // audio kept playing. If the slider has not moved for a moment, the
+            // drag is over — commit it and hand the display back to the player.
+            if isSeeking, Date().timeIntervalSince(lastSliderInteraction) > 1.5 {
+                commitSeek()
+            }
+        }
+        .onChange(of: playerVM.currentEpisode?.id) { _, _ in
+            isSeeking = false
+        }
         .confirmationDialog("Søvntimer", isPresented: $showSleepTimer, titleVisibility: .visible) {
             ForEach(AppConstants.sleepTimerOptions, id: \.value) { option in
                 Button(option.label) {
@@ -166,6 +217,13 @@ struct PlayerControls: View {
         } message: {
             Text("Avspillingen stopper automatisk etter valgt tid.")
         }
+    }
+
+    /// Ends a scrub: hand the display back to the player and seek once.
+    private func commitSeek() {
+        guard isSeeking else { return }
+        isSeeking = false
+        playerVM.seek(to: seekPosition)
     }
 
     private func showSkipOverlay(_ text: String) {

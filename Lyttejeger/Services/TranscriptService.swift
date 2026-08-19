@@ -21,6 +21,10 @@ struct Transcript: Sendable {
     var language: String?
 }
 
+enum TranscriptError: Error {
+    case unavailable
+}
+
 actor TranscriptService: TranscriptFetching {
     static let shared = TranscriptService()
 
@@ -34,10 +38,10 @@ actor TranscriptService: TranscriptFetching {
         pattern: "(\\d{2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})\\s*-->\\s*(\\d{2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})"
     )
 
-    func fetchTranscript(from url: String) async -> Transcript? {
+    func fetchTranscript(from url: String) async throws -> Transcript? {
         guard !url.isEmpty,
               let requestUrl = URL(string: url),
-              requestUrl.scheme == "https" else { return nil }
+              requestUrl.scheme == "https" else { throw TranscriptError.unavailable }
 
         // Check cache
         if let cached = cache.value(for: url) {
@@ -47,8 +51,10 @@ actor TranscriptService: TranscriptFetching {
         do {
             let (data, response) = try await URLSession.shared.data(from: requestUrl)
 
-            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return nil }
-            guard data.count <= AppConstants.maxTranscriptSize else { return nil }
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                throw TranscriptError.unavailable
+            }
+            guard data.count <= AppConstants.maxTranscriptSize else { throw TranscriptError.unavailable }
 
             let contentType = http.value(forHTTPHeaderField: "Content-Type") ?? ""
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -89,9 +95,13 @@ actor TranscriptService: TranscriptFetching {
                 return srt
             }
 
+            // Parsed, but nothing usable in it — that is "no transcript",
+            // not a failure.
             return nil
+        } catch is TranscriptError {
+            throw TranscriptError.unavailable
         } catch {
-            return nil
+            throw TranscriptError.unavailable
         }
     }
 

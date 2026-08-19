@@ -12,6 +12,7 @@ En podkastspiller for iOS, laget i Swift. Rolig, retro design uten sporing eller
 - Avspillingshastighet per podkast, som appen husker
 - Smart gjenopptakelse med 10 sekunders tilbakespoling etter lange pauser
 - Eksport av lydfiler direkte fra spilleren
+- Import og eksport av egne data: OPML for abonnementer, JSON for alt
 - Eksplisitt-merking etter retningslinjene til Apple og Podcast Index
 - Sortering og filtrering på språk, kategori, dato, popularitet og varighet
 - Avansert søk med eksakte fraser (`"..."`), ekskludering (`-ord`) og OR-operator
@@ -28,7 +29,7 @@ Se [brukerveiledningen](Brukerveiledning.md) for hvordan appen brukes.
 | **Rammeverk**     | SwiftUI, SwiftData, AVFoundation, MediaPlayer |
 | **Minstekrav**    | iOS 26, iPhone                                |
 | **Avhengigheter** | Ingen tredjepartsbiblioteker                  |
-| **Tester**        | Swift Testing (75 tester, 16 suiter)          |
+| **Tester**        | Swift Testing (162 tester, 37 suiter) og XCUITest (8) |
 | **Byggverktøy**   | Xcode 26.6, xcodegen                          |
 | **Typografi**     | DM Mono (inkludert)                           |
 | **Design**        | Lys modus, beige/blågrønn retro               |
@@ -61,7 +62,7 @@ xcodebuild -project Lyttejeger.xcodeproj -scheme Lyttejeger \
 
 API-nøkler ligger ikke i repoet. Registrer deg på [podcastindex.org/developer](https://podcastindex.org/developer) og legg inn dine egne nøkler i `Lyttejeger/Config/Secrets.swift`.
 
-Sertifikatpinning mot `api.podcastindex.org` feiler lukket. Bytter Podcast Index sertifikat, må du regne ut nye pin-verdier og legge dem inn i `PodcastIndexAPI.swift`. Kommentaren i filen viser `openssl`-kommandoen.
+Appen bruker ikke sertifikatpinning. Begrunnelsen og resten av sikkerhetsmodellen står i [SECURITY.md](SECURITY.md).
 
 ## Prosjektstruktur
 
@@ -82,6 +83,7 @@ Lyttejeger/
     Search/        Hjem, søk, episodekort, filtre
   Preview Content/ Forhåndsvisningsdata for SwiftUI Previews
 LyttejegerTests/   Enhetstester (Swift Testing)
+LyttejegerUITests/ Grensesnittstester (XCUITest)
 ```
 
 ## Personvern

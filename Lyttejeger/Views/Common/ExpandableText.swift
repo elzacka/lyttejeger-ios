@@ -25,6 +25,7 @@ struct ExpandableText: View {
                     .allowsHitTesting(false)
                 }
             }
+            .frame(minHeight: AppSize.touchTarget, alignment: .topLeading)
             .contentShape(Rectangle())
             .onTapGesture {
                 if UIAccessibility.isReduceMotionEnabled {

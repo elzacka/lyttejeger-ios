@@ -2,7 +2,6 @@ import SwiftUI
 
 struct TranscriptPanel: View {
     @Environment(AudioPlayerViewModel.self) private var playerVM
-    @Environment(\.dismiss) private var dismiss
     @State private var autoScroll = true
     @State private var lastScrolledSegmentId: String?
     @State private var hasScrolledToInitial = false
@@ -16,21 +15,17 @@ struct TranscriptPanel: View {
                 } label: {
                     HStack(spacing: AppSpacing.xs) {
                         Image(systemName: autoScroll ? "arrow.up.arrow.down" : "hand.draw")
-                            .font(.system(size: 14))
+                            .font(.system(.subheadline))
                         Text(autoScroll ? "Auto" : "Manuell")
                             .font(.buttonText)
                     }
                     .foregroundStyle(Color.appAccent)
+                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                    .contentShape(Rectangle())
                 }
-                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                 .accessibilityLabel(autoScroll ? "Automatisk rulling på" : "Automatisk rulling av")
 
                 Spacer()
-
-                Button("Ferdig") { dismiss() }
-                    .font(.buttonText)
-                    .foregroundStyle(Color.appAccent)
-                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
             }
             .padding(.horizontal, AppSpacing.xl)
             .padding(.top, AppSpacing.xl)
@@ -87,11 +82,37 @@ struct TranscriptPanel: View {
                                         .padding(.leading, AppSpacing.lg + 3 + AppSpacing.sm)
                                 }
                             }
+                        } else if playerVM.transcriptFailed {
+                            VStack(spacing: AppSpacing.md) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.system(.largeTitle, weight: .light))
+                                    .foregroundStyle(Color.appError)
+
+                                Text("Kunne ikke laste transkripsjonen.")
+                                    .font(.bodyText)
+                                    .foregroundStyle(Color.appMutedForeground)
+                                    .multilineTextAlignment(.center)
+
+                                Button {
+                                    playerVM.retryTranscript()
+                                } label: {
+                                    Text("Prøv igjen")
+                                        .font(.buttonText)
+                                        .foregroundStyle(Color.appAccent)
+                                        .padding(.horizontal, AppSpacing.lg)
+                                        .frame(minHeight: AppSize.touchTarget)
+                                        .contentShape(Rectangle())
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(AppSpacing.xl)
                         } else {
-                            Text("Ingen transkripsjon tilgjengelig")
+                            Text("Denne episoden har ingen transkripsjon.")
                                 .font(.bodyText)
                                 .foregroundStyle(Color.appMutedForeground)
-                                .padding(AppSpacing.lg)
+                                .frame(maxWidth: .infinity)
+                                .multilineTextAlignment(.center)
+                                .padding(AppSpacing.xl)
                         }
                     }
                     .padding(.vertical, AppSpacing.sm)

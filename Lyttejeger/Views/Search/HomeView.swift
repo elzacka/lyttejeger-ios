@@ -14,6 +14,9 @@ struct HomeView: View {
     @State private var lastPlayedInfo: LastPlayedInfo?
     @State private var recentEpisodes: [RecentEpisodeData] = []
     @State private var hasLoadedRecent = false
+    /// True when a home fetch failed, so an empty list is not passed off as
+    /// "nothing new".
+    @State private var recentEpisodesFailed = false
 
     private var isHomeState: Bool {
         !searchVM.isLoading && searchVM.error == nil && searchVM.filters.query.isEmpty && searchVM.podcasts.isEmpty && !searchVM.hasActiveFilters
@@ -29,6 +32,14 @@ struct HomeView: View {
         return nil
     }
 
+    /// Whether the user asked for anything at all — a query, a filter, or both.
+    ///
+    /// "Ingen resultater" used to require a non-empty query, so browsing with
+    /// filters that matched nothing rendered an empty list with no explanation.
+    private var hasSearchInput: Bool {
+        !searchVM.filters.query.isEmpty || searchVM.hasActiveFilters
+    }
+
     private var hasHomeContent: Bool {
         (showLastPlayed && lastPlayedEpisode != nil) || (showNewFromSubscriptions && !recentEpisodes.isEmpty)
     }
@@ -39,10 +50,20 @@ struct HomeView: View {
 
             if isHomeState {
                 homeContentView
+                    .transition(.opacity)
             } else {
                 searchResultsView
+                    .transition(.opacity)
             }
         }
+        .animation(
+            UIAccessibility.isReduceMotionEnabled ? nil : .easeInOut(duration: 0.2),
+            value: isHomeState
+        )
+        .animation(
+            UIAccessibility.isReduceMotionEnabled ? nil : .easeInOut(duration: 0.2),
+            value: searchVM.isLoading
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.appBackground)
         .toolbar(.hidden, for: .navigationBar)
@@ -77,19 +98,30 @@ struct HomeView: View {
             HStack(spacing: AppSpacing.md) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(Color.appAccent.opacity(0.7))
-                    .font(.system(size: 16))
+                    .font(.system(.callout))
 
-                TextField(searchVM.activeTab == .podcasts ? "Søk etter podkaster..." : "Søk etter episoder...", text: Binding(
-                    get: { searchVM.filters.query },
-                    set: { searchVM.setQuery($0) }
-                ))
-                .font(.bodyText)
-                .foregroundStyle(Color.appForeground)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .focused($isSearchFocused)
-                .submitLabel(.search)
-                .accessibilityLabel(searchVM.activeTab == .podcasts ? "Søk etter podkaster" : "Søk etter episoder")
+                // The system placeholder colour composites to about 1.7:1 on
+                // the muted field, so the placeholder is drawn separately.
+                ZStack(alignment: .leading) {
+                    if searchVM.filters.query.isEmpty {
+                        Text(searchVM.activeTab == .podcasts ? "Søk etter podkaster…" : "Søk etter episoder…")
+                            .font(.bodyText)
+                            .foregroundStyle(Color.appMutedForeground)
+                            .allowsHitTesting(false)
+                    }
+
+                    TextField("", text: Binding(
+                        get: { searchVM.filters.query },
+                        set: { searchVM.setQuery($0) }
+                    ))
+                    .font(.bodyText)
+                    .foregroundStyle(Color.appForeground)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .focused($isSearchFocused)
+                    .submitLabel(.search)
+                    .accessibilityLabel(searchVM.activeTab == .podcasts ? "Søk etter podkaster" : "Søk etter episoder")
+                }
 
                 if !searchVM.filters.query.isEmpty {
                     Button {
@@ -97,10 +129,12 @@ struct HomeView: View {
                         isSearchFocused = false
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 15))
-                            .foregroundStyle(Color.appBorder)
+                            .font(.system(.subheadline))
+                            .foregroundStyle(Color.appMutedForeground)
+                            .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                            .contentShape(Rectangle())
                     }
-                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                    .accessibilityLabel("Tøm søkefeltet")
                 }
 
                 Button {
@@ -109,10 +143,11 @@ struct HomeView: View {
                     Image(systemName: searchVM.activeFilterCount > 0
                         ? "line.3.horizontal.decrease.circle.fill"
                         : "line.3.horizontal.decrease.circle")
-                        .font(.system(size: 16))
+                        .font(.system(.callout))
                         .foregroundStyle(searchVM.activeFilterCount > 0 ? Color.appAccent : Color.appAccent.opacity(0.6))
+                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                        .contentShape(Rectangle())
                 }
-                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
                 .accessibilityLabel(searchVM.activeFilterCount > 0 ? "Filter, \(searchVM.activeFilterCount) aktive" : "Filter")
             }
             .padding(.horizontal, AppSpacing.md)
@@ -137,7 +172,8 @@ struct HomeView: View {
                             .font(.buttonText)
                             .foregroundStyle(searchVM.activeTab == tab ? Color.appAccent : Color.appMutedForeground)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, AppSpacing.sm)
+                            .frame(minHeight: AppSize.touchTarget)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityAddTraits(searchVM.activeTab == tab ? .isSelected : [])
                 }
@@ -169,8 +205,7 @@ struct HomeView: View {
                             EpisodeCard(
                                 episode: last.episode,
                                 podcastTitle: last.podcastTitle,
-                                podcastImage: last.podcastImage,
-                                compact: true
+                                podcastImage: last.podcastImage
                             )
                         }
                     }
@@ -191,6 +226,40 @@ struct HomeView: View {
                 .padding(.top, AppSpacing.lg)
                 .padding(.bottom, AppConstants.playerBottomPadding)
             }
+        } else if recentEpisodesFailed {
+            Spacer()
+
+            VStack(spacing: AppSpacing.md) {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.system(.largeTitle, weight: .light))
+                    .foregroundStyle(Color.appError)
+
+                Text("Fikk ikke hentet nye episoder")
+                    .font(.bodyText)
+                    .foregroundStyle(Color.appMutedForeground)
+
+                Text("Sjekk nettverkstilkoblingen og prøv igjen.")
+                    .font(.caption2Text)
+                    .foregroundStyle(Color.appMutedForeground)
+                    .multilineTextAlignment(.center)
+
+                Button {
+                    Task {
+                        hasLoadedRecent = false
+                        recentEpisodesFailed = false
+                        await loadRecentEpisodes()
+                    }
+                } label: {
+                    Text("Prøv igjen")
+                        .font(.buttonText)
+                        .foregroundStyle(Color.appAccent)
+                        .padding(.horizontal, AppSpacing.lg)
+                        .frame(minHeight: AppSize.touchTarget)
+                        .contentShape(Rectangle())
+                }
+            }
+
+            Spacer()
         } else if !hasLoadedRecent && !subscriptionVM.subscriptions.isEmpty {
             Spacer()
             ProgressView()
@@ -212,7 +281,7 @@ struct HomeView: View {
 
                 Text("Søk etter podkaster øverst på skjermen")
                     .font(.caption2Text)
-                    .foregroundStyle(Color.appBorder)
+                    .foregroundStyle(Color.appMutedForeground)
                     .multilineTextAlignment(.center)
             }
 
@@ -225,26 +294,55 @@ struct HomeView: View {
     private var searchResultsView: some View {
         ScrollView {
             LazyVStack(spacing: AppSpacing.sm) {
+                if searchVM.nrkUnavailable && !searchVM.isLoading {
+                    HStack(spacing: AppSpacing.sm) {
+                        Image(systemName: "exclamationmark.circle")
+                            .font(.caption)
+                        Text("Fikk ikke hentet NRK-katalogen. NRK-podkaster mangler i resultatene.")
+                            .font(.caption2Text)
+                    }
+                    .foregroundStyle(Color.appMutedForeground)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(AppSpacing.sm)
+                    .background(Color.appMuted)
+                    .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm))
+                }
+
                 if searchVM.isLoading {
                     ProgressView()
                         .tint(Color.appAccent)
                         .padding(.top, AppSpacing.xxxl)
                 } else if let error = searchVM.error {
-                    Text(error)
-                        .font(.bodyText)
-                        .foregroundStyle(Color.appError)
-                        .padding(.top, AppSpacing.xxxl)
+                    VStack(spacing: AppSpacing.md) {
+                        Text(error)
+                            .font(.bodyText)
+                            .foregroundStyle(Color.appError)
+                            .multilineTextAlignment(.center)
+
+                        Button {
+                            searchVM.retrySearch()
+                        } label: {
+                            Text("Prøv igjen")
+                                .font(.buttonText)
+                                .foregroundStyle(Color.appAccent)
+                                .padding(.horizontal, AppSpacing.lg)
+                                .frame(minHeight: AppSize.touchTarget)
+                                .contentShape(Rectangle())
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, AppSpacing.xxxl)
                 } else if searchVM.activeTab == .podcasts {
-                    if searchVM.podcasts.isEmpty && !searchVM.filters.query.isEmpty {
-                        NoResultsView()
+                    if searchVM.podcasts.isEmpty && hasSearchInput {
+                        NoResultsView(message: "Fant ingen podkaster")
                     } else {
                         ForEach(searchVM.podcasts) { podcast in
                             PodcastCard(podcast: podcast)
                         }
                     }
                 } else {
-                    if searchVM.episodes.isEmpty && !searchVM.filters.query.isEmpty {
-                        NoResultsView()
+                    if searchVM.episodes.isEmpty && hasSearchInput {
+                        NoResultsView(message: "Fant ingen episoder")
                     } else {
                         ForEach(searchVM.episodes) { episodeWithPodcast in
                             EpisodeCard(
@@ -254,15 +352,6 @@ struct HomeView: View {
                             )
                         }
                     }
-                }
-
-                if searchVM.nrkUnavailable {
-                    Text("Fikk ikke hentet NRK-katalogen. NRK-podkaster vises ikke i resultatene.")
-                        .font(.caption2Text)
-                        .foregroundStyle(Color.appMutedForeground)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, AppSpacing.md)
                 }
 
                 Text("Søk via Podcast Index")
@@ -285,10 +374,10 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
             HStack(spacing: AppSpacing.sm) {
                 Image(systemName: icon)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(.subheadline, weight: .medium))
                     .foregroundStyle(Color.appAccent)
                 Text(title)
-                    .font(.buttonText)
+                    .font(.sectionTitle)
                     .foregroundStyle(Color.appForeground)
             }
 
@@ -310,6 +399,7 @@ struct HomeView: View {
         }
 
         defer { hasLoadedRecent = true }
+        var anyFetchFailed = false
 
         let piSubs = subs.filter { !$0.podcastId.hasPrefix("nrk:") }
         let nrkSubs = subs.filter { $0.podcastId.hasPrefix("nrk:") }
@@ -321,8 +411,9 @@ struct HomeView: View {
             let feedIds = piSubs.compactMap { Int($0.podcastId) }
             let since = Int(Date().timeIntervalSince1970) - 7 * 24 * 3600
 
-            if !feedIds.isEmpty,
-               let response = try? await PodcastIndexAPI.shared.episodesByFeedIds(feedIds, max: 50, since: since) {
+            let response = try? await PodcastIndexAPI.shared.episodesByFeedIds(feedIds, max: 50, since: since)
+            if !feedIds.isEmpty, response == nil { anyFetchFailed = true }
+            if !feedIds.isEmpty, let response {
                 let subMap = Dictionary(uniqueKeysWithValues: piSubs.map { ($0.podcastId, $0) })
                 for piEpisode in response.items ?? [] {
                     let episode = PodcastTransform.transformEpisode(piEpisode)
@@ -347,7 +438,9 @@ struct HomeView: View {
             let batchResults = await withTaskGroup(of: [RecentEpisodeData].self) { group in
                 for slug in batchSlugs {
                     group.addTask {
-                        guard let result = try? await NRKPodcastService.shared.fetchEpisodes(nrkSlug: slug) else { return [] }
+                        guard let result = try? await NRKPodcastService.shared.fetchEpisodes(nrkSlug: slug) else {
+                            return []
+                        }
                         return result.episodes.compactMap { ep in
                             guard let date = iso8601BasicFormatter.date(from: ep.publishedAt), date > sevenDaysAgo else { return nil }
                             return RecentEpisodeData(
@@ -371,6 +464,7 @@ struct HomeView: View {
         results.sort { $0.episode.publishedAt > $1.episode.publishedAt }
 
         recentEpisodes = Array(results.prefix(20))
+        recentEpisodesFailed = anyFetchFailed && results.isEmpty
     }
 }
 
@@ -386,16 +480,20 @@ private struct RecentEpisodeData: Identifiable {
 // MARK: - No Results
 
 private struct NoResultsView: View {
+    /// Phrased for the active tab, so an episode search does not report
+    /// missing podcasts.
+    let message: String
+
     var body: some View {
         VStack(spacing: AppSpacing.md) {
             Spacer()
                 .frame(height: 60)
 
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 28, weight: .light))
-                .foregroundStyle(Color.appBorder)
+                .font(.system(.title, weight: .light))
+                .foregroundStyle(Color.appMutedForeground)
 
-            Text("Ingen resultater")
+            Text(message)
                 .font(.bodyText)
                 .foregroundStyle(Color.appMutedForeground)
         }

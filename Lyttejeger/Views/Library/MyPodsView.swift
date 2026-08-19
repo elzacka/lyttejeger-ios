@@ -25,7 +25,7 @@ struct MyPodsView: View {
 
                     Text("Gå til Hjem og søk etter podkaster")
                         .font(.caption2Text)
-                        .foregroundStyle(Color.appBorder)
+                        .foregroundStyle(Color.appMutedForeground)
                         .multilineTextAlignment(.center)
                 }
 
@@ -39,7 +39,7 @@ struct MyPodsView: View {
                                     CachedAsyncImage(url: sub.imageUrl, size: 100)
 
                                     Text(sub.title)
-                                        .font(.caption2Text)
+                                        .font(.smallText)
                                         .foregroundStyle(Color.appForeground)
                                         .lineLimit(2)
                                         .multilineTextAlignment(.center)

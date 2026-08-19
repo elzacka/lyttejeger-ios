@@ -26,12 +26,15 @@ struct QueueView: View {
                             .font(.caption2Text)
                             .foregroundStyle(Color.appMutedForeground)
                         Spacer()
-                        Button("Tøm") {
+                        Button {
                             showClearConfirmation = true
+                        } label: {
+                            Text("Tøm")
+                                .font(.smallText)
+                                .foregroundStyle(Color.appMutedForeground)
+                                .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                                .contentShape(Rectangle())
                         }
-                        .font(.buttonText)
-                        .foregroundStyle(Color.appError)
-                        .frame(minHeight: AppSize.touchTarget)
                     }
 
                     Button {
@@ -43,13 +46,14 @@ struct QueueView: View {
                     } label: {
                         HStack(spacing: AppSpacing.sm) {
                             Image(systemName: "play.fill")
-                                .font(.system(size: 12))
+                                .font(.system(.caption))
                             Text("Spill alle")
                                 .font(.buttonText)
                         }
                         .foregroundStyle(Color.appCard)
                         .frame(maxWidth: .infinity)
-                        .frame(height: AppSize.touchTarget)
+                        .frame(minHeight: AppSize.touchTarget)
+                        .padding(.vertical, AppSpacing.xs)
                         .background(Color.appAccent)
                         .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
                     }
@@ -75,7 +79,7 @@ struct QueueView: View {
 
                     Text("Trykk og hold på en episode for å legge den til")
                         .font(.caption2Text)
-                        .foregroundStyle(Color.appBorder)
+                        .foregroundStyle(Color.appMutedForeground)
                         .multilineTextAlignment(.center)
                 }
 
@@ -173,36 +177,41 @@ private struct QueueItemCard: View {
                 playerVM.play(episode: episode, podcastTitle: item.podcastTitle, podcastImage: item.podcastImage)
                 queueVM.remove(item)
             },
-            useDefaultContextMenu: false
+            useDefaultContextMenu: false,
+            // Queue actions live in the row's own menu button. A contextMenu
+            // here would make a long press ambiguous with the reorder drag.
+            menuContent: { AnyView(queueMenu) }
         )
-        .contextMenu {
-            Button {
-                playerVM.play(episode: episode, podcastTitle: item.podcastTitle, podcastImage: item.podcastImage)
-                queueVM.remove(item)
-            } label: {
-                Label("Spill", systemImage: "play.fill")
-            }
-            if let index = queueVM.items.firstIndex(where: { $0.episodeId == item.episodeId }) {
-                if index > 0 {
-                    Button {
-                        queueVM.move(from: IndexSet(integer: index), to: 0)
-                    } label: {
-                        Label("Flytt øverst", systemImage: "arrow.up.to.line")
-                    }
-                }
-                if index < queueVM.items.count - 1 {
-                    Button {
-                        queueVM.move(from: IndexSet(integer: index), to: queueVM.items.count)
-                    } label: {
-                        Label("Flytt nederst", systemImage: "arrow.down.to.line")
-                    }
+    }
+
+    @ViewBuilder
+    private var queueMenu: some View {
+        Button {
+            playerVM.play(episode: episode, podcastTitle: item.podcastTitle, podcastImage: item.podcastImage)
+            queueVM.remove(item)
+        } label: {
+            Label("Spill", systemImage: "play.fill")
+        }
+        if let index = queueVM.items.firstIndex(where: { $0.episodeId == item.episodeId }) {
+            if index > 0 {
+                Button {
+                    queueVM.move(from: IndexSet(integer: index), to: 0)
+                } label: {
+                    Label("Flytt øverst", systemImage: "arrow.up.to.line")
                 }
             }
-            Button(role: .destructive) {
-                queueVM.remove(item)
-            } label: {
-                Label("Fjern fra kø", systemImage: "trash")
+            if index < queueVM.items.count - 1 {
+                Button {
+                    queueVM.move(from: IndexSet(integer: index), to: queueVM.items.count)
+                } label: {
+                    Label("Flytt nederst", systemImage: "arrow.down.to.line")
+                }
             }
+        }
+        Button(role: .destructive) {
+            queueVM.remove(item)
+        } label: {
+            Label("Fjern fra kø", systemImage: "trash")
         }
     }
 }

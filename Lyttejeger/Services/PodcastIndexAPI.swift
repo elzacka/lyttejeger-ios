@@ -1,6 +1,5 @@
 import Foundation
 import CryptoKit
-import Security
 
 // MARK: - API Response Types
 
@@ -125,113 +124,6 @@ enum PodcastIndexError: Error, LocalizedError {
     }
 }
 
-// MARK: - Certificate Pinning
-
-private final class APIPinningDelegate: NSObject, URLSessionDelegate, Sendable {
-    // SHA256 hashes of the SubjectPublicKeyInfo (SPKI) for api.podcastindex.org
-    // Leaf = EC P-256, Intermediate = EC P-384.
-    // Pinning fails closed: if the API rotates to keys not in this set, all
-    // requests are rejected until an app update ships new pins. When adding a
-    // pin, compute it with:
-    //   openssl s_client -connect api.podcastindex.org:443 -showcerts \
-    //     | openssl x509 -pubkey -noout | openssl pkey -pubin -outform DER \
-    //     | openssl dgst -sha256 -binary | base64
-    private let pinnedKeyHashes: Set<String> = [
-        "HKcoICKuDsuKqYvsKrfFMFwTJu4X3mNmNKA/B+1ybho=",
-        "brzvtCELCIZUo4sD/qPX0ccRtPsd3DY6RfmxpOU9oB4=",
-    ]
-
-    // ASN.1 headers to reconstruct SubjectPublicKeyInfo from raw key data.
-    // SecKeyCopyExternalRepresentation returns the raw key (EC) or PKCS#1 (RSA);
-    // openssl hashes the full SPKI, so the matching header must be prepended.
-    private static let ecP256SPKIHeader: [UInt8] = [
-        0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
-        0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03,
-        0x42, 0x00
-    ]
-
-    private static let ecP384SPKIHeader: [UInt8] = [
-        0x30, 0x76, 0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
-        0x01, 0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22, 0x03, 0x62, 0x00
-    ]
-
-    private static let rsa2048SPKIHeader: [UInt8] = [
-        0x30, 0x82, 0x01, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
-        0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x01, 0x0f, 0x00
-    ]
-
-    private static let rsa4096SPKIHeader: [UInt8] = [
-        0x30, 0x82, 0x02, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
-        0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x02, 0x0f, 0x00
-    ]
-
-    /// Selects the SPKI header matching the key's type and size, so both EC
-    /// and RSA keys in the chain can be evaluated against the pin set.
-    private static func spkiHeader(for publicKey: SecKey) -> [UInt8]? {
-        guard let attributes = SecKeyCopyAttributes(publicKey) as? [CFString: Any],
-              let keyType = attributes[kSecAttrKeyType] as? String,
-              let keySize = attributes[kSecAttrKeySizeInBits] as? Int else { return nil }
-
-        if keyType == (kSecAttrKeyTypeECSECPrimeRandom as String) {
-            switch keySize {
-            case 256: return ecP256SPKIHeader
-            case 384: return ecP384SPKIHeader
-            default: return nil
-            }
-        }
-        if keyType == (kSecAttrKeyTypeRSA as String) {
-            switch keySize {
-            case 2048: return rsa2048SPKIHeader
-            case 4096: return rsa4096SPKIHeader
-            default: return nil
-            }
-        }
-        return nil
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        didReceive challenge: URLAuthenticationChallenge
-    ) async -> (URLSession.AuthChallengeDisposition, URLCredential?) {
-        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-              challenge.protectionSpace.host == "api.podcastindex.org",
-              let serverTrust = challenge.protectionSpace.serverTrust else {
-            return (.performDefaultHandling, nil)
-        }
-
-        let policy = SecPolicyCreateSSL(true, "api.podcastindex.org" as CFString)
-        SecTrustSetPolicies(serverTrust, policy)
-
-        var error: CFError?
-        guard SecTrustEvaluateWithError(serverTrust, &error) else {
-            return (.cancelAuthenticationChallenge, nil)
-        }
-
-        guard let chain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate] else {
-            return (.cancelAuthenticationChallenge, nil)
-        }
-        for certificate in chain {
-            guard let publicKey = SecCertificateCopyKey(certificate),
-                  let rawKeyData = SecKeyCopyExternalRepresentation(publicKey, nil) as? Data,
-                  let spkiHeader = Self.spkiHeader(for: publicKey) else {
-                continue
-            }
-
-            var spkiData = Data(spkiHeader)
-            spkiData.append(rawKeyData)
-
-            let hash = SHA256.hash(data: spkiData)
-            let hashBase64 = Data(hash).base64EncodedString()
-
-            if pinnedKeyHashes.contains(hashBase64) {
-                return (.useCredential, URLCredential(trust: serverTrust))
-            }
-        }
-
-        return (.cancelAuthenticationChallenge, nil)
-    }
-}
-
 // MARK: - API Client
 
 actor PodcastIndexAPI: PodcastSearching {
@@ -243,11 +135,20 @@ actor PodcastIndexAPI: PodcastSearching {
     private let maxRetries = AppConstants.apiMaxRetries
     private let decoder: JSONDecoder
 
-    private init() {
-        let config = URLSessionConfiguration.default
+    /// Internal so tests can inject a URLProtocol-backed configuration.
+    /// Production always goes through `.shared`, which takes the default.
+    init(configuration: URLSessionConfiguration = .default) {
+        let config = configuration
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
-        self.session = URLSession(configuration: config, delegate: APIPinningDelegate(), delegateQueue: nil)
+        // No certificate pinning. api.podcastindex.org uses Let's Encrypt, which
+        // rotates the leaf every 90 days and rotated its whole CA hierarchy in
+        // 2026. Pinning failed closed and silently broke search in v1.0.7 for
+        // every user until an app update shipped. Let's Encrypt advises against
+        // pinning their certificates for exactly this reason. ATS still enforces
+        // TLS 1.2+, a valid chain to a system trust anchor, and hostname
+        // validation; the endpoint carries public podcast metadata only.
+        self.session = URLSession(configuration: config)
         self.decoder = JSONDecoder()
     }
 
@@ -284,7 +185,8 @@ actor PodcastIndexAPI: PodcastSearching {
     private func apiRequest<T: Decodable>(
         endpoint: String,
         params: [String: String] = [:],
-        retryCount: Int = 0
+        retryCount: Int = 0,
+        retryServerErrors: Bool = true
     ) async throws -> T {
         guard var components = URLComponents(string: AppConstants.apiBase + endpoint) else {
             throw PodcastIndexError.invalidResponse
@@ -339,16 +241,26 @@ actor PodcastIndexAPI: PodcastSearching {
                         AppConstants.apiRetryAfterMaxSeconds
                     )
                     try await Task.sleep(for: .seconds(retryAfter))
-                    return try await apiRequest(endpoint: endpoint, params: params, retryCount: retryCount + 1)
+                    return try await apiRequest(
+                        endpoint: endpoint,
+                        params: params,
+                        retryCount: retryCount + 1,
+                        retryServerErrors: retryServerErrors
+                    )
                 }
                 throw PodcastIndexError.rateLimitExceeded
 
             case 500...599:
-                if retryCount < maxRetries {
+                if retryServerErrors && retryCount < maxRetries {
                     // Exponential backoff: 1s, 2s, 4s for retries 0, 1, 2
                     let delay = AppConstants.apiRetryBaseDelay * pow(2.0, Double(retryCount))
                     try await Task.sleep(for: .seconds(delay))
-                    return try await apiRequest(endpoint: endpoint, params: params, retryCount: retryCount + 1)
+                    return try await apiRequest(
+                        endpoint: endpoint,
+                        params: params,
+                        retryCount: retryCount + 1,
+                        retryServerErrors: retryServerErrors
+                    )
                 }
                 throw PodcastIndexError.serverError(httpResponse.statusCode)
 
@@ -439,12 +351,23 @@ actor PodcastIndexAPI: PodcastSearching {
 
     // MARK: - Browse/Trending
 
+    /// Trending feeds, optionally narrowed by language and category.
+    ///
+    /// A `cat` value the endpoint dislikes makes it answer 500 rather than an
+    /// empty list, and it does so every time — verified for Self-Improvement,
+    /// Tabletop, Role-Playing, Video-Games, Climate, How-To, Cryptocurrency
+    /// and Weather. Retrying a deterministic 500 only delays the caller's
+    /// fallback by seven seconds, so retries are off whenever `cat` is set.
     func trending(max: Int = 50, lang: String? = nil, cat: String? = nil, notcat: String? = nil) async throws -> SearchResponse {
         var params: [String: String] = ["max": String(max)]
         if let lang { params["lang"] = lang }
         if let cat { params["cat"] = cat }
         if let notcat { params["notcat"] = notcat }
-        return try await apiRequest(endpoint: "/podcasts/trending", params: params)
+        return try await apiRequest(
+            endpoint: "/podcasts/trending",
+            params: params,
+            retryServerErrors: cat == nil
+        )
     }
 
     func recentEpisodes(max: Int = 50, lang: String? = nil) async throws -> EpisodesResponse {
