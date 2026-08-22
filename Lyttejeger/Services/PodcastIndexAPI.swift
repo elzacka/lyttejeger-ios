@@ -219,8 +219,9 @@ actor PodcastIndexAPI: PodcastSearching {
             return try decoder.decode(T.self, from: cached)
         }
 
-        // Rate limit
-        await rateLimiter.acquire()
+        // Rate limit. Throws if this request was cancelled while queued, which
+        // also releases the slot it was holding.
+        try await rateLimiter.acquire()
 
         var request = URLRequest(url: url)
         for (key, value) in authHeaders() {

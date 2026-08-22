@@ -306,34 +306,68 @@ struct TTLCacheTests {
 struct RateLimiterTests {
 
     @Test("the first acquire is immediate")
-    func firstAcquireImmediate() async {
+    func firstAcquireImmediate() async throws {
         let limiter = RateLimiter(minInterval: 0.2)
         let clock = ContinuousClock()
         let start = clock.now
-        await limiter.acquire()
+        try await limiter.acquire()
         #expect(clock.now - start < .milliseconds(100))
     }
 
     @Test("a second immediate acquire waits out the interval")
-    func secondAcquireWaits() async {
+    func secondAcquireWaits() async throws {
         let limiter = RateLimiter(minInterval: 0.2)
-        await limiter.acquire()
+        try await limiter.acquire()
         let clock = ContinuousClock()
         let start = clock.now
-        await limiter.acquire()
+        try await limiter.acquire()
         #expect(clock.now - start > .milliseconds(120))
     }
 
     @Test("concurrent acquires are staggered, not burst")
-    func concurrentAcquiresStagger() async {
+    func concurrentAcquiresStagger() async throws {
         let limiter = RateLimiter(minInterval: 0.15)
         let clock = ContinuousClock()
         let start = clock.now
         async let first: Void = limiter.acquire()
         async let second: Void = limiter.acquire()
         async let third: Void = limiter.acquire()
-        _ = await (first, second, third)
+        _ = try await (first, second, third)
         #expect(clock.now - start > .milliseconds(200))
+    }
+
+    @Test("a cancelled acquire throws instead of letting the request through")
+    func cancelledAcquireThrows() async throws {
+        let limiter = RateLimiter(minInterval: 0.4)
+        try await limiter.acquire()
+
+        let waiting = Task { try await limiter.acquire() }
+        try await Task.sleep(for: .milliseconds(50))
+        waiting.cancel()
+
+        await #expect(throws: CancellationError.self) { try await waiting.value }
+    }
+
+    @Test("a cancelled acquire gives its slot back")
+    func cancelledAcquireReleasesItsSlot() async throws {
+        let limiter = RateLimiter(minInterval: 0.4)
+        try await limiter.acquire()
+
+        // Typing past a search cancels it. Before the fix this slot stayed
+        // claimed, so the next real request waited out a request that was
+        // never sent — roughly a second of dead time per abandoned search.
+        let abandoned = Task { try await limiter.acquire() }
+        try await Task.sleep(for: .milliseconds(50))
+        abandoned.cancel()
+        _ = try? await abandoned.value
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        try await limiter.acquire()
+        let waited = clock.now - start
+
+        // One interval from the first acquire, not two.
+        #expect(waited < .milliseconds(450))
     }
 }
 
