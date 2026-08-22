@@ -62,7 +62,11 @@ extension PodcastSearching {
 
 protocol NRKSearching: Sendable {
     func searchCatalog(query: String) async throws -> [Podcast]
-    func fetchEpisodes(nrkSlug: String) async throws -> NRKFeedResult
+    func fetchEpisodes(nrkSlug: String) async throws -> PodcastFeedResult
+}
+
+protocol RSSFeedFetching: Sendable {
+    func fetchEpisodes(feedUrl: String, podcastId: String) async throws -> PodcastFeedResult
 }
 
 protocol ChapterFetching: Sendable {

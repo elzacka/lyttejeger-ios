@@ -4,26 +4,43 @@ struct TranscriptPanel: View {
     @Environment(AudioPlayerViewModel.self) private var playerVM
     @State private var autoScroll = true
     @State private var lastScrolledSegmentId: String?
-    @State private var hasScrolledToInitial = false
+    /// Tracked per episode, not as a one-shot flag: the panel is reused across
+    /// episodes, so a plain "already scrolled" bool left every later episode
+    /// opening at the top instead of at the current position.
+    @State private var scrolledForEpisodeId: String?
+
+    /// Some publishers ship a transcript with text but no timings. It reads
+    /// fine, but nothing in it can follow playback, so the controls that
+    /// promise synchronisation are left out rather than shown doing nothing.
+    private var isSynced: Bool {
+        playerVM.transcript?.isSynced ?? true
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Button {
-                    autoScroll.toggle()
-                } label: {
-                    HStack(spacing: AppSpacing.xs) {
-                        Image(systemName: autoScroll ? "arrow.up.arrow.down" : "hand.draw")
-                            .font(.system(.subheadline))
-                        Text(autoScroll ? "Auto" : "Manuell")
-                            .font(.buttonText)
+                if isSynced {
+                    Button {
+                        autoScroll.toggle()
+                    } label: {
+                        HStack(spacing: AppSpacing.xs) {
+                            Image(systemName: autoScroll ? "arrow.up.arrow.down" : "hand.draw")
+                                .font(.system(.subheadline))
+                            Text(autoScroll ? "Auto" : "Manuell")
+                                .font(.buttonText)
+                        }
+                        .foregroundStyle(Color.appAccent)
+                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                        .contentShape(Rectangle())
                     }
-                    .foregroundStyle(Color.appAccent)
-                    .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
-                    .contentShape(Rectangle())
+                    .accessibilityLabel(autoScroll ? "Automatisk rulling på" : "Automatisk rulling av")
+                } else {
+                    Text("Uten tidskoder")
+                        .font(.buttonText)
+                        .foregroundStyle(Color.appMutedForeground)
+                        .frame(minHeight: AppSize.touchTarget)
                 }
-                .accessibilityLabel(autoScroll ? "Automatisk rulling på" : "Automatisk rulling av")
 
                 Spacer()
             }
@@ -39,7 +56,7 @@ struct TranscriptPanel: View {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if let transcript = playerVM.transcript {
                             ForEach(transcript.segments) { segment in
-                                let isCurrent = isCurrentSegment(segment)
+                                let isCurrent = isSynced && isCurrentSegment(segment)
 
                                 HStack(alignment: .top, spacing: AppSpacing.sm) {
                                     // Active indicator bar
@@ -57,7 +74,11 @@ struct TranscriptPanel: View {
                                         Text(segment.text)
                                             .font(.bodyText)
                                             .foregroundStyle(
-                                                isCurrent
+                                                // Without timings nothing is
+                                                // "current", so muting every
+                                                // line would mute the whole
+                                                // transcript.
+                                                isCurrent || !isSynced
                                                     ? Color.appForeground
                                                     : Color.appMutedForeground
                                             )
@@ -69,11 +90,12 @@ struct TranscriptPanel: View {
                                 .background(isCurrent ? Color.appAccent.opacity(0.1) : Color.clear)
                                 .id(segment.id)
                                 .onTapGesture {
+                                    guard isSynced else { return }
                                     playerVM.seek(to: segment.startTime)
                                 }
                                 .accessibilityLabel(segment.text)
-                                .accessibilityAddTraits(.isButton)
-                                .accessibilityHint("Trykk for å spole til dette tidspunktet")
+                                .accessibilityAddTraits(isSynced ? [.isButton] : [])
+                                .accessibilityHint(isSynced ? "Trykk for å spole til dette tidspunktet" : "")
 
                                 // Divider between segments
                                 if segment.id != transcript.segments.last?.id {
@@ -118,19 +140,18 @@ struct TranscriptPanel: View {
                     .padding(.vertical, AppSpacing.sm)
                 }
                 .onAppear {
-                    // Scroll to current segment when panel opens
-                    guard !hasScrolledToInitial,
-                          let transcript = playerVM.transcript,
-                          let current = TranscriptService.getCurrentSegment(transcript, at: playerVM.currentTime) else { return }
-                    hasScrolledToInitial = true
-                    lastScrolledSegmentId = current.id
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(100))
-                        proxy.scrollTo(current.id, anchor: .center)
-                    }
+                    scrollToCurrent(using: proxy)
+                }
+                .onChange(of: playerVM.transcript?.segments.first?.id) { _, _ in
+                    // A new episode's transcript just arrived. Reset so it
+                    // opens at the listener's position rather than the top.
+                    scrolledForEpisodeId = nil
+                    lastScrolledSegmentId = nil
+                    scrollToCurrent(using: proxy)
                 }
                 .onChange(of: playerVM.currentTime) { _, newTime in
-                    guard autoScroll,
+                    guard isSynced,
+                          autoScroll,
                           let transcript = playerVM.transcript,
                           let current = TranscriptService.getCurrentSegment(transcript, at: newTime),
                           current.id != lastScrolledSegmentId else { return }
@@ -150,6 +171,20 @@ struct TranscriptPanel: View {
 
     private func isCurrentSegment(_ segment: TranscriptSegment) -> Bool {
         playerVM.currentTime >= segment.startTime && playerVM.currentTime < segment.endTime
+    }
+
+    private func scrollToCurrent(using proxy: ScrollViewProxy) {
+        let episodeId = playerVM.currentEpisode?.id
+        guard isSynced,
+              scrolledForEpisodeId != episodeId,
+              let transcript = playerVM.transcript,
+              let current = TranscriptService.getCurrentSegment(transcript, at: playerVM.currentTime) else { return }
+        scrolledForEpisodeId = episodeId
+        lastScrolledSegmentId = current.id
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
+            proxy.scrollTo(current.id, anchor: .center)
+        }
     }
 }
 
