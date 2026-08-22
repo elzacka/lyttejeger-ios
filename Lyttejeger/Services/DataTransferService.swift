@@ -386,6 +386,16 @@ enum DataTransferService {
         for key in AppConstants.userDataDefaultsKeys {
             defaults.removeObject(forKey: key)
         }
+        deleteAllCookies()
+    }
+
+    /// Cookies are refused at launch, so this should find nothing. It runs
+    /// anyway: a store written by a build from before that guard would
+    /// otherwise survive "Slett alle data" indefinitely.
+    static func deleteAllCookies(in storage: HTTPCookieStorage = .shared) {
+        for cookie in storage.cookies ?? [] {
+            storage.deleteCookie(cookie)
+        }
     }
 
     /// Recognises an NRK feed URL and returns its slug.

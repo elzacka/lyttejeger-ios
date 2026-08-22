@@ -2920,6 +2920,29 @@ struct DeleteUserDefaultsTests {
         }
     }
 
+    /// Personvern.md says the app uses no cookies to identify or track you, but
+    /// URLSession accepted and persisted them by default, and they survived
+    /// "Slett alle data". They are refused at launch now; this covers the
+    /// stores written before that guard existed.
+    @Test("cookies are cleared too")
+    func clearsCookies() throws {
+        let storage = HTTPCookieStorage.sharedCookieStorage(
+            forGroupContainerIdentifier: "cookie-test-\(UUID().uuidString)"
+        )
+        let cookie = try #require(HTTPCookie(properties: [
+            .domain: "api.podcastindex.org",
+            .path: "/",
+            .name: "session",
+            .value: "noe",
+        ]))
+        storage.setCookie(cookie)
+        #expect(storage.cookies?.isEmpty == false)
+
+        DataTransferService.deleteAllCookies(in: storage)
+
+        #expect(storage.cookies?.isEmpty ?? true)
+    }
+
     @Test("keys the app does not own are left alone")
     func leavesForeignKeysAlone() {
         let (defaults, suiteName) = makeDefaults()
