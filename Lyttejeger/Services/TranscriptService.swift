@@ -38,8 +38,10 @@ actor TranscriptService: TranscriptFetching {
         ttl: TranscriptService.cacheTTL,
         maxSize: AppConstants.transcriptCacheMaxSize
     )
+    // Hours are 1-2 digits: several tools write "0:00:01,000" from hour zero
+    // onward, and a two-digit-only pattern rejected every cue in such files.
     private static let timestampRegex = try! NSRegularExpression(
-        pattern: "(\\d{2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})\\s*-->\\s*(\\d{2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})"
+        pattern: "(\\d{1,2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})\\s*-->\\s*(\\d{1,2}:)?(\\d{2}):(\\d{2})[.,](\\d{3})"
     )
 
     /// The three tags Podcasting 2.0 HTML transcripts are built from, matched in
@@ -226,14 +228,22 @@ actor TranscriptService: TranscriptFetching {
 
         // Try array format
         if let items = try? decoder.decode([JSONSegment].self, from: data), !items.isEmpty {
-            return Transcript(segments: items.map(Self.segment(from:)))
+            // Text-only JSON (no time fields anywhere) is prose, not cues.
+            // Defaulting every start to 0 and calling it synced pinned the
+            // highlight to the last paragraph and sent every tap-to-seek to
+            // 0:00 — the exact behaviour parseHTML's sawTime avoids.
+            return Transcript(
+                segments: items.map(Self.segment(from:)),
+                isSynced: items.contains { $0.startTime != nil || $0.start != nil }
+            )
         }
 
         // Try object with segments
         if let obj = try? decoder.decode(JSONTranscript.self, from: data), !obj.segments.isEmpty {
             return Transcript(
                 segments: obj.segments.map(Self.segment(from:)),
-                language: obj.language
+                language: obj.language,
+                isSynced: obj.segments.contains { $0.startTime != nil || $0.start != nil }
             )
         }
 
@@ -241,11 +251,11 @@ actor TranscriptService: TranscriptFetching {
     }
 
     private static func segment(from item: JSONSegment) -> TranscriptSegment {
-        let start = item.startTime ?? item.start ?? 0
+        let start = item.startTime?.value ?? item.start?.value ?? 0
         let speaker = item.speaker?.trimmingCharacters(in: .whitespacesAndNewlines)
         return TranscriptSegment(
             startTime: start,
-            endTime: item.endTime ?? item.end ?? start,
+            endTime: item.endTime?.value ?? item.end?.value ?? start,
             text: (item.body ?? item.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
             speaker: speaker?.isEmpty == false ? speaker : nil
         )
@@ -335,6 +345,12 @@ actor TranscriptService: TranscriptFetching {
         var currentText: [String] = []
         var currentSpeaker: String?
         var sawTimestamp = false
+        // A NOTE block runs until the next blank line, and cue identifiers can
+        // be any text, not just digits. Collecting text only while a cue is
+        // open keeps both out of the transcript instead of flushing them as
+        // spurious cues under the previous cue's times.
+        var inNote = false
+        var cueOpen = false
 
         func flush() {
             guard !currentText.isEmpty else { return }
@@ -353,14 +369,26 @@ actor TranscriptService: TranscriptFetching {
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-            if trimmed == "WEBVTT" || trimmed.isEmpty || trimmed.hasPrefix("NOTE") {
+            if trimmed.isEmpty {
                 flush()
+                inNote = false
+                cueOpen = false
+                continue
+            }
+
+            if inNote { continue }
+
+            if trimmed == "WEBVTT" || trimmed.hasPrefix("NOTE") {
+                flush()
+                cueOpen = false
+                inNote = trimmed.hasPrefix("NOTE")
                 continue
             }
 
             if let times = parseTimestampLine(trimmed) {
                 flush()
                 sawTimestamp = true
+                cueOpen = true
                 currentStart = times.0
                 currentEnd = times.1
                 continue
@@ -368,9 +396,10 @@ actor TranscriptService: TranscriptFetching {
 
             if trimmed.range(of: "^\\d+$", options: .regularExpression) != nil { continue }
 
-            // Only collect text once a timestamp has established when it plays.
-            // Otherwise any non-VTT file would be swallowed as one long cue.
-            guard sawTimestamp else { continue }
+            // Only collect text while a cue is open. Otherwise any non-VTT file
+            // would be swallowed as one long cue, and cue identifiers would
+            // leak in as spoken lines.
+            guard cueOpen else { continue }
             currentText.append(trimmed)
         }
 
@@ -596,10 +625,13 @@ actor TranscriptService: TranscriptFetching {
 // MARK: - JSON Decodable Types
 
 private struct JSONSegment: Decodable {
-    let startTime: Double?
-    let start: Double?
-    let endTime: Double?
-    let end: Double?
+    // FlexibleDouble for the same reason as ChapterEntry: some generators emit
+    // times as strings, and a strict Double rejected the whole file into the
+    // plain-text fallback.
+    let startTime: FlexibleDouble?
+    let start: FlexibleDouble?
+    let endTime: FlexibleDouble?
+    let end: FlexibleDouble?
     let body: String?
     let text: String?
     let speaker: String?

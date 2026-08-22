@@ -426,6 +426,7 @@ struct MenuView: View {
             await TranscriptService.shared.clearCache()
             await PodcastIndexAPI.shared.clearCache()
             await NRKPodcastService.shared.clearCache()
+            await RSSFeedService.shared.clearCache()
         }
     }
 }

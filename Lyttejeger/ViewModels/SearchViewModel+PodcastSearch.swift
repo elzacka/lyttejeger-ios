@@ -221,22 +221,24 @@ extension SearchViewModel {
             let titleLower = podcast.title.lowercased()
             let authorLower = podcast.author.lowercased()
 
-            // Title match (highest weight)
+            // Title match (highest weight). Word-boundary matching, like the
+            // episode ranking — a substring `contains` awarded these tiers to
+            // "rapport" for the query "app".
             if titleLower == queryLower {
                 score += 100
             } else if titleLower.hasPrefix(queryLower) {
                 score += 80
-            } else if titleLower.contains(queryLower) {
+            } else if SearchQueryParser.containsTerm(queryLower, in: titleLower) {
                 score += 60
             }
 
             // Individual term matches in title
-            for term in terms where titleLower.contains(term) {
+            for term in terms where SearchQueryParser.containsTerm(term, in: titleLower) {
                 score += 20
             }
 
             // Author match
-            if authorLower.contains(queryLower) {
+            if SearchQueryParser.containsTerm(queryLower, in: authorLower) {
                 score += 15
             }
 

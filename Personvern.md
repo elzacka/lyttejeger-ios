@@ -1,6 +1,6 @@
 # Personvern
 
-*Sist oppdatert: 18. august 2026*
+*Sist oppdatert: 22. august 2026*
 
 ## Kort oppsummert
 
@@ -13,10 +13,13 @@ Lyttejeger lagrer bare det som trengs for at appen skal fungere:
 - **Avspillingsposisjon** for episoder du har lyttet til
 - **Spillekø** med episoder du har lagt til
 - **Abonnementer** på podkaster du har valgt å følge
+- **Sist spilte episode**, så «Fortsett å lytte» vet hvor du slapp
+- **Avspillingshastighet** du har valgt for hver podkast
+- **Innstillinger** for hjemskjermen og køen
 
-Dette ligger i appens lokale database og synkroniseres ikke til noen sky- eller nettjeneste. Sletter du appen, slettes også all data.
+Dette ligger lokalt på enheten og synkroniseres ikke til noen sky- eller nettjeneste. Sletter du appen, slettes også all data.
 
-I tillegg holder appen midlertidige data i minnet, som transkripsjoner og kapittelmerker, for å svare raskere. Disse forsvinner når appen lukkes.
+For å svare raskere mellomlagrer appen innhold den har hentet. Transkripsjoner og kapittelmerker holdes bare i minnet og forsvinner når appen lukkes. Omslagsbilder og svar fra nettjenestene lagres på enheten en periode. Alt mellomlagret slettes med «Slett alle data», og når du sletter appen.
 
 ## Tredjepartstjenester
 
@@ -30,7 +33,7 @@ Appen henter NRK-katalogen og RSS-feeder fra et offentlig GitHub-repo. IP-adress
 
 ### Podkastutgivere
 
-Når du spiller av eller laster ned en episode, hentes lydfilen direkte fra utgiveren. IP-adressen din er synlig for dem.
+Når du spiller av eller laster ned en episode, hentes lydfilen direkte fra utgiveren. Appen henter også omslagsbilder, kapitler og transkripsjoner direkte fra utgiveren når du blar i podkaster og åpner spilleren, og feeder som ikke finnes i Podcast Index leses rett fra utgiverens server. IP-adressen din er synlig for dem ved disse forespørslene.
 
 ## Hva appen ikke gjør
 
@@ -50,7 +53,7 @@ Avspillingsposisjoner for ferdige episoder slettes automatisk etter 90 dager. Po
 
 Lyttejeger lagrer ingen personopplysninger sentralt. Det finnes derfor ingen sentral data å be om innsyn i, rette eller slette.
 
-Du kan når som helst eksportere alt appen har lagret, importere data du har med deg, eller slette alt. Alle tre ligger under **Dine data** i menyen i appen. Du kan også slette appen fra enheten.
+Du kan når som helst eksportere alt appen har lagret, importere data du har med deg, eller slette alt. Alle tre ligger under **Dataene dine** i menyen i appen. Du kan også slette appen fra enheten.
 
 Eksport gir deg enten en JSON-fil med alt, eller en OPML-fil med abonnementene dine. OPML kan leses av andre podkastapper, så du står fritt til å ta dataene dine med videre.
 

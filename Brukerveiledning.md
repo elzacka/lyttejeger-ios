@@ -1,6 +1,6 @@
 # Brukerveiledning
 
-*Sist oppdatert: 21. august 2026*
+*Sist oppdatert: 22. august 2026*
 
 ## Kom i gang
 
@@ -119,16 +119,17 @@ Trykk **Følg** for å legge podkasten til i følgelisten. Trykk **Slutt å føl
 
 ### Episodekort
 
-Hvert episodekort viser tittel, dato og lengde. Lange titler klippes etter to
-linjer. Kortet kan i tillegg vise:
+Hvert episodekort viser tittelen, og utenfor køen også dato og lengde. Lange
+titler klippes etter to linjer. Kortet kan i tillegg vise:
 
 - Avspillingsfremdrift (prosentlinje og prosent)
 - Avhakingsikon for ferdighørte episoder
 - Kapittelikon hvis episoden har kapitler
 - Tekstikon hvis episoden har transkripsjon
 
-Episodebeskrivelsen vises bare på podkastsiden. Trykk på beskrivelsen for å
-utvide den.
+På podkastsiden står episodebeskrivelsen rett under kortet – trykk på den for
+å utvide. På Hjem og i køen trykker du pilen på kortet, så står beskrivelsen
+der.
 
 I lister der episodene kommer fra flere podkaster – på Hjem, i søkeresultatene
 og i køen – er episodebildet avspillingsknappen, og du trykker på tittelen for
@@ -228,7 +229,7 @@ Trykk **Spill alle** for å starte avspilling fra første episode i køen. Når 
 
 ### Legge til
 
-Trykk menyknappen (**…**) på et episodekort og velg:
+Hold inne et episodekort og velg:
 
 - **Spill neste** – legger episoden først i køen
 - **Legg i kø** – legger episoden sist i køen
@@ -270,7 +271,7 @@ Menyfanen nederst til høyre åpner menyen. Der ligger alt som ikke hører hjemm
 
 - **Importer** – henter inn følgelisten fra en OPML-fil, eller alt fra en JSON-fil du har eksportert fra Lyttejeger
 - **Eksporter følgelisten din** – lager en OPML-fil med podkastene du følger
-- **Eksporter alle data** – lager en JSON-fil med følgeliste, spillekø og avspillingsposisjoner
+- **Eksporter alle data** – lager en JSON-fil med følgeliste, spillekø, avspillingsposisjoner, valgt hastighet per podkast og episoden du sist hørte på
 - **Slett alle data** – fjerner alle lokalt lagrede data. Krever bekreftelse, og kan ikke angres.
 
 **Flytte podkaster fra en annen app:** OPML er formatet podkastapper bruker for å utveksle følgelister. Eksporter listen din fra den andre appen, og importer filen her. Det virker begge veier, så du kan også ta abonnementene dine med videre til en annen app.

@@ -476,8 +476,9 @@ struct HomeView: View {
         defer { hasLoadedRecent = true }
         var anyFetchFailed = false
 
-        let piSubs = subs.filter { !$0.podcastId.hasPrefix("nrk:") }
+        let piSubs = subs.filter { Int($0.podcastId) != nil }
         let nrkSubs = subs.filter { $0.podcastId.hasPrefix("nrk:") }
+        let directSubs = subs.filter { $0.podcastId.hasPrefix("feed:") }
 
         var results: [RecentEpisodeData] = []
 
@@ -486,12 +487,13 @@ struct HomeView: View {
             let feedIds = piSubs.compactMap { Int($0.podcastId) }
             let since = Int(Date().timeIntervalSince1970) - 7 * 24 * 3600
 
-            let response = try? await PodcastIndexAPI.shared.episodesByFeedIds(feedIds, max: 50, since: since)
-            if !feedIds.isEmpty, response == nil { anyFetchFailed = true }
-            if !feedIds.isEmpty, let response {
+            do {
+                let response = try await PodcastIndexAPI.shared.episodesByFeedIds(feedIds, max: 50, since: since)
+                // Up to 50 descriptions are HTML-stripped here; per-item on the
+                // main actor that work landed on the frame showing the section.
+                let episodes = await PodcastTransform.transformEpisodes(offMain: response.items ?? [])
                 let subMap = Dictionary(uniqueKeysWithValues: piSubs.map { ($0.podcastId, $0) })
-                for piEpisode in response.items ?? [] {
-                    let episode = PodcastTransform.transformEpisode(piEpisode)
+                for episode in episodes {
                     if let sub = subMap[episode.podcastId] {
                         results.append(RecentEpisodeData(
                             episode: episode,
@@ -500,22 +502,43 @@ struct HomeView: View {
                         ))
                     }
                 }
+            } catch is CancellationError {
+                return
+            } catch let error as URLError where error.code == .cancelled {
+                // Leaving the screen cancels the task; that is not a network
+                // failure and must not publish the failure state.
+                return
+            } catch {
+                anyFetchFailed = true
             }
         }
 
-        // NRK subscriptions (concurrent with limit)
+        // NRK and direct-feed subscriptions both come back as a
+        // PodcastFeedResult, fetched concurrently in capped batches (same as
+        // BackgroundRefreshService). Direct feeds used to be silently absent
+        // from this section.
         let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 3600)
 
-        // Batch fetches to cap concurrency, same as BackgroundRefreshService
-        let nrkSlugList = nrkSubs.map { String($0.podcastId.dropFirst(4)) }
-        for batchStart in stride(from: 0, to: nrkSlugList.count, by: AppConstants.nrkConcurrencyLimit) {
-            let batchSlugs = Array(nrkSlugList[batchStart..<min(batchStart + AppConstants.nrkConcurrencyLimit, nrkSlugList.count)])
-            let batchResults = await withTaskGroup(of: [RecentEpisodeData].self) { group in
-                for slug in batchSlugs {
+        var feedJobs: [@Sendable () async throws -> PodcastFeedResult] = nrkSubs.map { sub in
+            let slug = String(sub.podcastId.dropFirst(4))
+            return { try await NRKPodcastService.shared.fetchEpisodes(nrkSlug: slug) }
+        }
+        feedJobs += directSubs.map { sub in
+            let feedUrl = sub.feedUrl.isEmpty ? String(sub.podcastId.dropFirst(5)) : sub.feedUrl
+            let podcastId = sub.podcastId
+            return { try await RSSFeedService.shared.fetchEpisodes(feedUrl: feedUrl, podcastId: podcastId) }
+        }
+
+        for batchStart in stride(from: 0, to: feedJobs.count, by: AppConstants.nrkConcurrencyLimit) {
+            let batch = Array(feedJobs[batchStart..<min(batchStart + AppConstants.nrkConcurrencyLimit, feedJobs.count)])
+            let (batchResults, batchFailed) = await withTaskGroup(
+                of: [RecentEpisodeData]?.self
+            ) { group -> ([RecentEpisodeData], Bool) in
+                for job in batch {
                     group.addTask {
-                        guard let result = try? await NRKPodcastService.shared.fetchEpisodes(nrkSlug: slug) else {
-                            return []
-                        }
+                        // nil marks a failed fetch: an all-NRK home screen used
+                        // to swallow every failure and just look empty.
+                        guard let result = try? await job() else { return nil }
                         return result.episodes.compactMap { ep in
                             guard let date = iso8601BasicFormatter.date(from: ep.publishedAt), date > sevenDaysAgo else { return nil }
                             return RecentEpisodeData(
@@ -527,13 +550,22 @@ struct HomeView: View {
                     }
                 }
                 var collected: [RecentEpisodeData] = []
-                for await batch in group {
-                    collected.append(contentsOf: batch)
+                var failed = false
+                for await episodes in group {
+                    if let episodes {
+                        collected.append(contentsOf: episodes)
+                    } else {
+                        failed = true
+                    }
                 }
-                return collected
+                return (collected, failed)
             }
+            guard !Task.isCancelled else { return }
+            if batchFailed { anyFetchFailed = true }
             results.append(contentsOf: batchResults)
         }
+
+        guard !Task.isCancelled else { return }
 
         // Sort newest first (ISO8601 strings sort lexicographically)
         results.sort { $0.episode.publishedAt > $1.episode.publishedAt }

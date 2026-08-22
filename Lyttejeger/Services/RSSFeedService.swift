@@ -50,6 +50,12 @@ actor RSSFeedService: RSSFeedFetching {
             throw RSSFeedError.fetchFailed
         }
 
+        // The URL is untrusted (imported OPML), so cap the bytes before parsing —
+        // same rule as ChapterService/TranscriptService.
+        guard data.count <= AppConstants.maxFeedSize else {
+            throw RSSFeedError.fetchFailed
+        }
+
         let result = PodcastRSSParser(data: data, podcastId: podcastId).parse()
 
         // Only cache a real parse, so a transient failure does not lock the

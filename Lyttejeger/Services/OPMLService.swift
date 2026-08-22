@@ -22,7 +22,13 @@ enum OPMLService {
     /// Accepts the loose shapes real exports use: `xmlUrl` is the feed, the
     /// label may be in `text` or `title`, outlines may be nested under
     /// category folders, and non-podcast outlines (no `xmlUrl`) are skipped.
-    static func parse(_ data: Data) -> [OPMLEntry] {
+    ///
+    /// `completed` is false when the XML parser halted before the end of the
+    /// document — a truncated file, or an unescaped `&` mid-file. The entries
+    /// collected up to that point are only a prefix of the file, and importing
+    /// them as if they were everything told the user a partial migration was
+    /// complete.
+    static func parse(_ data: Data) -> (entries: [OPMLEntry], completed: Bool) {
         let parser = OPMLParser(data: data)
         return parser.parse()
     }
@@ -46,9 +52,17 @@ enum OPMLService {
             "  <body>",
         ]
 
-        for subscription in subscriptions where !subscription.feedUrl.isEmpty {
+        for subscription in subscriptions {
+            // NRK podcasts followed via a navigation stub carry no feed URL,
+            // but their slug is the id, so the URL can be synthesized. Without
+            // this every such row silently vanished from the export.
+            var feedUrl = subscription.feedUrl
+            if feedUrl.isEmpty, subscription.podcastId.hasPrefix("nrk:") {
+                feedUrl = Podcast.nrkFeedUrl(slug: String(subscription.podcastId.dropFirst(4)))
+            }
+            guard !feedUrl.isEmpty else { continue }
             let title = escape(subscription.title)
-            let url = escape(subscription.feedUrl)
+            let url = escape(feedUrl)
             lines.append(
                 #"    <outline type="rss" text="\#(title)" title="\#(title)" xmlUrl="\#(url)"/>"#
             )
@@ -82,11 +96,14 @@ private final class OPMLParser: NSObject, XMLParserDelegate {
         self.data = data
     }
 
-    func parse() -> [OPMLEntry] {
+    func parse() -> (entries: [OPMLEntry], completed: Bool) {
         let parser = XMLParser(data: data)
         parser.delegate = self
-        parser.parse()
-        return entries
+        // XMLParser halts on the first well-formedness error, keeping whatever
+        // was collected before it. That must be reported, not returned as if
+        // it were the whole file.
+        let completed = parser.parse()
+        return (entries, completed)
     }
 
     func parser(

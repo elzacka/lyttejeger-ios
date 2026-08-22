@@ -26,7 +26,9 @@ struct AudioPlayerSheet: View {
             ),
             focusEpisodeId: episode.id
         )
-        playerVM.isExpanded = false
+        // Dismissal happens in ContentView's onChange, which needs to read
+        // isExpanded first: clearing it here made the dismiss delay dead code,
+        // because onChange runs on the next view update.
     }
 
     var body: some View {
@@ -126,7 +128,7 @@ struct AudioPlayerSheet: View {
                             .shadow(color: .black.opacity(0.15), radius: 20, y: 10)
                     }
                     .buttonStyle(CardButtonStyle())
-                    .accessibilityLabel("Vis podcast")
+                    .accessibilityLabel("Vis podkast")
                 }
 
                 // Title & podcast
@@ -295,10 +297,16 @@ struct AudioPlayerSheet: View {
 
     private func downloadAndShare() async {
         // https only — ATS blocks plain-http URLSession transfers anyway
-        // (NSAllowsArbitraryLoadsForMedia covers only AV playback)
+        // (NSAllowsArbitraryLoadsForMedia covers only AV playback). Plain-http
+        // episodes play fine through that exception, so this path is reachable
+        // and must say why nothing happens instead of ignoring the tap.
         guard let episode = playerVM.currentEpisode,
               let url = URL(string: episode.audioUrl),
-              url.scheme == "https" else { return }
+              url.scheme == "https" else {
+            downloadError = "Denne episoden tilbys ikke over en sikker tilkobling og kan derfor ikke eksporteres."
+            showDownloadError = true
+            return
+        }
 
         isDownloading = true
         defer { isDownloading = false }

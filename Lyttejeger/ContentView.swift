@@ -184,8 +184,13 @@ struct ContentView: View {
             // the delay, and forced the Kø tab back to Hjem behind their back.
             let originTab = selectedTab
             // Only the player sheet needs the delay — it has to finish
-            // dismissing first. A tap on the mini bar can push immediately.
+            // dismissing first. The sheet leaves the dismissal to this
+            // handler: when it cleared isExpanded itself, this read always
+            // saw false and the delay never applied.
             let needsDismissDelay = playerVM.isExpanded
+            if needsDismissDelay {
+                playerVM.isExpanded = false
+            }
 
             routeNavigationTask?.cancel()
             routeNavigationTask = Task { @MainActor in

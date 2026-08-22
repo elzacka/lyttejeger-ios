@@ -140,6 +140,14 @@ final class AudioService: AudioPlaying {
 
     func play(episode: Episode, podcastTitle: String?, podcastImage: String?) {
         guard let url = URL(string: episode.audioUrl) else {
+            // Same cleanup as a load failure. Setting hasError while the
+            // previous episode kept playing froze the transport (togglePlayPause
+            // guards on hasError) against audio that was still running, and the
+            // error state described the wrong episode.
+            stop()
+            currentEpisode = episode
+            currentPodcastTitle = podcastTitle
+            currentPodcastImage = podcastImage
             hasError = true
             return
         }
@@ -219,6 +227,9 @@ final class AudioService: AudioPlaying {
                 guard let self else { return }
                 self.isPlaying = false
                 self.currentTime = self.duration
+                // Without this the lock screen keeps extrapolating elapsed
+                // time past the end at the last written playback rate.
+                self.updateNowPlaying()
             }
         }
     }
@@ -285,7 +296,9 @@ final class AudioService: AudioPlaying {
     }
 
     func skipForward() {
-        let newTime = min(duration, currentTime + AppConstants.skipForward)
+        // duration is 0 while unknown; min(0, target) restarted the episode.
+        let target = currentTime + AppConstants.skipForward
+        let newTime = duration > 0 ? min(duration, target) : target
         seek(to: newTime)
     }
 

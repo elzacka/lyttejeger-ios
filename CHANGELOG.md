@@ -5,20 +5,36 @@ den som limes inn i «What's New in This Version» i App Store Connect.
 
 Oppdater denne fila sammen med endringen, ikke når du skal slippe.
 
-## Ikke sluppet ennå
+## 1.0.8
 
 **Se hva en episode handler om med ett trykk.** Kortene under Nyeste på
 hjemskjermen og i køen har fått en pil. Trykk den, så står beskrivelsen der.
 Før måtte du innom podkastsiden og lete opp episoden.
 
 **Roligere kø.** Lengde og dato har flyttet inn i den utvidede delen, så
-listen viser bare det du trenger for å finne fram.
+listen viser bare det du trenger for å finne fram. Køen oppfører seg også
+bedre: en episode du startet utenfor køen spilles ikke på nytt når den er
+ferdig, og når søvntimeren stopper avspillingen, starter ikke neste episode
+i køen etterpå.
 
 **Jevn følgeliste.** Omslagene står nå i rette rader uansett hvor lange
 podkastnavnene er. Ved store tekststørrelser vises de i én kolonne, så hele
 navnet får plass.
 
-## 1.0.8
+**Riktigere søk og lister.** Hastigheten i spilleren viser riktig verdi ved
+1,25x og 1,75x. Filteret «Fotball» finner fotball, ikke amerikansk fotball.
+Skriver du -«frase» i søk, utelates treffene i stedet for å kreves. Datoer
+følger kalenderdagen, så en episode fra i går kveld står som «I går», og
+korte episoder viser sekunder i stedet for «0 min».
+
+**Nyeste viser alt du følger.** Også podkaster du har importert fra andre
+apper, og som ikke finnes i podkastkatalogen, dukker nå opp under Nyeste.
+
+**Tryggere sikkerhetskopi og import.** Sikkerhetskopien tar nå med valgt
+hastighet per podkast, «Fortsett å lytte» og riktige innstillinger. En
+ødelagt OPML-fil avvises med beskjed i stedet for å importere en del av den
+i stillhet, nettverksfeil under import gjør ikke lenger podkaster varig uten
+bilde og info, og NRK-podkaster du følger blir med i OPML-eksporten.
 
 **Ny meny.** Alt som før lå spredt over tre skjermer ligger nå på ett sted:
 innstillinger for hjemskjermen, sikkerhetskopi, sletting av data og informasjon

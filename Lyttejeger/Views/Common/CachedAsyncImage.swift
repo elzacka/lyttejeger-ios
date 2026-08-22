@@ -106,6 +106,13 @@ struct CachedAsyncImage: View {
 
         do {
             let (data, _) = try await Self.imageSession.data(from: imageUrl)
+            // Artwork URLs come from feeds; cap the bytes like every other
+            // feed-controlled fetch before handing them to the decoder.
+            guard data.count <= AppConstants.maxArtworkSize else {
+                isLoading = false
+                hasFailed = true
+                return
+            }
             if let image = await Self.prepared(from: data, targetPixels: targetPixels) {
                 Self.cache.setObject(image, forKey: cacheKey, cost: Self.cost(of: image))
                 uiImage = image

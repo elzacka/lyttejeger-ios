@@ -81,7 +81,9 @@ struct PlayerControls: View {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     playerVM.cycleSpeed()
                 } label: {
-                    Text(String(format: "%.2gx", playerVM.playbackSpeed))
+                    // %.4g, not %.2g: %g counts significant digits, so two
+                    // digits rendered 1.25 as "1.2" and 1.75 as "1.8".
+                    Text(String(format: "%.4gx", playerVM.playbackSpeed))
                         .font(.speedText)
                         .foregroundStyle(Color.appMutedForeground)
                         .lineLimit(1)
@@ -90,7 +92,7 @@ struct PlayerControls: View {
                         .frame(minHeight: AppSize.touchTarget)
                         .contentShape(Rectangle())
                 }
-                .accessibilityLabel("Hastighet \(String(format: "%.2g", playerVM.playbackSpeed)) ganger")
+                .accessibilityLabel("Hastighet \(String(format: "%.4g", playerVM.playbackSpeed)) ganger")
                 .accessibilityHint("Trykk for å endre avspillingshastighet")
 
                 // Skip back

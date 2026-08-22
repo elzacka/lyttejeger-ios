@@ -22,7 +22,7 @@ actor NRKPodcastService: NRKSearching {
     // NRK data comes from the community project sindrel/nrk-pod-feeds — a
     // third-party dependency with no SLA. Failures must degrade gracefully.
     private static let catalogURL = "https://raw.githubusercontent.com/sindrel/nrk-pod-feeds/master/podcasts.json"
-    private static let feedBaseURL = "https://sindrel.github.io/nrk-pod-feeds/rss/"
+    private static let feedBaseURL = AppConstants.nrkFeedBaseURL
 
     private static let catalogTTL: TimeInterval = 24 * 60 * 60   // 24 hours
     private static let feedTTL: TimeInterval = 30 * 60            // 30 minutes

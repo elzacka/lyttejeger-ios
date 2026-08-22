@@ -28,12 +28,19 @@ final class SubscriptionViewModel {
         guard let modelContext else { return }
         guard !isSubscribed(podcast.id) else { return }
 
+        // NRK podcasts reached through a navigation stub carry no feed URL,
+        // and a subscription without one is invisible to OPML export. The
+        // slug is the id, so the URL can be synthesized here.
+        var feedUrl = podcast.feedUrl
+        if feedUrl.isEmpty, let slug = podcast.nrkSlug {
+            feedUrl = Podcast.nrkFeedUrl(slug: slug)
+        }
         let sub = Subscription(
             podcastId: podcast.id,
             title: podcast.title,
             author: podcast.author,
             imageUrl: podcast.imageUrl,
-            feedUrl: podcast.feedUrl
+            feedUrl: feedUrl
         )
         modelContext.insert(sub)
         do {

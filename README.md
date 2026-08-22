@@ -76,11 +76,11 @@ Lyttejeger/
   Utilities/       Hastighetsbegrenser, søkeparser, tidsformatering, TTL-cache
   ViewModels/      Søk, kø, abonnementer, spiller, fremdrift
   Views/
-    Common/        Gjenbrukbare komponenter (bildecache, meny, kort, menyrader)
+    Common/        Gjenbrukbare komponenter (bildecache, meny, episodekort, menyrader)
     Library/       Følgeliste, kø
     Player/        Spiller, kontroller, kapitler, transkripsjoner
     Podcast/       Podkastdetaljer
-    Search/        Hjem, søk, episodekort, filtre
+    Search/        Hjem, søk, podkastkort, filtre
   Preview Content/ Forhåndsvisningsdata for SwiftUI Previews
 LyttejegerTests/   Enhetstester (Swift Testing)
 LyttejegerUITests/ Grensesnittstester (XCUITest)

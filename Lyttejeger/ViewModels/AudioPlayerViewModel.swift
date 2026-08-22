@@ -93,6 +93,12 @@ final class AudioPlayerViewModel {
     var sleepTimerMinutes: Int = 0
     var sleepTimerEndTime: Date?
     var sleepTimerRemaining: TimeInterval = 0
+    /// True from the moment the sleep timer pauses playback until the listener
+    /// deliberately starts something. `completeSleepFade` clears the timer
+    /// state before `checkAutoAdvance` runs in the same tick, so without this
+    /// flag a finished episode plus a non-empty queue meant the next episode
+    /// started at full volume three seconds after the timer put you to sleep.
+    private var pausedBySleepTimer = false
 
     // Chapters
     var chapters: [Chapter] = []
@@ -141,6 +147,7 @@ final class AudioPlayerViewModel {
 
     func play(episode: Episode, podcastTitle: String?, podcastImage: String?) {
         // Cancel any pending auto-advance or fade
+        pausedBySleepTimer = false
         autoAdvanceTask?.cancel()
         autoAdvanceTask = nil
         fadeTask?.cancel()
@@ -272,6 +279,7 @@ final class AudioPlayerViewModel {
 
     func stop() {
         savePosition()
+        pausedBySleepTimer = false
         autoAdvanceTask?.cancel()
         autoAdvanceTask = nil
         fadeTask?.cancel()
@@ -300,6 +308,7 @@ final class AudioPlayerViewModel {
     }
 
     func togglePlayPause() {
+        pausedBySleepTimer = false
         if !isPlaying, let pausedAt = audioService.pausedAt {
             let target = Self.smartResumePosition(currentTime, pausedSince: pausedAt)
             if target < currentTime {
@@ -342,8 +351,13 @@ final class AudioPlayerViewModel {
         sleepTimerMinutes = minutes
         if minutes > 0 {
             sleepTimerEndTime = Date().addingTimeInterval(TimeInterval(minutes * 60))
+            // The label reads this; checkSleepTimer only refreshes it every
+            // save-timer tick, so without seeding it here the player showed
+            // the previous timer's leftover minutes for up to five seconds.
+            sleepTimerRemaining = TimeInterval(minutes * 60)
         } else {
             sleepTimerEndTime = nil
+            sleepTimerRemaining = 0
         }
     }
 
@@ -388,6 +402,7 @@ final class AudioPlayerViewModel {
     private func completeSleepFade() {
         fadeTask?.cancel()
         fadeTask = nil
+        pausedBySleepTimer = true
         audioService.pause()
         audioService.setVolume(1.0)
         isFadingOut = false
@@ -476,7 +491,11 @@ final class AudioPlayerViewModel {
     // MARK: - Auto-Advance
 
     func checkAutoAdvance() {
+        // pausedBySleepTimer, not just sleepTimerMinutes: completeSleepFade
+        // resets the timer state to 0 before this runs, so the minutes check
+        // alone cannot tell "episode ended" from "sleep timer just fired".
         guard !isPlaying,
+              !pausedBySleepTimer,
               duration > 0,
               currentTime >= duration - 1,
               sleepTimerMinutes == 0,

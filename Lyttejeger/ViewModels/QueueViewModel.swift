@@ -147,8 +147,19 @@ final class QueueViewModel {
     /// from the queue. With the setting on, the episode that just finished is
     /// still sitting there, so popping would replay it — and remove it, which
     /// is the one thing the setting promises not to do.
+    ///
+    /// With the setting off, the finished episode can *also* still be at the
+    /// head: `removeAfterPlay` only runs when playback starts from a queue row,
+    /// so an episode started from Hjem or a podcast page stays queued. Popping
+    /// then replayed it from the top; the row is removed first instead, which
+    /// is what `removeAfterPlay` would have done at play time.
     func nextAfterPlaying(episodeId: String?) -> (episode: Episode, podcastTitle: String, podcastImage: String?)? {
-        guard keepsPlayedEpisodes else { return popFirst() }
+        guard keepsPlayedEpisodes else {
+            if let episodeId, let played = items.first(where: { $0.episodeId == episodeId }) {
+                remove(played)
+            }
+            return popFirst()
+        }
         return itemAfter(episodeId: episodeId)
     }
 

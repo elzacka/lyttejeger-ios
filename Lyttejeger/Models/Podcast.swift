@@ -21,6 +21,13 @@ struct Podcast: Identifiable, Hashable, Sendable {
     /// The NRK RSS slug (e.g. "abels_taarn"), or nil if not an NRK podcast.
     var nrkSlug: String? { isNRKFeed ? String(id.dropFirst(4)) : nil }
 
+    /// The RSS URL for an NRK slug. NRK podcasts reached through navigation
+    /// stubs have an empty `feedUrl`, so subscribe and OPML export synthesize
+    /// it from the slug instead of dropping the feed.
+    static func nrkFeedUrl(slug: String) -> String {
+        AppConstants.nrkFeedBaseURL + slug + ".xml"
+    }
+
     /// True for a podcast that exists only as a raw feed URL, with no
     /// Podcast Index entry. OPML import creates these when a feed in the
     /// file is unknown to the index.

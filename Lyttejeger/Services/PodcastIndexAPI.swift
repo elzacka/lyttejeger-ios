@@ -95,6 +95,25 @@ struct PodcastByIdResponse: Decodable, Sendable {
     let status: String?
     let feed: PodcastIndexFeed?
     let description: String?
+
+    init(status: String?, feed: PodcastIndexFeed?, description: String?) {
+        self.status = status
+        self.feed = feed
+        self.description = description
+    }
+
+    private enum CodingKeys: String, CodingKey { case status, feed, description }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        // An unknown feed comes back as "feed": [] — an empty array where the
+        // object normally sits. Decode leniently so "unknown" is a nil feed
+        // rather than a decode error indistinguishable from a transport
+        // failure; OPML import must treat those two cases differently.
+        feed = try? container.decodeIfPresent(PodcastIndexFeed.self, forKey: .feed)
+    }
 }
 
 // MARK: - Search Options

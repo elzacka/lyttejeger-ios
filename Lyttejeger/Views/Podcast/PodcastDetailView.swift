@@ -294,7 +294,7 @@ struct PodcastDetailView: View {
 
     private func loadPodcastIndexEpisodes() async {
         guard let feedId = Int(podcast.id) else {
-            error = "Ugyldig podcast-ID"
+            error = "Ugyldig podkast-ID"
             isLoading = false
             return
         }

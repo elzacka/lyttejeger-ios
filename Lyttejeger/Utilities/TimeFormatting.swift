@@ -26,6 +26,8 @@ func formatDuration(_ seconds: TimeInterval) -> String {
     if hours > 0 {
         return minutes > 0 ? "\(hours) t \(minutes) min" : "\(hours) t"
     }
+    // A 45-second trailer is not "0 min".
+    guard totalMinutes > 0 else { return "\(Int(seconds)) sek" }
     return "\(totalMinutes) min"
 }
 
@@ -54,28 +56,35 @@ func formatShortDate(_ dateString: String) -> String? {
     return shortDateFormatter.string(from: date)
 }
 
-/// Format relative date (e.g., "I dag", "I går", "3 dager siden")
+/// Format relative date (e.g., "I dag", "I går", "for 3 dager siden")
 func formatRelativeDate(_ dateString: String) -> String {
     guard let date = iso8601Formatter.date(from: dateString) ?? iso8601BasicFormatter.date(from: dateString) else {
         return dateString
     }
 
+    // Compare calendar days, not 24-hour periods: an episode published
+    // yesterday evening is "I går" this morning, even though less than a
+    // day has elapsed.
     let calendar = Calendar.current
-    let now = Date()
-    let components = calendar.dateComponents([.day], from: date, to: now)
+    let components = calendar.dateComponents(
+        [.day],
+        from: calendar.startOfDay(for: date),
+        to: calendar.startOfDay(for: Date())
+    )
 
     guard let days = components.day else { return dateString }
 
     switch days {
-    case 0: return "I dag"
+    // Future-dated feeds happen; "I dag" beats "0 år siden".
+    case ...0: return "I dag"
     case 1: return "I går"
-    case 2...6: return "\(days) dager siden"
-    case 7...13: return "1 uke siden"
-    case 14...29: return "\(days / 7) uker siden"
-    case 30...59: return "1 måned siden"
-    case 60...364: return "\(days / 30) måneder siden"
+    case 2...6: return "for \(days) dager siden"
+    case 7...13: return "for 1 uke siden"
+    case 14...29: return "for \(days / 7) uker siden"
+    case 30...59: return "for 1 måned siden"
+    case 60...364: return "for \(days / 30) måneder siden"
     default:
         let years = days / 365
-        return years == 1 ? "1 år siden" : "\(years) år siden"
+        return years == 1 ? "for 1 år siden" : "for \(years) år siden"
     }
 }

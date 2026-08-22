@@ -20,11 +20,13 @@ struct ImportSummary: Sendable, Equatable {
 enum ImportError: Error, LocalizedError {
     case unreadableFile
     case unrecognisedFormat
+    case malformedFile
 
     var errorDescription: String? {
         switch self {
         case .unreadableFile: "Kunne ikke lese filen"
         case .unrecognisedFormat: "Filformatet er ikke støttet"
+        case .malformedFile: "Filen er skadet eller ufullstendig, så ingenting ble importert"
         }
     }
 }
@@ -79,7 +81,7 @@ enum DataTransferService {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
 
-        let export: [String: Any] = [
+        var export: [String: Any] = [
             "app": "Lyttejeger",
             "versjon": AppConstants.appVersion,
             "eksportert": formatter.string(from: exportedAt),
@@ -127,12 +129,31 @@ enum DataTransferService {
             },
             // Every toggle the user can set. A new one belongs here and in
             // applySettings below, so export and import stay symmetric.
+            // Read through the effective default: `@AppStorage` never persists
+            // its default, so a raw bool(forKey:) exported "false" for toggles
+            // the user had left on.
             "innstillinger": [
-                "visFortsettÅLytte": UserDefaults.standard.bool(forKey: AppConstants.showLastPlayedKey),
-                "visNyttFraAbonnementer": UserDefaults.standard.bool(forKey: AppConstants.showNewFromSubscriptionsKey),
-                "beholdEpisoderIKoen": UserDefaults.standard.bool(forKey: AppConstants.keepEpisodesInQueueKey),
+                "visFortsettÅLytte": (UserDefaults.standard.object(forKey: AppConstants.showLastPlayedKey) as? Bool)
+                    ?? AppConstants.showLastPlayedDefault,
+                "visNyttFraAbonnementer": (UserDefaults.standard.object(forKey: AppConstants.showNewFromSubscriptionsKey) as? Bool)
+                    ?? AppConstants.showNewFromSubscriptionsDefault,
+                "beholdEpisoderIKoen": (UserDefaults.standard.object(forKey: AppConstants.keepEpisodesInQueueKey) as? Bool)
+                    ?? AppConstants.keepEpisodesInQueueDefault,
             ] as [String: Any],
         ]
+
+        // Per-podcast playback speeds and the "Fortsett å lytte" record are
+        // user data too — Personvern.md promises the export contains
+        // everything the app stores, so they travel with it.
+        if let data = UserDefaults.standard.data(forKey: AppConstants.podcastSpeedPrefsKey),
+           let prefs = try? JSONDecoder().decode([String: Float].self, from: data),
+           !prefs.isEmpty {
+            export["avspillingshastigheter"] = prefs.mapValues { Double($0) }
+        }
+        if let data = UserDefaults.standard.data(forKey: AppConstants.lastPlayedInfoKey),
+           let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            export["sistSpilte"] = info
+        }
 
         return try JSONSerialization.data(
             withJSONObject: export,
@@ -237,9 +258,11 @@ enum DataTransferService {
             summary.addedPositions += 1
         }
 
-        applySettings(root["innstillinger"] as? [String: Any])
-
+        // Settings only change once the data half has committed: a rolled-back
+        // import must leave no trace, and UserDefaults has no rollback.
         try saveOrRollback(context)
+        applySettings(root["innstillinger"] as? [String: Any])
+        applyPlaybackExtras(root)
         return summary
     }
 
@@ -258,6 +281,35 @@ enum DataTransferService {
             if let value = raw[fileKey] as? Bool {
                 UserDefaults.standard.set(value, forKey: defaultsKey)
             }
+        }
+    }
+
+    /// Restores per-podcast playback speeds and the "Fortsett å lytte" record.
+    ///
+    /// Merge semantics, like the rest of import: speeds set on this device win
+    /// over the file's, and the last-played record is only restored when the
+    /// device has none — a backup must add, not overwrite what the user is in
+    /// the middle of.
+    private static func applyPlaybackExtras(_ root: [String: Any]) {
+        if let speeds = root["avspillingshastigheter"] as? [String: Double], !speeds.isEmpty {
+            var prefs: [String: Float] = [:]
+            if let data = UserDefaults.standard.data(forKey: AppConstants.podcastSpeedPrefsKey),
+               let existing = try? JSONDecoder().decode([String: Float].self, from: data) {
+                prefs = existing
+            }
+            for (podcastId, speed) in speeds where prefs[podcastId] == nil && speed != 1.0 {
+                prefs[podcastId] = Float(speed)
+            }
+            if let data = try? JSONEncoder().encode(prefs) {
+                UserDefaults.standard.set(data, forKey: AppConstants.podcastSpeedPrefsKey)
+            }
+        }
+
+        if UserDefaults.standard.data(forKey: AppConstants.lastPlayedInfoKey) == nil,
+           let info = root["sistSpilte"] as? [String: Any],
+           let data = try? JSONSerialization.data(withJSONObject: info),
+           (try? JSONDecoder().decode(LastPlayedInfo.self, from: data)) != nil {
+            UserDefaults.standard.set(data, forKey: AppConstants.lastPlayedInfoKey)
         }
     }
 
@@ -292,7 +344,11 @@ enum DataTransferService {
         api: any PodcastSearching,
         progress: @MainActor (Int, Int) -> Void
     ) async throws -> ImportSummary {
-        let entries = OPMLService.parse(data)
+        let (entries, completed) = OPMLService.parse(data)
+        // A parse that halted mid-file has only a prefix of the subscriptions.
+        // Importing that prefix while reporting success told the user a partial
+        // migration was complete, which is worse than refusing the file.
+        guard completed else { throw ImportError.malformedFile }
         guard !entries.isEmpty else { throw ImportError.unrecognisedFormat }
 
         let capped = Array(entries.prefix(AppConstants.opmlImportLimit))
@@ -303,6 +359,12 @@ enum DataTransferService {
         var existingIds = Set(existing.map(\.podcastId))
         let existingFeedUrls = Set(existing.map(\.feedUrl).filter { !$0.isEmpty })
 
+        // Resolve first, insert after: the environment's main context autosaves,
+        // and an insert made before an `await` can be committed to disk during
+        // the suspension — putting most of a failed import beyond the reach of
+        // saveOrRollback. With every insert after the last suspension, the
+        // rollback governs the whole import again.
+        var resolved: [Subscription] = []
         for (index, entry) in capped.enumerated() {
             progress(index + 1, capped.count)
 
@@ -320,10 +382,13 @@ enum DataTransferService {
                 continue
             }
 
-            context.insert(subscription)
+            resolved.append(subscription)
             summary.addedSubscriptions += 1
         }
 
+        for subscription in resolved {
+            context.insert(subscription)
+        }
         try saveOrRollback(context)
         return summary
     }
@@ -341,11 +406,26 @@ enum DataTransferService {
             )
         }
 
-        if let feed = try? await api.podcastByFeedUrl(entry.feedUrl).feed {
+        // A thrown lookup (offline, timeout, connection drop mid-import) must
+        // not be mistaken for "unknown to Podcast Index": the feed: fallback is
+        // permanent — re-import matches the stored feedUrl and skips the row —
+        // while a failed entry stays importable once the network is back.
+        let feed: PodcastIndexFeed?
+        do {
+            feed = try await api.podcastByFeedUrl(entry.feedUrl).feed
+        } catch {
+            logger.info("OPML feed lookup failed, leaving the entry for a later import")
+            return nil
+        }
+
+        if let feed {
             let podcast = PodcastTransform.transformFeed(feed)
+            // transformFeed substitutes a placeholder for a missing title, so
+            // an isEmpty check alone never preferred the title the file carried.
+            let indexTitleMissing = podcast.title.isEmpty || podcast.title == PodcastTransform.untitledPodcast
             return Subscription(
                 podcastId: podcast.id,
-                title: podcast.title.isEmpty ? entry.title : podcast.title,
+                title: indexTitleMissing && !entry.title.isEmpty ? entry.title : podcast.title,
                 author: podcast.author,
                 imageUrl: podcast.imageUrl,
                 feedUrl: podcast.feedUrl.isEmpty ? entry.feedUrl : podcast.feedUrl
@@ -355,14 +435,22 @@ enum DataTransferService {
         // Unknown to Podcast Index. Keep the subscription anyway rather than
         // silently dropping it: the feed URL is enough to fetch episodes, and
         // losing a podcast during a migration is worse than missing artwork.
+        // Direct fetches are https-only, so an http URL is rewritten (nearly
+        // every such feed answers on https) and anything else counts as failed
+        // instead of being stored as a subscription that can never load.
         guard !entry.title.isEmpty else { return nil }
+        var feedUrl = entry.feedUrl
+        if feedUrl.lowercased().hasPrefix("http://") {
+            feedUrl = "https://" + feedUrl.dropFirst("http://".count)
+        }
+        guard feedUrl.lowercased().hasPrefix("https://") else { return nil }
         logger.info("OPML feed not in Podcast Index, keeping by URL")
         return Subscription(
-            podcastId: "feed:\(entry.feedUrl)",
+            podcastId: "feed:\(feedUrl)",
             title: entry.title,
             author: "",
             imageUrl: "",
-            feedUrl: entry.feedUrl
+            feedUrl: feedUrl
         )
     }
 

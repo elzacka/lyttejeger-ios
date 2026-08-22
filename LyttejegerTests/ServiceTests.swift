@@ -16,6 +16,9 @@ struct MockPodcastSearching: PodcastSearching {
     var recentItems: [PodcastIndexEpisode] = []
     /// Feeds the index knows, keyed by feed URL. Drives OPML import.
     var feedsByUrl: [String: PodcastIndexFeed] = [:]
+    /// URLs whose lookup fails with a transport error, so OPML import's
+    /// distinction between "offline" and "unknown to the index" is testable.
+    var failingFeedUrls: Set<String> = []
 
     func searchByTitle(_ query: String, options: SearchOptions) async throws -> SearchResponse {
         SearchResponse(status: "true", feeds: titleFeeds, count: titleFeeds.count, query: query, description: nil)
@@ -42,7 +45,8 @@ struct MockPodcastSearching: PodcastSearching {
     }
 
     func podcastByFeedUrl(_ feedUrl: String) async throws -> PodcastByIdResponse {
-        PodcastByIdResponse(status: "true", feed: feedsByUrl[feedUrl], description: nil)
+        if failingFeedUrls.contains(feedUrl) { throw URLError(.notConnectedToInternet) }
+        return PodcastByIdResponse(status: "true", feed: feedsByUrl[feedUrl], description: nil)
     }
 
     func trending(max: Int, lang: String?, cat: String?, notcat: String?) async throws -> SearchResponse {
@@ -910,6 +914,19 @@ struct RSSFeedServiceTests {
 
         #expect(URLStub.requestCount(for: url) == 1)
     }
+
+    @Test("rejects a response larger than the feed size cap")
+    func rejectsOversizedFeed() async {
+        // Same rule as ChapterService/TranscriptService (LYT-09): the URL is
+        // untrusted, so the bytes are capped before any parsing.
+        let url = "https://example.com/enorm.xml"
+        URLStub.register(.init(body: Data(count: AppConstants.maxFeedSize + 1)), for: url)
+        defer { URLStub.unregister(url) }
+
+        await #expect(throws: RSSFeedService.RSSFeedError.self) {
+            try await makeService().fetchEpisodes(feedUrl: url, podcastId: "feed:x")
+        }
+    }
 }
 
 // MARK: - Direct-feed podcast ids
@@ -938,6 +955,23 @@ struct DirectFeedPodcastTests {
         #expect(podcast(id: "12345").directFeedUrl == nil)
         #expect(!podcast(id: "nrk:abels_taarn").isDirectFeed)
         #expect(podcast(id: "nrk:abels_taarn").directFeedUrl == nil)
+    }
+}
+
+// MARK: - Podcast Index response decoding
+
+@Suite("PodcastByIdResponse decoding")
+struct PodcastByIdResponseDecodingTests {
+
+    @Test("an unknown feed decodes as nil feed, not as an error")
+    func unknownFeedDecodesLeniently() throws {
+        // Podcast Index answers unknown feed URLs with "feed": [] — an empty
+        // array where the object normally sits. A strict decode threw, which
+        // OPML import could not tell apart from a transport failure.
+        let data = Data(#"{"status":"true","feed":[],"description":"No feeds match this feedurl."}"#.utf8)
+        let response = try JSONDecoder().decode(PodcastByIdResponse.self, from: data)
+        #expect(response.feed == nil)
+        #expect(response.status == "true")
     }
 }
 
@@ -1056,6 +1090,106 @@ struct ImportOPMLTests {
                 into: context, api: MockPodcastSearching()
             ) { _, _ in }
         }
+    }
+
+    @Test("a transport failure counts as failed, not as unknown to the index")
+    func transportFailureStaysRetryable() async throws {
+        // The feed: fallback is permanent — re-import matches the stored URL
+        // and skips — so an offline lookup must leave the entry unimported.
+        let context = try makeContext()
+        var api = MockPodcastSearching()
+        api.failingFeedUrls = ["https://example.com/offline.xml"]
+
+        let summary = try await run(
+            opml(#"<outline type="rss" text="Utilgjengelig" xmlUrl="https://example.com/offline.xml"/>"#),
+            context: context, api: api
+        )
+
+        #expect(summary.addedSubscriptions == 0)
+        #expect(summary.failedSubscriptions == 1)
+        #expect(try context.fetch(FetchDescriptor<Subscription>()).isEmpty)
+
+        // Once the network is back, the same file imports the feed.
+        api.failingFeedUrls = []
+        api.feedsByUrl["https://example.com/offline.xml"] = makeFeed(id: 7, title: "Nå tilgjengelig")
+        let retry = try await run(
+            opml(#"<outline type="rss" text="Utilgjengelig" xmlUrl="https://example.com/offline.xml"/>"#),
+            context: context, api: api
+        )
+        #expect(retry.addedSubscriptions == 1)
+    }
+
+    @Test("rewrites an unknown http feed to https instead of storing a dead end")
+    func rewritesPlainHTTPFeed() async throws {
+        let context = try makeContext()
+
+        let summary = try await run(
+            opml(#"<outline type="rss" text="Gammel feed" xmlUrl="http://example.com/gammel.xml"/>"#),
+            context: context
+        )
+
+        #expect(summary.addedSubscriptions == 1)
+        let sub = try #require(try context.fetch(FetchDescriptor<Subscription>()).first)
+        #expect(sub.feedUrl == "https://example.com/gammel.xml")
+        #expect(sub.podcastId == "feed:https://example.com/gammel.xml")
+    }
+
+    @Test("counts a feed with an unusable URL scheme as failed")
+    func rejectsNonHTTPScheme() async throws {
+        let context = try makeContext()
+
+        let summary = try await run(
+            opml(#"<outline type="rss" text="Rar" xmlUrl="ftp://example.com/feed.xml"/>"#),
+            context: context
+        )
+
+        #expect(summary.addedSubscriptions == 0)
+        #expect(summary.failedSubscriptions == 1)
+        #expect(try context.fetch(FetchDescriptor<Subscription>()).isEmpty)
+    }
+
+    @Test("prefers the file's title when the index record has none")
+    func prefersFileTitleOverPlaceholder() async throws {
+        let context = try makeContext()
+        var api = MockPodcastSearching()
+        api.feedsByUrl["https://example.com/9.xml"] = PodcastIndexFeed(
+            id: 9, podcastGuid: nil, title: nil,
+            url: "https://example.com/9.xml", originalUrl: nil, link: nil,
+            description: nil, author: nil, ownerName: nil,
+            image: nil, artwork: nil, lastUpdateTime: nil, lastCrawlTime: nil,
+            lastParseTime: nil, itunesId: nil, language: nil, explicit: nil,
+            episodeCount: nil, crawlErrors: nil, parseErrors: nil,
+            categories: nil, dead: 0
+        )
+
+        _ = try await run(
+            opml(#"<outline type="rss" text="Ukens vinylplate" xmlUrl="https://example.com/9.xml"/>"#),
+            context: context, api: api
+        )
+
+        let sub = try #require(try context.fetch(FetchDescriptor<Subscription>()).first)
+        #expect(sub.title == "Ukens vinylplate")
+    }
+
+    @Test("refuses a file the XML parser cannot read to the end")
+    func refusesTruncatedFile() async throws {
+        // A bare & mid-file halts XMLParser; the entries before it are only a
+        // prefix, and importing a prefix while reporting success left the user
+        // believing the whole migration happened.
+        let context = try makeContext()
+        let broken = Data("""
+        <opml version="2.0"><body>
+          <outline type="rss" text="Gyldig" xmlUrl="https://example.com/a.xml"/>
+          <outline type="rss" text="Rock & Roll" xmlUrl="https://example.com/b.xml"/>
+        </body></opml>
+        """.utf8)
+
+        await #expect(throws: ImportError.self) {
+            _ = try await DataTransferService.importOPML(
+                broken, into: context, api: MockPodcastSearching()
+            ) { _, _ in }
+        }
+        #expect(try context.fetch(FetchDescriptor<Subscription>()).isEmpty)
     }
 
     @Test("reports how far it has come, so a long import is not silent")

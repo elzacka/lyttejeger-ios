@@ -130,6 +130,10 @@ enum AppConstants {
     /// cap is here so a wrong URL cannot pull an arbitrary payload into memory.
     static let maxChaptersSize = 1 * 1024 * 1024
 
+    /// Max artwork download size (bytes). Artwork URLs come from feeds, so the
+    /// same rule applies as for chapters and transcripts.
+    static let maxArtworkSize = 5 * 1024 * 1024
+
     // MARK: - Layout
 
     /// Bottom padding for scroll content (accounts for mini player)
@@ -149,8 +153,15 @@ enum AppConstants {
     /// Max episodes to parse from a podcast RSS feed
     static let maxFeedEpisodes = 500
 
+    /// Max RSS feed download size (bytes). Direct-feed URLs come from imported
+    /// OPML files, so the fetch needs the same cap as chapters and transcripts.
+    static let maxFeedSize = 10 * 1024 * 1024
+
     /// Valid pattern for NRK slugs (alphanumeric, underscores, hyphens)
     static let nrkSlugPattern = "^[a-zA-Z0-9_-]+$"
+
+    /// Base URL for NRK RSS feeds (sindrel/nrk-pod-feeds)
+    static let nrkFeedBaseURL = "https://sindrel.github.io/nrk-pod-feeds/rss/"
 
     // MARK: - Player Status Polling
 
@@ -184,6 +195,14 @@ enum AppConstants {
     static let showNewFromSubscriptionsKey = "showNewFromSubscriptions"
     static let podcastSpeedPrefsKey = "podcastSpeedPrefs"
     static let keepEpisodesInQueueKey = "keepEpisodesInQueue"
+
+    /// Effective defaults for the toggles above, in one place. `@AppStorage`
+    /// does not persist its default, so anything exporting or reading these
+    /// keys directly must apply the same default as the UI — reading a raw
+    /// `bool(forKey:)` backed up "false" for toggles the user never touched.
+    static let showLastPlayedDefault = true
+    static let showNewFromSubscriptionsDefault = true
+    static let keepEpisodesInQueueDefault = false
 
     /// Every key above that holds something the user put there, in one place.
     /// "Slett alle data" walks this list, so a new key is cleared by being

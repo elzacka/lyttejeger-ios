@@ -52,6 +52,11 @@ struct FormatDurationTests {
         #expect(formatDuration(4980) == "1 t 23 min")
         #expect(formatDuration(7200) == "2 t")
     }
+
+    @Test("under a minute reads as seconds, not 0 min")
+    func underOneMinute() {
+        #expect(formatDuration(45) == "45 sek")
+    }
 }
 
 // MARK: - SearchQueryParser Tests
@@ -141,6 +146,23 @@ struct SearchQueryParserTests {
         #expect(result.mustInclude == ["NRK-podkaster"])
         #expect(result.mustExclude == ["nyheter"])
     }
+
+    @Test("a negated quoted phrase excludes, it does not require")
+    func negatedQuotedPhrase() {
+        // -"true crime" used to land in exactPhrases, so the query returned
+        // exactly the shows the user asked to exclude and nothing else.
+        let result = SearchQueryParser.parse("krim -\"true crime\"")
+        #expect(result.mustInclude == ["krim"])
+        #expect(result.mustExclude == ["true crime"])
+        #expect(result.exactPhrases.isEmpty)
+    }
+
+    @Test("a negated guillemet phrase excludes too")
+    func negatedGuillemetPhrase() {
+        let result = SearchQueryParser.parse("krim -«true crime»")
+        #expect(result.mustExclude == ["true crime"])
+        #expect(result.exactPhrases.isEmpty)
+    }
 }
 
 // MARK: - PodcastTransform Tests
@@ -224,13 +246,28 @@ struct FormatRelativeDateTests {
     @Test func daysAgo() {
         let date = Calendar.current.date(byAdding: .day, value: -3, to: Date())!
         let threeDaysAgo = iso8601BasicFormatter.string(from: date)
-        #expect(formatRelativeDate(threeDaysAgo) == "3 dager siden")
+        #expect(formatRelativeDate(threeDaysAgo) == "for 3 dager siden")
     }
 
     @Test func weeksAgo() {
         let date = Calendar.current.date(byAdding: .day, value: -10, to: Date())!
         let tenDaysAgo = iso8601BasicFormatter.string(from: date)
-        #expect(formatRelativeDate(tenDaysAgo) == "1 uke siden")
+        #expect(formatRelativeDate(tenDaysAgo) == "for 1 uke siden")
+    }
+
+    @Test("late yesterday evening is I går, not I dag")
+    func lateYesterdayEvening() {
+        // One second before midnight: less than 24 hours have elapsed, but it
+        // is a different calendar day. Counting 24-hour periods called this
+        // "I dag" every morning.
+        let date = Calendar.current.startOfDay(for: Date()).addingTimeInterval(-1)
+        #expect(formatRelativeDate(iso8601BasicFormatter.string(from: date)) == "I går")
+    }
+
+    @Test("a future-dated episode is I dag, not 0 år siden")
+    func futureDate() {
+        let date = Calendar.current.date(byAdding: .day, value: 3, to: Date())!
+        #expect(formatRelativeDate(iso8601BasicFormatter.string(from: date)) == "I dag")
     }
 
     @Test func invalidDate() {
@@ -373,9 +410,87 @@ struct NRKParseDateTests {
         #expect(result.contains("2025-01-15"))
     }
 
-    @Test func invalidDate() {
-        let result = PodcastRSSParser.parseDate("not a date")
-        #expect(result == "not a date")
+    @Test("named time zones parse instead of failing") func namedZone() {
+        let result = PodcastRSSParser.parseDate("Tue, 19 Aug 2025 09:00:00 EST")
+        #expect(result.contains("2025-08-19"))
+    }
+
+    @Test("minutes-only times parse instead of failing") func minutesOnly() {
+        let result = PodcastRSSParser.parseDate("Mon, 15 Jan 2025 12:00 +0000")
+        #expect(result.contains("2025-01-15"))
+    }
+
+    @Test("an unparseable date becomes empty, not raw English text in the UI")
+    func invalidDate() {
+        #expect(PodcastRSSParser.parseDate("not a date") == "")
+    }
+}
+
+@Suite("PodcastRSSParser channel metadata")
+struct PodcastRSSParserChannelTests {
+
+    private func parse(_ xml: String, podcastId: String = "pod") -> PodcastFeedResult {
+        PodcastRSSParser(data: Data(xml.utf8), podcastId: podcastId).parse()
+    }
+
+    @Test("the channel image's title does not replace the podcast title")
+    func imageTitleDoesNotWin() {
+        // Classic RSS 2.0: <image> carries its own <title>. Tracking only
+        // inChannel/inItem let the last channel-level title win.
+        let result = parse("""
+        <rss><channel>
+          <title>Show Name</title>
+          <description>Show desc</description>
+          <image>
+            <url>https://example.com/logo.png</url>
+            <title>Show logo</title>
+            <link>https://example.com</link>
+          </image>
+        </channel></rss>
+        """)
+        #expect(result.podcastTitle == "Show Name")
+        #expect(result.podcastDescription == "Show desc")
+    }
+
+    @Test("a liveItem's title and description stay out of the channel's")
+    func liveItemStaysOut() {
+        let result = parse("""
+        <rss xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel>
+          <title>Show Name</title>
+          <description>Show desc</description>
+          <podcast:liveItem status="live">
+            <title>Live now</title>
+            <description>Live desc</description>
+          </podcast:liveItem>
+        </channel></rss>
+        """)
+        #expect(result.podcastTitle == "Show Name")
+        #expect(result.podcastDescription == "Show desc")
+    }
+
+    @Test("a guid-less episode gets its id from the enclosure URL")
+    func guidlessIdFromEnclosure() {
+        // A positional id renumbers when the feed prepends an episode, silently
+        // re-attaching saved progress and queue rows to the wrong episode.
+        let result = parse("""
+        <rss><channel><title>T</title>
+          <item>
+            <title>A</title>
+            <enclosure url="https://example.com/a.mp3" type="audio/mpeg"/>
+          </item>
+        </channel></rss>
+        """)
+        #expect(result.episodes.first?.id == "pod-https://example.com/a.mp3")
+    }
+
+    @Test("position is the last resort for items with no guid and no audio")
+    func positionalLastResort() {
+        let result = parse("""
+        <rss><channel><title>T</title>
+          <item><title>Uten lyd</title></item>
+        </channel></rss>
+        """)
+        #expect(result.episodes.first?.id == "pod-0")
     }
 }
 
@@ -439,6 +554,33 @@ struct TransformFeedTests {
         let result = PodcastTransform.transformFeeds(feeds)
         #expect(result.count == 1)
         #expect(result.first?.title == "Live")
+    }
+
+    @Test("a missing title falls back to Norwegian, not English")
+    func norwegianTitlePlaceholder() {
+        let feed = PodcastIndexFeed(
+            id: 3, podcastGuid: nil, title: nil, url: nil, originalUrl: nil,
+            link: nil, description: nil, author: nil, ownerName: nil, image: nil,
+            artwork: nil, lastUpdateTime: nil, lastCrawlTime: nil, lastParseTime: nil,
+            itunesId: nil, language: nil, explicit: nil, episodeCount: nil,
+            crawlErrors: nil, parseErrors: nil, categories: nil, dead: 0
+        )
+        #expect(PodcastTransform.transformFeed(feed).title == "Uten tittel")
+    }
+
+    @Test("category badges come out in a stable order")
+    func categoriesAreSorted() {
+        // Dictionary values are ordered randomly per process; unsorted, the
+        // three badges the UI shows changed between launches.
+        let feed = PodcastIndexFeed(
+            id: 4, podcastGuid: nil, title: "T", url: nil, originalUrl: nil,
+            link: nil, description: nil, author: nil, ownerName: nil, image: nil,
+            artwork: nil, lastUpdateTime: nil, lastCrawlTime: nil, lastParseTime: nil,
+            itunesId: nil, language: nil, explicit: nil, episodeCount: nil,
+            crawlErrors: nil, parseErrors: nil,
+            categories: ["9": "Technology", "1": "Arts", "55": "News", "16": "Comedy"], dead: 0
+        )
+        #expect(PodcastTransform.transformFeed(feed).categories == ["Arts", "Comedy", "News", "Technology"])
     }
 }
 
@@ -753,6 +895,21 @@ struct SearchRankingTests {
         #expect(ranked.first?.id == "1")
     }
 
+    @Test("substring hits do not earn title-match tiers")
+    func substringDoesNotEarnTitleTiers() {
+        // rankResults must match on word boundaries like rankEpisodes does:
+        // with String.contains, "rapport" collected the +60 and +20 tiers for
+        // the query "app" and sorted above real matches.
+        let vm = SearchViewModel()
+        let substring = makePodcast(id: "1", title: "Dagens rapport")
+        let real = makePodcast(id: "2", title: "Beste app-tips")
+        let parsed = SearchQueryParser.parse("app")
+
+        let ranked = vm.rankResults([substring, real], query: "app", parsed: parsed)
+
+        #expect(ranked.first?.id == "2")
+    }
+
     @Test("dead feeds are penalized")
     func deadFeedsArePenalized() {
         let vm = SearchViewModel()
@@ -1015,7 +1172,7 @@ struct OPMLParseTests {
 
     @Test("reads title and feed URL from a standard export")
     func readsStandardExport() {
-        let entries = OPMLService.parse(data("""
+        let (entries, _) = OPMLService.parse(data("""
         <?xml version="1.0" encoding="UTF-8"?>
         <opml version="2.0">
           <body>
@@ -1029,7 +1186,7 @@ struct OPMLParseTests {
 
     @Test("prefers title over text when both are present")
     func prefersTitleAttribute() {
-        let entries = OPMLService.parse(data("""
+        let (entries, _) = OPMLService.parse(data("""
         <opml><body>
           <outline type="rss" text="fallback" title="Ekte tittel" xmlUrl="https://example.com/a.xml"/>
         </body></opml>
@@ -1041,7 +1198,7 @@ struct OPMLParseTests {
     @Test("finds feeds nested inside category folders")
     func findsNestedFeeds() {
         // Apple Podcasts and Pocket Casts both group subscriptions this way
-        let entries = OPMLService.parse(data("""
+        let (entries, _) = OPMLService.parse(data("""
         <opml><body>
           <outline text="Krim">
             <outline type="rss" text="En podkast" xmlUrl="https://example.com/a.xml"/>
@@ -1055,7 +1212,7 @@ struct OPMLParseTests {
 
     @Test("skips outlines without a feed URL")
     func skipsFolders() {
-        let entries = OPMLService.parse(data("""
+        let (entries, _) = OPMLService.parse(data("""
         <opml><body>
           <outline text="Bare en mappe"/>
           <outline type="rss" text="Ekte" xmlUrl="https://example.com/a.xml"/>
@@ -1067,7 +1224,7 @@ struct OPMLParseTests {
 
     @Test("handles lowercase attribute spelling")
     func handlesLowercaseAttributes() {
-        let entries = OPMLService.parse(data("""
+        let (entries, _) = OPMLService.parse(data("""
         <opml><body><outline type="rss" text="A" xmlurl="https://example.com/a.xml"/></body></opml>
         """))
 
@@ -1076,7 +1233,7 @@ struct OPMLParseTests {
 
     @Test("drops duplicate feed URLs")
     func dropsDuplicates() {
-        let entries = OPMLService.parse(data("""
+        let (entries, _) = OPMLService.parse(data("""
         <opml><body>
           <outline type="rss" text="A" xmlUrl="https://example.com/a.xml"/>
           <outline type="rss" text="A igjen" xmlUrl="https://example.com/a.xml"/>
@@ -1088,7 +1245,31 @@ struct OPMLParseTests {
 
     @Test("returns nothing for a file that is not OPML")
     func rejectsNonOPML() {
-        #expect(OPMLService.parse(data("<rss><channel><title>Noe</title></channel></rss>")).isEmpty)
+        #expect(OPMLService.parse(data("<rss><channel><title>Noe</title></channel></rss>")).entries.isEmpty)
+    }
+
+    @Test("reports when the parser could not read the whole file")
+    func reportsTruncatedParse() {
+        // A bare & halts XMLParser mid-file. The entries before it are only a
+        // prefix, and the flag is what lets import refuse instead of reporting
+        // a partial migration as success.
+        let (entries, completed) = OPMLService.parse(data("""
+        <opml><body>
+          <outline type="rss" text="Gyldig" xmlUrl="https://example.com/a.xml"/>
+          <outline type="rss" text="Rock & Roll" xmlUrl="https://example.com/b.xml"/>
+        </body></opml>
+        """))
+
+        #expect(!completed)
+        #expect(entries.count == 1)
+    }
+
+    @Test("a well-formed file reports completed")
+    func reportsCompletedParse() {
+        let (_, completed) = OPMLService.parse(data("""
+        <opml><body><outline type="rss" text="A" xmlUrl="https://example.com/a.xml"/></body></opml>
+        """))
+        #expect(completed)
     }
 }
 
@@ -1109,7 +1290,7 @@ struct OPMLExportTests {
         ]
 
         let document = OPMLService.makeDocument(from: subs, generatedAt: Date())
-        let parsed = OPMLService.parse(Data(document.utf8))
+        let (parsed, _) = OPMLService.parse(Data(document.utf8))
 
         #expect(parsed.count == 2)
         #expect(parsed.map(\.title) == ["Abels tårn", "Ekko"])
@@ -1125,7 +1306,7 @@ struct OPMLExportTests {
         #expect(document.contains("&amp;"))
 
         // The real check: it must survive a parse unchanged
-        let parsed = OPMLService.parse(Data(document.utf8))
+        let (parsed, _) = OPMLService.parse(Data(document.utf8))
         #expect(parsed.first?.title == "Ludvig & \"Co\" <live>")
         #expect(parsed.first?.feedUrl == "https://example.com/a.xml?x=1&y=2")
     }
@@ -1137,10 +1318,26 @@ struct OPMLExportTests {
             subscription(title: "Med feed", feedUrl: "https://example.com/a.xml"),
         ]
 
-        let parsed = OPMLService.parse(Data(OPMLService.makeDocument(from: subs, generatedAt: Date()).utf8))
+        let (parsed, _) = OPMLService.parse(Data(OPMLService.makeDocument(from: subs, generatedAt: Date()).utf8))
 
         #expect(parsed.count == 1)
         #expect(parsed.first?.title == "Med feed")
+    }
+
+    @Test("synthesizes the feed URL for an NRK subscription without one")
+    func synthesizesNRKFeedUrl() {
+        // Following an NRK podcast from an episode card stores no feed URL —
+        // the slug is the id. Without synthesis those rows silently vanished
+        // from every OPML export.
+        let subs = [Subscription(
+            podcastId: "nrk:abels_taarn", title: "Abels tårn", author: "NRK",
+            imageUrl: "", feedUrl: ""
+        )]
+
+        let (parsed, _) = OPMLService.parse(Data(OPMLService.makeDocument(from: subs, generatedAt: Date()).utf8))
+
+        #expect(parsed.count == 1)
+        #expect(parsed.first?.feedUrl == "https://sindrel.github.io/nrk-pod-feeds/rss/abels_taarn.xml")
     }
 }
 
@@ -1437,6 +1634,110 @@ struct JSONRoundTripTests {
         #expect(pos.updatedAt == updated)
     }
 
+    /// Snapshots and restores the UserDefaults keys a test touches, since
+    /// export and import read UserDefaults.standard directly.
+    private func withCleanDefaults(_ keys: [String], _ body: () throws -> Void) rethrows {
+        let saved = keys.map { ($0, UserDefaults.standard.object(forKey: $0)) }
+        defer {
+            for (key, value) in saved {
+                if let value {
+                    UserDefaults.standard.set(value, forKey: key)
+                } else {
+                    UserDefaults.standard.removeObject(forKey: key)
+                }
+            }
+        }
+        for key in keys { UserDefaults.standard.removeObject(forKey: key) }
+        try body()
+    }
+
+    @Test("untouched home toggles export as their effective defaults")
+    func untouchedTogglesExportAsDefaults() throws {
+        // @AppStorage never persists its default, and bool(forKey:) reads an
+        // absent key as false — so a user who never opened the toggles used to
+        // get a backup that switched both home sections off on restore.
+        try withCleanDefaults([
+            AppConstants.showLastPlayedKey,
+            AppConstants.showNewFromSubscriptionsKey,
+            AppConstants.keepEpisodesInQueueKey,
+        ]) {
+            let data = try DataTransferService.makeJSONExport(
+                subscriptions: [], queueItems: [], positions: [], exportedAt: Date()
+            )
+            let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let settings = root?["innstillinger"] as? [String: Bool]
+            #expect(settings?["visFortsettÅLytte"] == true)
+            #expect(settings?["visNyttFraAbonnementer"] == true)
+            #expect(settings?["beholdEpisoderIKoen"] == false)
+        }
+    }
+
+    @Test("speed prefs and the last-played record travel with the backup")
+    func playbackExtrasRoundTrip() throws {
+        try withCleanDefaults([AppConstants.podcastSpeedPrefsKey, AppConstants.lastPlayedInfoKey]) {
+            UserDefaults.standard.set(
+                try JSONEncoder().encode(["42": Float(1.5)]),
+                forKey: AppConstants.podcastSpeedPrefsKey
+            )
+            LastPlayedInfo(
+                episodeId: "e1", podcastId: "42", title: "Episode en",
+                audioUrl: "https://example.com/e1.mp3", duration: 1800,
+                imageUrl: nil, podcastTitle: "Podden", podcastImage: ""
+            ).save()
+
+            let data = try DataTransferService.makeJSONExport(
+                subscriptions: [], queueItems: [], positions: [], exportedAt: Date()
+            )
+
+            // Wipe, then import into the clean state — a fresh device restore.
+            UserDefaults.standard.removeObject(forKey: AppConstants.podcastSpeedPrefsKey)
+            UserDefaults.standard.removeObject(forKey: AppConstants.lastPlayedInfoKey)
+            let context = try makeContext()
+            _ = try DataTransferService.importJSON(data, into: context)
+
+            let speedData = try #require(UserDefaults.standard.data(forKey: AppConstants.podcastSpeedPrefsKey))
+            let speeds = try JSONDecoder().decode([String: Float].self, from: speedData)
+            #expect(speeds == ["42": 1.5])
+            #expect(LastPlayedInfo.load()?.episodeId == "e1")
+        }
+    }
+
+    @Test("import does not overwrite this device's speeds or last played")
+    func importMergesPlaybackExtras() throws {
+        try withCleanDefaults([AppConstants.podcastSpeedPrefsKey, AppConstants.lastPlayedInfoKey]) {
+            let backup = try JSONSerialization.data(withJSONObject: [
+                "app": "Lyttejeger",
+                "abonnementer": [] as [Any],
+                "avspillingshastigheter": ["42": 1.25, "99": 2.0] as [String: Double],
+                "sistSpilte": [
+                    "episodeId": "gammel", "podcastId": "42", "title": "Fra backup",
+                    "audioUrl": "https://example.com/x.mp3", "duration": 100,
+                    "podcastTitle": "P", "podcastImage": "",
+                ] as [String: Any],
+            ])
+
+            UserDefaults.standard.set(
+                try JSONEncoder().encode(["42": Float(1.5)]),
+                forKey: AppConstants.podcastSpeedPrefsKey
+            )
+            LastPlayedInfo(
+                episodeId: "aktiv", podcastId: "1", title: "Pågående",
+                audioUrl: "https://example.com/a.mp3", duration: 900,
+                imageUrl: nil, podcastTitle: "P", podcastImage: ""
+            ).save()
+
+            let context = try makeContext()
+            _ = try DataTransferService.importJSON(backup, into: context)
+
+            let speedData = try #require(UserDefaults.standard.data(forKey: AppConstants.podcastSpeedPrefsKey))
+            let speeds = try JSONDecoder().decode([String: Float].self, from: speedData)
+            // This device's 1.5 for podcast 42 wins; the backup fills the gap.
+            #expect(speeds == ["42": 1.5, "99": 2.0])
+            // The episode the user is in the middle of stays.
+            #expect(LastPlayedInfo.load()?.episodeId == "aktiv")
+        }
+    }
+
     @Test("a legacy backup without the new queue fields still imports")
     func legacyBackupImports() throws {
         let context = try makeContext()
@@ -1595,6 +1896,21 @@ struct ContainsTermTests {
 
 @Suite("PodcastTransform.transformEpisode")
 struct TransformEpisodeTests {
+
+    @Test("a missing episode title falls back to Norwegian")
+    func norwegianEpisodeTitlePlaceholder() {
+        let apiEpisode = PodcastIndexEpisode(
+            id: 5, title: nil, link: nil, description: nil, guid: nil,
+            datePublished: nil, datePublishedPretty: nil,
+            enclosureUrl: "https://example.com/e.mp3", enclosureType: nil,
+            enclosureLength: nil, duration: nil, explicit: nil, episode: nil,
+            episodeType: nil, season: nil, image: nil, feedItunesId: nil,
+            feedImage: nil, feedId: 1, feedLanguage: nil, feedDead: nil,
+            chaptersUrl: nil, transcriptUrl: nil, transcripts: nil,
+            soundbite: nil, soundbites: nil, feedTitle: nil, feedAuthor: nil
+        )
+        #expect(PodcastTransform.transformEpisode(apiEpisode).title == "Episode uten tittel")
+    }
 
     @Test("nil feedId falls back to episode-based id, never '0' or empty string")
     func nilFeedIdProducesFallbackPodcastId() {
@@ -2243,6 +2559,71 @@ struct TranscriptRegressionTests {
 
 @Suite("TranscriptService format fallbacks")
 struct TranscriptFallbackTests {
+
+    @Test("single-digit hours parse as timed cues, not raw prose")
+    func singleDigitHourSRT() throws {
+        // Several tools write "0:00:01,000" from hour zero onward; a
+        // two-digit-only hour pattern rejected every cue in such files.
+        let srt = """
+        1
+        0:00:01,000 --> 0:00:04,000
+        Hei og velkommen.
+
+        2
+        0:00:04,000 --> 0:00:08,000
+        I dag skal vi snakke om fjell.
+        """
+        let result = try #require(TranscriptService.makeTranscript(
+            from: Data(srt.utf8), contentType: "application/srt", url: "https://example.com/t.srt"
+        ))
+        #expect(result.isSynced)
+        #expect(result.segments.count == 2)
+        #expect(result.segments.first?.startTime == 1)
+    }
+
+    @Test("string-typed JSON times decode like chapter times do")
+    func stringTypedJSONTimes() throws {
+        let json = #"[{"startTime":"1.5","endTime":"3.2","body":"Hei og velkommen"},{"startTime":"3.2","endTime":"5.0","body":"til podkasten"}]"#
+        let result = try #require(TranscriptService.makeTranscript(
+            from: Data(json.utf8), contentType: "application/json", url: "https://example.com/t.json"
+        ))
+        #expect(result.isSynced)
+        #expect(result.segments.first?.startTime == 1.5)
+    }
+
+    @Test("JSON with text but no timings reads as prose, not as synced at 0:00")
+    func untimedJSONIsUnsynced() throws {
+        // Same rule as parseHTML's sawTime: faked 0:00 timings pinned the
+        // highlight to the last paragraph and sent every tap-to-seek to 0:00.
+        let json = #"[{"text":"Hei og velkommen."},{"text":"I dag skal vi snakke."}]"#
+        let result = try #require(TranscriptService.makeTranscript(
+            from: Data(json.utf8), contentType: "application/json", url: "https://example.com/t.json"
+        ))
+        #expect(result.isSynced == false)
+        #expect(result.segments.count == 2)
+    }
+
+    @Test("NOTE bodies and named cue identifiers stay out of the transcript")
+    func noteBodiesAndCueIdsAreSkipped() throws {
+        let vtt = """
+        WEBVTT
+
+        NOTE
+        Redigert 12. mai 2026
+
+        00:00:01.000 --> 00:00:04.000
+        God morgen.
+
+        intro-2
+        00:00:04.000 --> 00:00:08.000
+        Videre tekst.
+        """
+        let result = try #require(TranscriptService.makeTranscript(
+            from: Data(vtt.utf8), contentType: "text/vtt", url: "https://example.com/t.vtt"
+        ))
+        let texts = result.segments.map(\.text)
+        #expect(texts == ["God morgen.", "Videre tekst."])
+    }
     /// The regression that produced raw markup on screen: an unrecognised file
     /// fell through to the VTT parser, which accepted every line as one cue.
     @Test func doesNotSwallowNonTranscriptText() {
@@ -2472,6 +2853,21 @@ struct BestTranscriptUrlTests {
             transcripts: transcripts, soundbite: nil, soundbites: nil,
             feedTitle: nil, feedAuthor: nil
         )
+    }
+
+    @Test("application/x-subrip ranks as SRT, above HTML")
+    func xSubripRanksAsSRT() {
+        // The Podcasting 2.0 spec lists application/x-subrip for SRT. Unranked
+        // it fell below text/html, so the coarse HTML rendition won over fully
+        // timed cues whenever the SRT URL had no .srt extension.
+        let result = PodcastTransform.bestTranscriptUrl(episode(
+            transcriptUrl: nil,
+            transcripts: [
+                PodcastIndexTranscript(url: "https://example.com/t.html", type: "text/html"),
+                PodcastIndexTranscript(url: "https://example.com/transcript?fmt=srt", type: "application/x-subrip"),
+            ]
+        ))
+        #expect(result == "https://example.com/transcript?fmt=srt")
     }
 
     /// The reported bug in one assertion: the legacy field pointed at the HTML
@@ -2763,17 +3159,31 @@ struct QueueKeepRuleTests {
         #expect(vm.items.count == 3)
     }
 
-    /// Without the setting the finished episode is already gone, so the next
-    /// one to play is simply the new head of the queue.
-    @Test("auto-advance pops the head when episodes are consumed")
-    func autoAdvancePops() throws {
+    /// Without the setting the finished episode normally left the queue when
+    /// it started. When it is still there — started from Hjem or a podcast
+    /// page rather than its queue row — popping the head replayed it from the
+    /// top, so it is removed first and the queue advances.
+    @Test("auto-advance skips a finished episode that never left the queue")
+    func autoAdvanceSkipsFinishedOutOfQueuePlay() throws {
         let context = try makeContext()
         let (vm, _, suite) = makeVM(in: context, keepsEpisodes: false)
         defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
 
         let next = try #require(vm.nextAfterPlaying(episodeId: "a"))
-        #expect(next.episode.id == "a")
-        #expect(vm.items.count == 2)
+        #expect(next.episode.id == "b")
+        #expect(vm.items.map(\.episodeId) == ["c"])
+    }
+
+    @Test("auto-advance pops the head when the finished episode already left")
+    func autoAdvancePops() throws {
+        let context = try makeContext()
+        let (vm, _, suite) = makeVM(in: context, keepsEpisodes: false)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        vm.removeAfterPlay(vm.items[0])
+        let next = try #require(vm.nextAfterPlaying(episodeId: "a"))
+        #expect(next.episode.id == "b")
+        #expect(vm.items.map(\.episodeId) == ["c"])
     }
 
     /// With the setting on, the episode that just finished is still sitting in

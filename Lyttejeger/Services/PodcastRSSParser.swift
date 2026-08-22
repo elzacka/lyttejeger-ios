@@ -37,6 +37,9 @@ final class PodcastRSSParser: NSObject, XMLParserDelegate {
     // Parser state
     private var inChannel = false
     private var inItem = false
+    // Depth inside channel sub-containers (<image>, <textInput>, <podcast:liveItem>)
+    // whose own <title>/<description> must not overwrite the channel's.
+    private var channelSubElementDepth = 0
     private var currentElement = ""
     private var textBuffer = ""
 
@@ -46,6 +49,19 @@ final class PodcastRSSParser: NSObject, XMLParserDelegate {
         f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
         return f
     }()
+
+    // Real feeds also write named zones ("EST", "CEST") and minutes-only times,
+    // which the primary RFC 2822 pattern does not parse.
+    private static let pubDateFallbackFormatters: [DateFormatter] = [
+        "EEE, dd MMM yyyy HH:mm:ss zzz",
+        "EEE, dd MMM yyyy HH:mm Z",
+        "EEE, dd MMM yyyy HH:mm zzz"
+    ].map { pattern in
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = pattern
+        return f
+    }
 
     nonisolated(unsafe) private static let isoFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
@@ -82,6 +98,11 @@ final class PodcastRSSParser: NSObject, XMLParserDelegate {
         currentElement = elementName
         textBuffer = ""
 
+        if inChannel && !inItem,
+           elementName == "image" || elementName == "textInput" || elementName.hasSuffix(":liveItem") {
+            channelSubElementDepth += 1
+        }
+
         switch elementName {
         case "channel":
             inChannel = true
@@ -102,7 +123,7 @@ final class PodcastRSSParser: NSObject, XMLParserDelegate {
             if let href = attributeDict["href"] {
                 if inItem {
                     currentImageUrl = href
-                } else if inChannel {
+                } else if inChannel && channelSubElementDepth == 0 {
                     channelImageUrl = href
                 }
             }
@@ -138,9 +159,14 @@ final class PodcastRSSParser: NSObject, XMLParserDelegate {
                     break
                 }
                 let episode = Episode(
-                    // A feed without a guid still needs a stable per-episode id, so fall
-                    // back to the podcast it came from plus its position.
-                    id: currentGuid.isEmpty ? "\(podcastId)-\(episodes.count)" : currentGuid,
+                    // A feed without a guid still needs a stable per-episode id. The
+                    // enclosure URL survives feed updates; a positional index does not
+                    // (a new episode at the top renumbers every row, re-attaching saved
+                    // progress and queue items to the wrong episode), so position is the
+                    // last resort for items that lack both.
+                    id: currentGuid.isEmpty
+                        ? (currentAudioUrl.isEmpty ? "\(podcastId)-\(episodes.count)" : "\(podcastId)-\(currentAudioUrl)")
+                        : currentGuid,
                     podcastId: podcastId,
                     title: currentTitle,
                     description: currentDescription,
@@ -156,12 +182,17 @@ final class PodcastRSSParser: NSObject, XMLParserDelegate {
             }
         } else if inChannel {
             switch elementName {
-            case "title": channelTitle = text
-            case "description": channelDescription = text
+            case "title" where channelSubElementDepth == 0: channelTitle = text
+            case "description" where channelSubElementDepth == 0: channelDescription = text
             case "channel": inChannel = false
             default:
                 break
             }
+        }
+
+        if inChannel && !inItem,
+           elementName == "image" || elementName == "textInput" || elementName.hasSuffix(":liveItem") {
+            channelSubElementDepth = max(0, channelSubElementDepth - 1)
         }
     }
 
@@ -178,11 +209,19 @@ final class PodcastRSSParser: NSObject, XMLParserDelegate {
         }
     }
 
-    /// Parses RFC 2822 date to ISO 8601 string.
+    /// Parses RFC 2822 date (including named-zone and minutes-only variants) to
+    /// an ISO 8601 string. Returns "" when nothing parses: the raw English date
+    /// string must not leak into the UI, and an empty string drops cleanly out
+    /// of date display and date-based filtering.
     static func parseDate(_ str: String) -> String {
         if let date = pubDateFormatter.date(from: str) {
             return isoFormatter.string(from: date)
         }
-        return str
+        for formatter in pubDateFallbackFormatters {
+            if let date = formatter.date(from: str) {
+                return isoFormatter.string(from: date)
+            }
+        }
+        return ""
     }
 }

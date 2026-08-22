@@ -13,15 +13,24 @@ enum PodcastTransform {
 
     // MARK: - Feed Transform
 
+    /// Norwegian placeholders for records without a title — every UI string is
+    /// Norwegian, so "Untitled" was a defect, not a default. Exposed so other
+    /// layers (OPML resolve) can recognize a placeholder and prefer their own
+    /// source's title over it.
+    static let untitledPodcast = "Uten tittel"
+    static let untitledEpisode = "Episode uten tittel"
+
     static func transformFeed(_ feed: PodcastIndexFeed) -> Podcast {
         Podcast(
             id: String(feed.id),
-            title: feed.title ?? "Untitled",
+            title: feed.title ?? untitledPodcast,
             author: feed.author ?? feed.ownerName ?? "Ukjent",
             description: htmlToText(feed.description ?? ""),
             imageUrl: feed.artwork ?? feed.image ?? "",
             feedUrl: feed.url ?? feed.originalUrl ?? "",
-            categories: Array((feed.categories ?? [:]).values),
+            // Dictionary order is randomized per launch; sorted keeps the same
+            // three badges showing on every visit.
+            categories: Array((feed.categories ?? [:]).values).sorted(),
             language: normalizeLanguage(feed.language ?? ""),
             episodeCount: feed.episodeCount ?? 0,
             lastUpdated: safeTimestampToISO(feed.lastUpdateTime),
@@ -53,7 +62,7 @@ enum PodcastTransform {
         return Episode(
             id: String(episode.id),
             podcastId: podcastId,
-            title: episode.title ?? "Untitled Episode",
+            title: episode.title ?? untitledEpisode,
             description: htmlToText(episode.description ?? ""),
             audioUrl: episode.enclosureUrl ?? "",
             duration: TimeInterval(episode.duration ?? 0),
@@ -96,7 +105,7 @@ enum PodcastTransform {
         switch type?.lowercased() {
         case "application/json": return 0
         case "text/vtt": return 1
-        case "application/srt", "text/srt": return 2
+        case "application/srt", "text/srt", "application/x-subrip": return 2
         case "text/html": return 3
         case "text/plain": return 4
         default: return 5

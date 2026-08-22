@@ -46,12 +46,27 @@ enum SearchQueryParser {
         let matches = quotePattern.matches(in: remaining, range: NSRange(remaining.startIndex..., in: remaining))
 
         for match in matches.reversed() {
-            if let phraseRange = Range(match.range(at: 1), in: remaining) {
-                result.exactPhrases.append(String(remaining[phraseRange]))
+            guard let phraseRange = Range(match.range(at: 1), in: remaining),
+                  let fullRange = Range(match.range, in: remaining) else { continue }
+            let phrase = String(remaining[phraseRange])
+
+            // -"quoted phrase" is an exclusion. The leading '-' used to survive
+            // as a stray one-character token while the phrase itself was
+            // required — the exact opposite of what the operator asked for.
+            var removalRange = fullRange
+            if fullRange.lowerBound > remaining.startIndex {
+                let precedingIndex = remaining.index(before: fullRange.lowerBound)
+                if remaining[precedingIndex] == "-" {
+                    removalRange = precedingIndex..<fullRange.upperBound
+                }
             }
-            if let fullRange = Range(match.range, in: remaining) {
-                remaining.removeSubrange(fullRange)
+
+            if removalRange == fullRange {
+                result.exactPhrases.append(phrase)
+            } else {
+                result.mustExclude.append(phrase)
             }
+            remaining.removeSubrange(removalRange)
         }
 
         // Split remaining by whitespace

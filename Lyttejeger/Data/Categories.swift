@@ -109,10 +109,14 @@ let categoryGroups: [CategoryGroup] = [
     ]),
     CategoryGroup(title: "Sport og fritid", icon: "sportscourt", categories: [
         FilterOption(value: "Baseball", label: "Baseball"),
+        // "Football" is American football in the Podcast Index taxonomy;
+        // association football is "Soccer". The chip labelled Fotball must
+        // carry the Soccer value or it filters for the wrong sport.
+        FilterOption(value: "Football", label: "Amerikansk fotball"),
         FilterOption(value: "Basketball", label: "Basketball"),
         FilterOption(value: "Wrestling", label: "Bryting"),
         FilterOption(value: "Cricket", label: "Cricket"),
-        FilterOption(value: "Football", label: "Fotball"),
+        FilterOption(value: "Soccer", label: "Fotball"),
         FilterOption(value: "Leisure", label: "Fritid"),
         FilterOption(value: "Golf", label: "Golf"),
         FilterOption(value: "Hockey", label: "Hockey"),
@@ -155,7 +159,6 @@ private let categoryLookup: [String: String] = {
     var map = Dictionary(uniqueKeysWithValues: allCategories.map { ($0.value, $0.label) })
     // Add common API variations
     map["Natural"] = "Natur"
-    map["Soccer"] = "Fotball"
     return map
 }()
 
