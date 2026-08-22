@@ -125,9 +125,12 @@ enum DataTransferService {
                     "oppdatert": formatter.string(from: pos.updatedAt),
                 ] as [String: Any]
             },
+            // Every toggle the user can set. A new one belongs here and in
+            // applySettings below, so export and import stay symmetric.
             "innstillinger": [
                 "visFortsettÅLytte": UserDefaults.standard.bool(forKey: AppConstants.showLastPlayedKey),
                 "visNyttFraAbonnementer": UserDefaults.standard.bool(forKey: AppConstants.showNewFromSubscriptionsKey),
+                "beholdEpisoderIKoen": UserDefaults.standard.bool(forKey: AppConstants.keepEpisodesInQueueKey),
             ] as [String: Any],
         ]
 
@@ -160,7 +163,10 @@ enum DataTransferService {
 
         var summary = ImportSummary()
 
-        let existingSubscriptionIds = Set(
+        // var, not let: an id inserted earlier in this same file has to
+        // count as existing, or a file listing a podcast twice reports two
+        // additions while @Attribute(.unique) stores one.
+        var existingSubscriptionIds = Set(
             ((try? context.fetch(FetchDescriptor<Subscription>())) ?? []).map(\.podcastId)
         )
         for raw in root["abonnementer"] as? [[String: Any]] ?? [] {
@@ -177,10 +183,11 @@ enum DataTransferService {
                 feedUrl: raw["feedUrl"] as? String ?? "",
                 subscribedAt: (raw["abonnertDato"] as? String).flatMap(formatter.date(from:)) ?? Date()
             ))
+            existingSubscriptionIds.insert(podcastId)
             summary.addedSubscriptions += 1
         }
 
-        let existingQueueIds = Set(
+        var existingQueueIds = Set(
             ((try? context.fetch(FetchDescriptor<QueueItem>())) ?? []).map(\.episodeId)
         )
         var nextPosition = ((try? context.fetch(FetchDescriptor<QueueItem>())) ?? [])
@@ -208,11 +215,12 @@ enum DataTransferService {
                 position: nextPosition
             )
             context.insert(item)
+            existingQueueIds.insert(episodeId)
             nextPosition += 1
             summary.addedQueueItems += 1
         }
 
-        let existingPositionIds = Set(
+        var existingPositionIds = Set(
             ((try? context.fetch(FetchDescriptor<PlaybackPosition>())) ?? []).map(\.episodeId)
         )
         for raw in root["avspillingsposisjoner"] as? [[String: Any]] ?? [] {
@@ -225,11 +233,47 @@ enum DataTransferService {
                 updatedAt: (raw["oppdatert"] as? String).flatMap(formatter.date(from:)) ?? Date(),
                 completed: raw["fullført"] as? Bool ?? false
             ))
+            existingPositionIds.insert(episodeId)
             summary.addedPositions += 1
         }
 
-        try context.save()
+        applySettings(root["innstillinger"] as? [String: Any])
+
+        try saveOrRollback(context)
         return summary
+    }
+
+    /// Restores the home screen and queue toggles from a backup.
+    ///
+    /// Only keys actually present are touched, so an older export that predates
+    /// a setting leaves it alone rather than resetting it to false.
+    private static func applySettings(_ raw: [String: Any]?) {
+        guard let raw else { return }
+        let mapping: [(String, String)] = [
+            ("visFortsettÅLytte", AppConstants.showLastPlayedKey),
+            ("visNyttFraAbonnementer", AppConstants.showNewFromSubscriptionsKey),
+            ("beholdEpisoderIKoen", AppConstants.keepEpisodesInQueueKey),
+        ]
+        for (fileKey, defaultsKey) in mapping {
+            if let value = raw[fileKey] as? Bool {
+                UserDefaults.standard.set(value, forKey: defaultsKey)
+            }
+        }
+    }
+
+    /// Saves, and discards the whole import if the save fails.
+    ///
+    /// Without the rollback the context keeps the inserted objects, and the
+    /// app's autosaving main context would commit them a moment later — after
+    /// the user had already been told the import failed.
+    private static func saveOrRollback(_ context: ModelContext) throws {
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            logger.error("Import save failed, rolled back: \(error.localizedDescription, privacy: .public)")
+            throw error
+        }
     }
 
     /// Imports subscriptions from an OPML file exported by another podcast app.
@@ -280,7 +324,7 @@ enum DataTransferService {
             summary.addedSubscriptions += 1
         }
 
-        try context.save()
+        try saveOrRollback(context)
         return summary
     }
 
@@ -332,6 +376,16 @@ enum DataTransferService {
         try context.delete(model: QueueItem.self)
         try context.delete(model: PlaybackPosition.self)
         try context.save()
+    }
+
+    /// The other half of "Slett alle data": everything the app keeps outside
+    /// the store. It lived in the view, where nothing could check it, and a key
+    /// added later was duly forgotten. Driven off `userDataDefaultsKeys` so
+    /// adding a key in one place is enough.
+    static func deleteAllUserDefaults(in defaults: UserDefaults = .standard) {
+        for key in AppConstants.userDataDefaultsKeys {
+            defaults.removeObject(forKey: key)
+        }
     }
 
     /// Recognises an NRK feed URL and returns its slug.

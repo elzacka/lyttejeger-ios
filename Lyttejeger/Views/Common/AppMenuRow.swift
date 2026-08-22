@@ -1,8 +1,13 @@
 import SwiftUI
 
 /// Standard menu row used across menu/settings sheets: one consistent
-/// anatomy (optional icon, label, optional subtitle, trailing glyph) so
-/// every row shares height, padding, fonts and colors.
+/// anatomy (optional icon, label, trailing glyph) so every row shares
+/// height, padding, fonts and colors.
+///
+/// There is deliberately no explanatory subtitle. A settings row states what
+/// it controls; what it means belongs in the user guide, which does not have
+/// to say it in six words. Without one, every row settles on the same 44pt
+/// height and the screen reads as one rhythm instead of a ragged column.
 ///
 /// Trailing glyph vocabulary:
 /// - `AppMenuRowChevron`: tapping navigates within the app
@@ -11,7 +16,6 @@ import SwiftUI
 struct AppMenuRow<Trailing: View>: View {
     var icon: String? = nil
     let label: String
-    var subtitle: String? = nil
     var iconColor: Color = .appAccent
     var labelColor: Color = .appForeground
     /// Dimmed and untappable while false, so a row that is busy says so
@@ -50,17 +54,10 @@ struct AppMenuRow<Trailing: View>: View {
                     .accessibilityHidden(true)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                    .font(.smallText)
-                    .foregroundStyle(labelColor)
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.caption2Text)
-                        .foregroundStyle(Color.appMutedForeground)
-                }
-            }
-            .multilineTextAlignment(.leading)
+            Text(label)
+                .font(.smallText)
+                .foregroundStyle(labelColor)
+                .multilineTextAlignment(.leading)
 
             Spacer()
 
@@ -73,7 +70,6 @@ struct AppMenuRow<Trailing: View>: View {
 
     private var accessibilityText: String {
         var parts: [String] = [label]
-        if let subtitle, !subtitle.isEmpty { parts.append(subtitle) }
         if let accessibilityValue, !accessibilityValue.isEmpty { parts.append(accessibilityValue) }
         return parts.joined(separator: ". ")
     }
@@ -83,7 +79,6 @@ extension AppMenuRow where Trailing == EmptyView {
     init(
         icon: String? = nil,
         label: String,
-        subtitle: String? = nil,
         iconColor: Color = .appAccent,
         labelColor: Color = .appForeground,
         isEnabled: Bool = true,
@@ -92,7 +87,6 @@ extension AppMenuRow where Trailing == EmptyView {
     ) {
         self.icon = icon
         self.label = label
-        self.subtitle = subtitle
         self.iconColor = iconColor
         self.labelColor = labelColor
         self.isEnabled = isEnabled

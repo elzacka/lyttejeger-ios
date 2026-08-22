@@ -68,6 +68,31 @@ targets:
         CFBundleLocalizations:
           - nb
         UIAccessibilityPerformEscapeEnabled: true
+        # Lets the app receive OPML and its own JSON backup from Mail,
+        # Files, Safari and other podcast apps. Rank is Alternate for both:
+        # Lyttejeger does not own XML or JSON and must not claim them.
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.opml.opml
+            UTTypeDescription: OPML-abonnementsfil
+            UTTypeConformsTo:
+              - public.xml
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - opml
+        # Import reads the file once and deletes the Inbox copy afterwards; it
+        # never edits the user's original, so opening in place would be a lie.
+        LSSupportsOpeningDocumentsInPlace: false
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Podkastabonnementer
+            LSHandlerRank: Alternate
+            CFBundleTypeRole: Viewer
+            LSItemContentTypes:
+              - org.opml.opml
+          - CFBundleTypeName: Lyttejeger-sikkerhetskopi
+            LSHandlerRank: Alternate
+            CFBundleTypeRole: Viewer
+            LSItemContentTypes:
+              - public.json
   LyttejegerTests:
     type: bundle.unit-test
     platform: iOS

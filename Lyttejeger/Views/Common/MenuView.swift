@@ -3,24 +3,35 @@ import SwiftData
 import UniformTypeIdentifiers
 
 extension UTType {
-    /// OPML has no system-declared type, so it is derived from the file
-    /// extension. `.xml` is accepted alongside it in the picker because
-    /// several podcast apps export OPML with an .xml extension.
+    /// OPML has no system-declared type. The app declares `org.opml.opml`
+    /// itself (UTImportedTypeDeclarations in project.yml), which is what this
+    /// lookup resolves to, and what lets other apps offer "Åpne i Lyttejeger".
+    /// `.xml` is accepted alongside it in the picker because several podcast
+    /// apps export OPML with an .xml extension.
     static let opml = UTType(filenameExtension: "opml", conformingTo: .xml) ?? .xml
 }
 
-/// Single menu sheet opened from the tab bar. Replaces the previous
-/// three-sheet chain (menu -> Innstillinger / Om Lyttejeger) with one
-/// calm surface built from AppCardSection + AppMenuRow.
+/// Root view of the menu tab. Built from AppCardSection + AppMenuRow, and
+/// configured like the other three tab roots: full-bleed, own background,
+/// hidden navigation bar, and its own PodcastRoute destination.
 struct MenuView: View {
+    /// A file handed to the app from outside, routed here by ContentView
+    /// because import lives on this tab. Cleared once handled.
+    @Binding var pendingImportURL: URL?
+
+    init(pendingImportURL: Binding<URL?> = .constant(nil)) {
+        self._pendingImportURL = pendingImportURL
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
     @Environment(AudioPlayerViewModel.self) private var playerVM
-    // Needed so an import shows up immediately in Mine podder and Kø
+    // Needed so an import shows up immediately in Følgeliste and Kø
     @Environment(SubscriptionViewModel.self) private var subscriptionVM
     @Environment(QueueViewModel.self) private var queueVM
     @AppStorage(AppConstants.showLastPlayedKey) private var showLastPlayed = true
     @AppStorage(AppConstants.showNewFromSubscriptionsKey) private var showNewFromSubscriptions = true
+    @AppStorage(AppConstants.keepEpisodesInQueueKey) private var keepEpisodesInQueue = false
     @State private var showExportConfirmation = false
     @State private var showOPMLExportConfirmation = false
     @State private var showDeleteConfirmation = false
@@ -56,25 +67,20 @@ struct MenuView: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                AppCardSection("Hjem-skjerm") {
-                    toggleRow(
-                        title: "Fortsett å lytte",
-                        subtitle: "Vis uferdig episode",
-                        isOn: $showLastPlayed
-                    )
+                AppCardSection("Hjem") {
+                    toggleRow("Fortsett", isOn: $showLastPlayed)
                     AppMenuRowDivider()
-                    toggleRow(
-                        title: "Nytt fra Mine podder",
-                        subtitle: "Episoder fra siste 7 dager",
-                        isOn: $showNewFromSubscriptions
-                    )
+                    toggleRow("Nyeste", isOn: $showNewFromSubscriptions)
                 }
 
-                AppCardSection("Dine data") {
+                AppCardSection("Kø") {
+                    toggleRow("Behold episoder i køen", isOn: $keepEpisodesInQueue)
+                }
+
+                AppCardSection("Dataene dine") {
                     AppMenuRow(
                         icon: "square.and.arrow.up",
                         label: "Importer",
-                        subtitle: "Legger til fra en OPML- eller JSON-fil. Du beholder det du har fra før.",
                         isEnabled: !isImporting,
                         action: { showFileImporter = true },
                         accessibilityHint: "Velg en OPML- eller JSON-fil å importere"
@@ -82,16 +88,14 @@ struct MenuView: View {
                     AppMenuRowDivider()
                     AppMenuRow(
                         icon: "square.and.arrow.down",
-                        label: "Eksporter abonnementer",
-                        subtitle: "OPML-fil andre podkastapper kan lese. Bare abonnementer.",
+                        label: "Eksporter følgelisten din",
                         action: { showOPMLExportConfirmation = true },
-                        accessibilityHint: "Eksporterer abonnementene dine som OPML-fil"
+                        accessibilityHint: "Eksporterer følgelisten din som OPML-fil"
                     )
                     AppMenuRowDivider()
                     AppMenuRow(
                         icon: "square.and.arrow.down",
                         label: "Eksporter alle data",
-                        subtitle: "JSON-fil bare Lyttejeger kan lese. Abonnementer, kø og hvor langt du har hørt.",
                         action: { showExportConfirmation = true },
                         accessibilityHint: "Eksporterer alle data som JSON-fil"
                     )
@@ -99,7 +103,6 @@ struct MenuView: View {
                     AppMenuRow(
                         icon: "trash",
                         label: "Slett alle data",
-                        subtitle: "Sletter alt appen har lagret på enheten. Kan ikke angres.",
                         iconColor: .appError,
                         labelColor: .appError,
                         action: { showDeleteConfirmation = true },
@@ -117,15 +120,9 @@ struct MenuView: View {
                 }
 
                 AppCardSection("Datakilder") {
-                    AppMenuRow(
-                        label: "Podcast Index API",
-                        subtitle: "Åpen podkastdatabase"
-                    )
+                    AppMenuRow(label: "Podcast Index API")
                     AppMenuRowDivider()
-                    AppMenuRow(
-                        label: "github.com/sindrel/nrk-pod-feeds",
-                        subtitle: "NRK-podkaster via åpne RSS-feeds"
-                    )
+                    AppMenuRow(label: "github.com/sindrel/nrk-pod-feeds")
                 }
 
                 AppCardSection("Om appen") {
@@ -149,14 +146,23 @@ struct MenuView: View {
                         trailing: { AppMenuRowExternal() }
                     )
                 }
-
-                Spacer(minLength: AppSpacing.xxl)
             }
             .padding(.horizontal, AppSpacing.lg)
             .padding(.top, AppSpacing.lg)
+            .padding(.bottom, AppConstants.playerBottomPadding)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.appBackground)
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(for: PodcastRoute.self) { route in
+            PodcastDetailView(podcast: route.podcast, focusEpisodeId: route.focusEpisodeId)
+        }
+        .onChange(of: pendingImportURL) { _, url in
+            guard let url else { return }
+            pendingImportURL = nil
+            Task { await handleImport(url) }
+        }
         .fileImporter(
             isPresented: $showFileImporter,
             allowedContentTypes: [.opml, .json, .xml],
@@ -171,15 +177,15 @@ struct MenuView: View {
                 exportData()
             }
         } message: {
-            Text("Eksporterer abonnementer, spillekø og avspillingsposisjoner som JSON-fil.")
+            Text("Eksporterer følgelisten, køen og hvor langt du har hørt, som JSON-fil.")
         }
-        .alert("Eksporter abonnementer?", isPresented: $showOPMLExportConfirmation) {
+        .alert("Eksporter følgelisten?", isPresented: $showOPMLExportConfirmation) {
             Button("Avbryt", role: .cancel) {}
             Button("Eksporter") {
                 exportOPML()
             }
         } message: {
-            Text("Lager en OPML-fil med abonnementene dine. De fleste podkastapper kan lese den. Spillekø og avspillingsposisjoner er ikke med.")
+            Text("Lager en OPML-fil med podkastene du følger. De fleste podkastapper kan lese den. Køen og hvor langt du har hørt er ikke med.")
         }
         .alert("Slett alle data?", isPresented: $showDeleteConfirmation) {
             Button("Avbryt", role: .cancel) {}
@@ -187,20 +193,20 @@ struct MenuView: View {
                 deleteAllData()
             }
         } message: {
-            Text("Dette sletter alle abonnementer, spillekøen og avspillingsposisjoner. Handlingen kan ikke angres.")
+            Text("Dette sletter følgelisten, køen og hvor langt du har hørt. Handlingen kan ikke angres.")
         }
     }
 
-    private func toggleRow(title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
+    /// Deliberately mirrors `AppMenuRow`'s anatomy — same font, same padding,
+    /// same minimum height — so a toggle row and a tappable row are the same
+    /// height and the screen reads as one rhythm. Both land on the 44pt
+    /// minimum: neither a switch nor a single label is tall enough to exceed
+    /// it once the subtitles are gone.
+    private func toggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
         Toggle(isOn: isOn) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.smallText)
-                    .foregroundStyle(Color.appForeground)
-                Text(subtitle)
-                    .font(.caption2Text)
-                    .foregroundStyle(Color.appMutedForeground)
-            }
+            Text(title)
+                .font(.smallText)
+                .foregroundStyle(Color.appForeground)
         }
         .tint(Color.appAccent)
         .padding(.vertical, AppSpacing.sm)
@@ -281,11 +287,7 @@ struct MenuView: View {
         isImporting = true
         defer { isImporting = false }
 
-        // Files chosen through the picker live outside the sandbox
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-
-        guard let data = try? Data(contentsOf: url) else {
+        guard let data = await readPickedFile(url) else {
             importStatus = "Kunne ikke lese filen."
             importStatusIsError = true
             return
@@ -318,10 +320,44 @@ struct MenuView: View {
             UIAccessibility.post(notification: .announcement, argument: importStatus)
             subscriptionVM.fetchSubscriptions()
             queueVM.fetchQueue()
+            removeIfInbox(url)
         } catch {
             importStatus = (error as? LocalizedError)?.errorDescription ?? "Importen feilet."
             importStatusIsError = true
         }
+    }
+
+    /// Reads a file the user picked or another app handed over.
+    ///
+    /// Off the main actor, and through NSFileCoordinator: the file can live in
+    /// iCloud Drive or another app's provider, where a plain synchronous read
+    /// either blocks the UI while the file downloads or returns nothing.
+    private func readPickedFile(_ url: URL) async -> Data? {
+        await Task.detached(priority: .userInitiated) {
+            // Files chosen through the picker live outside the sandbox
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+            var coordinatorError: NSError?
+            var data: Data?
+            NSFileCoordinator().coordinate(
+                readingItemAt: url,
+                options: .withoutChanges,
+                error: &coordinatorError
+            ) { readableURL in
+                data = try? Data(contentsOf: readableURL)
+            }
+            return data
+        }.value
+    }
+
+    /// Deletes the copy iOS leaves in Documents/Inbox when another app hands
+    /// us a file. Only ever touches that directory, and only after the import
+    /// succeeded, so a failed import leaves the file for a retry.
+    private func removeIfInbox(_ url: URL) {
+        let inbox = URL.documentsDirectory.appendingPathComponent("Inbox")
+        guard url.standardizedFileURL.path.hasPrefix(inbox.standardizedFileURL.path) else { return }
+        try? FileManager.default.removeItem(at: url)
     }
 
     /// Plain-language result, so the user knows what changed.
@@ -335,7 +371,7 @@ struct MenuView: View {
 
         var parts: [String] = []
         if summary.addedSubscriptions > 0 {
-            parts.append(summary.addedSubscriptions == 1 ? "1 abonnement" : "\(summary.addedSubscriptions) abonnementer")
+            parts.append(summary.addedSubscriptions == 1 ? "1 podkast" : "\(summary.addedSubscriptions) podkaster")
         }
         if summary.addedQueueItems > 0 {
             parts.append(summary.addedQueueItems == 1 ? "1 episode i køen" : "\(summary.addedQueueItems) episoder i køen")
@@ -378,10 +414,7 @@ struct MenuView: View {
         UIAccessibility.post(notification: .announcement, argument: importStatus)
 
         // Clear UserDefaults
-        UserDefaults.standard.removeObject(forKey: AppConstants.lastPlayedInfoKey)
-        UserDefaults.standard.removeObject(forKey: AppConstants.showLastPlayedKey)
-        UserDefaults.standard.removeObject(forKey: AppConstants.showNewFromSubscriptionsKey)
-        UserDefaults.standard.removeObject(forKey: AppConstants.podcastSpeedPrefsKey)
+        DataTransferService.deleteAllUserDefaults()
 
         // Clear URL caches
         URLCache.shared.removeAllCachedResponses()
@@ -400,7 +433,9 @@ struct MenuView: View {
 #if DEBUG
 #Preview {
     PreviewWrapper {
-        MenuView()
+        NavigationStack {
+            MenuView()
+        }
     }
 }
 #endif

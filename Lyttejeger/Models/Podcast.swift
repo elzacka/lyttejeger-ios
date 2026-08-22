@@ -21,6 +21,14 @@ struct Podcast: Identifiable, Hashable, Sendable {
     /// The NRK RSS slug (e.g. "abels_taarn"), or nil if not an NRK podcast.
     var nrkSlug: String? { isNRKFeed ? String(id.dropFirst(4)) : nil }
 
+    /// True for a podcast that exists only as a raw feed URL, with no
+    /// Podcast Index entry. OPML import creates these when a feed in the
+    /// file is unknown to the index.
+    var isDirectFeed: Bool { id.hasPrefix("feed:") }
+
+    /// The feed URL carried in a `feed:` id, or nil for any other podcast.
+    var directFeedUrl: String? { isDirectFeed ? String(id.dropFirst(5)) : nil }
+
     static func == (lhs: Podcast, rhs: Podcast) -> Bool {
         lhs.id == rhs.id
     }
