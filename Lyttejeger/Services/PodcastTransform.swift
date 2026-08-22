@@ -59,7 +59,7 @@ enum PodcastTransform {
             duration: TimeInterval(episode.duration ?? 0),
             publishedAt: safeTimestampToISO(episode.datePublished),
             imageUrl: episode.image ?? episode.feedImage,
-            transcriptUrl: episode.transcriptUrl,
+            transcriptUrl: bestTranscriptUrl(episode),
             chaptersUrl: episode.chaptersUrl,
             season: episode.season.flatMap { $0 > 0 ? $0 : nil },
             episode: episode.episode.flatMap { $0 > 0 ? $0 : nil },
@@ -70,6 +70,69 @@ enum PodcastTransform {
 
     static func transformEpisodes(_ episodes: [PodcastIndexEpisode]) -> [Episode] {
         episodes.map(transformEpisode)
+    }
+
+    // MARK: - Off the main actor
+
+    /// A full search response is 200-400 feeds, and stripping HTML from their
+    /// descriptions is tens of milliseconds of regex work. Run on the main
+    /// actor it lands on exactly the frame that shows the results, which is
+    /// where it is most visible. The inputs and outputs are all `Sendable`
+    /// value types, so moving it costs nothing but the hop.
+    static func transformFeeds(offMain feeds: [PodcastIndexFeed]) async -> [Podcast] {
+        await Task.detached(priority: .userInitiated) { transformFeeds(feeds) }.value
+    }
+
+    static func transformEpisodes(offMain episodes: [PodcastIndexEpisode]) async -> [Episode] {
+        await Task.detached(priority: .userInitiated) { transformEpisodes(episodes) }.value
+    }
+
+    // MARK: - Transcript selection
+
+    /// Lower sorts first. JSON carries per-word times and speakers; VTT and SRT
+    /// carry timed cues; HTML only has a coarse timestamp per paragraph; plain
+    /// text has no timing at all and cannot drive a synced transcript.
+    private static func transcriptRank(_ type: String?) -> Int {
+        switch type?.lowercased() {
+        case "application/json": return 0
+        case "text/vtt": return 1
+        case "application/srt", "text/srt": return 2
+        case "text/html": return 3
+        case "text/plain": return 4
+        default: return 5
+        }
+    }
+
+    /// Falls back to the file extension, because a few publishers report an
+    /// empty or wrong mime type on an otherwise usable file.
+    private static func transcriptRankByExtension(_ url: String) -> Int {
+        let lower = url.lowercased()
+        if lower.hasSuffix(".json") { return 0 }
+        if lower.hasSuffix(".vtt") { return 1 }
+        if lower.hasSuffix(".srt") { return 2 }
+        if lower.hasSuffix(".html") || lower.hasSuffix(".htm") { return 3 }
+        return 5
+    }
+
+    /// Podcast Index's API docs say the `transcripts` array should be used
+    /// instead of the legacy `transcriptUrl` in most cases, and real feeds show
+    /// why: where a publisher ships JSON, SRT and HTML of the same transcript,
+    /// the legacy field can hand back the HTML one, which is markup rather than
+    /// cues. Prefer the most machine-readable format on offer.
+    static func bestTranscriptUrl(_ episode: PodcastIndexEpisode) -> String? {
+        let candidates = (episode.transcripts ?? [])
+            .compactMap { entry -> (url: String, rank: Int)? in
+                guard let url = entry.url?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !url.isEmpty else { return nil }
+                return (url, min(transcriptRank(entry.type), transcriptRankByExtension(url)))
+            }
+
+        if let best = candidates.min(by: { $0.rank < $1.rank }) {
+            return best.url
+        }
+
+        let legacy = episode.transcriptUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return legacy?.isEmpty == false ? legacy : nil
     }
 
     // MARK: - Helpers
