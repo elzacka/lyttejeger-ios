@@ -177,6 +177,8 @@ private struct QueueItemCard: View {
             episode: episode,
             podcastTitle: item.podcastTitle,
             podcastImage: item.podcastImage ?? "",
+            expandable: true,
+            metadataInExpansion: true,
             usePodcastArtwork: true,
             onPlay: {
                 playerVM.play(episode: episode, podcastTitle: item.podcastTitle, podcastImage: item.podcastImage)

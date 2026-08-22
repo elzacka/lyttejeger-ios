@@ -9,6 +9,16 @@ struct EpisodeCard: View {
     /// between episodes of a show they already chose, and it is the only screen
     /// that renders the description at all — the player does not.
     var showDescription: Bool = false
+    /// Adds a disclosure control that reveals the episode description in place.
+    /// Knowing what an episode is about used to mean opening the podcast,
+    /// scrolling to the episode and tapping it; on the scanning surfaces that
+    /// is three steps to answer the one question a listener has before
+    /// pressing play.
+    var expandable: Bool = false
+    /// Moves date, duration and badges into the expanded area. The queue is a
+    /// list the listener has already chosen, so the metadata is reference
+    /// rather than something to scan, and the rows read more calmly without it.
+    var metadataInExpansion: Bool = false
     /// Shows the podcast artwork instead of the episode's own. On the lists
     /// that mix shows — home and the queue — per-episode artwork made it hard
     /// to tell which podcast a row belonged to.
@@ -23,6 +33,7 @@ struct EpisodeCard: View {
     @Environment(AudioPlayerViewModel.self) private var playerVM
     @Environment(PlaybackProgressViewModel.self) private var progressVM
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var isExpanded = false
 
     /// Diameter of the play overlay on the artwork. Well inside the 56pt
     /// artwork, which is itself the touch target.
@@ -162,6 +173,29 @@ struct EpisodeCard: View {
                     previewLines: 2
                 )
             }
+
+            // The whole point is that a collapsed row costs nothing, so this
+            // is the only place height is added, and only on demand. The
+            // description is shown in full rather than through ExpandableText:
+            // the listener has already asked to see it, and a second "read
+            // more" inside an expansion is one control too many.
+            if canExpand, isExpanded {
+                VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                    if metadataInExpansion {
+                        metaRow(progress: progress, hasBadges: hasBadges)
+                    }
+
+                    if !episode.description.isEmpty {
+                        Text(episode.description)
+                            .font(.smallText)
+                            .foregroundStyle(Color.appMutedForeground)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity)
+            }
         }
     }
 
@@ -179,9 +213,14 @@ struct EpisodeCard: View {
                 .lineLimit(titleLineLimit)
                 .multilineTextAlignment(.leading)
 
-            metaRow(progress: progress, hasBadges: hasBadges)
+            if !metadataInExpansion {
+                metaRow(progress: progress, hasBadges: hasBadges)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Without a floor this column is one line tall wherever the metadata
+        // moved into the expansion, which puts the tap target that opens the
+        // podcast under 44pt.
+        .frame(maxWidth: .infinity, minHeight: AppSize.touchTarget, alignment: .leading)
         .contentShape(Rectangle())
     }
 
@@ -222,7 +261,12 @@ struct EpisodeCard: View {
     }
 
     private var hasControls: Bool {
-        menuContent != nil || !showArtwork
+        menuContent != nil || !showArtwork || expandable
+    }
+
+    /// Only worth expanding when there is something to show.
+    private var canExpand: Bool {
+        expandable && (!episode.description.isEmpty || metadataInExpansion)
     }
 
     /// A menu button only where the row has actions of its own, plus the play
@@ -242,6 +286,24 @@ struct EpisodeCard: View {
     private var controlsRow: some View {
         if hasControls {
         HStack(spacing: AppSpacing.xs) {
+            if canExpand {
+                Button {
+                    if UIAccessibility.isReduceMotionEnabled {
+                        isExpanded.toggle()
+                    } else {
+                        withAnimation(.easeOut(duration: 0.2)) { isExpanded.toggle() }
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(.footnote, weight: .semibold))
+                        .foregroundStyle(Color.appMutedForeground)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .frame(minWidth: AppSize.touchTarget, minHeight: AppSize.touchTarget)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel(isExpanded ? "Skjul beskrivelsen" : "Vis beskrivelsen")
+            }
+
             if let menuContent {
                 Menu {
                     menuContent()

@@ -248,6 +248,7 @@ struct HomeView: View {
                                     episode: item.episode,
                                     podcastTitle: item.podcastTitle,
                                     podcastImage: item.podcastImage,
+                                    expandable: true,
                                     usePodcastArtwork: true
                                 )
                             }
