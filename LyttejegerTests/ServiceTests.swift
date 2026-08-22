@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import SwiftData
 @testable import Lyttejeger
 
 // MARK: - Service Mocks
@@ -13,6 +14,8 @@ struct MockPodcastSearching: PodcastSearching {
     var feedEpisodes: [PodcastIndexEpisode] = []
     var personEpisodes: [PodcastIndexEpisode] = []
     var recentItems: [PodcastIndexEpisode] = []
+    /// Feeds the index knows, keyed by feed URL. Drives OPML import.
+    var feedsByUrl: [String: PodcastIndexFeed] = [:]
 
     func searchByTitle(_ query: String, options: SearchOptions) async throws -> SearchResponse {
         SearchResponse(status: "true", feeds: titleFeeds, count: titleFeeds.count, query: query, description: nil)
@@ -39,7 +42,7 @@ struct MockPodcastSearching: PodcastSearching {
     }
 
     func podcastByFeedUrl(_ feedUrl: String) async throws -> PodcastByIdResponse {
-        PodcastByIdResponse(status: "true", feed: nil, description: nil)
+        PodcastByIdResponse(status: "true", feed: feedsByUrl[feedUrl], description: nil)
     }
 
     func trending(max: Int, lang: String?, cat: String?, notcat: String?) async throws -> SearchResponse {
@@ -55,7 +58,7 @@ struct MockPodcastSearching: PodcastSearching {
 
 struct MockNRKSearching: NRKSearching {
     var catalog: [Podcast] = []
-    var feedResults: [String: NRKFeedResult] = [:]
+    var feedResults: [String: PodcastFeedResult] = [:]
 
     struct FeedMissing: Error {}
 
@@ -63,7 +66,7 @@ struct MockNRKSearching: NRKSearching {
         catalog
     }
 
-    func fetchEpisodes(nrkSlug: String) async throws -> NRKFeedResult {
+    func fetchEpisodes(nrkSlug: String) async throws -> PodcastFeedResult {
         guard let result = feedResults[nrkSlug] else { throw FeedMissing() }
         return result
     }
@@ -96,7 +99,7 @@ func makeApiEpisode(id: Int, feedId: Int?, title: String) -> PodcastIndexEpisode
         enclosureLength: nil, duration: 1800, explicit: 0, episode: nil,
         episodeType: nil, season: nil, image: nil, feedItunesId: nil,
         feedImage: nil, feedId: feedId, feedLanguage: nil, feedDead: nil,
-        chaptersUrl: nil, transcriptUrl: nil, soundbite: nil, soundbites: nil,
+        chaptersUrl: nil, transcriptUrl: nil, transcripts: nil, soundbite: nil, soundbites: nil,
         feedTitle: "Feed title", feedAuthor: nil
     )
 }
@@ -214,7 +217,7 @@ struct NRKFilterMergeTests {
     func episodeSearchSkipsNRKOnLanguageFilter() async {
         var nrk = MockNRKSearching()
         nrk.catalog = [makeNRKPodcast()]
-        nrk.feedResults["test_pod"] = NRKFeedResult(
+        nrk.feedResults["test_pod"] = PodcastFeedResult(
             podcastTitle: "Test fra NRK",
             podcastDescription: "",
             podcastImageUrl: "",
@@ -537,5 +540,506 @@ struct PodcastIndexAPITests {
         } catch {
             Issue.record("unexpected error type: \(error)")
         }
+    }
+}
+
+// MARK: - Chapter and transcript fetching (URLProtocol-stubbed)
+
+/// Canned responses keyed by URL. `StubURLProtocol` above keeps one shared
+/// handler and needs a `.serialized` suite around it; keying by URL lets the
+/// suites below run in parallel with everything else without colliding.
+final class URLStub: URLProtocol {
+    struct Stubbed {
+        var status = 200
+        var headers: [String: String] = [:]
+        var body = Data()
+    }
+
+    private nonisolated(unsafe) static var responses: [String: Stubbed] = [:]
+    private nonisolated(unsafe) static var counts: [String: Int] = [:]
+    private static let lock = NSLock()
+
+    static func register(_ response: Stubbed, for url: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        responses[url] = response
+        counts[url] = 0
+    }
+
+    static func unregister(_ url: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        responses[url] = nil
+        counts[url] = nil
+    }
+
+    /// How many times the network was actually reached — the only way to tell
+    /// a cache hit from a second round trip.
+    static func requestCount(for url: String) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return counts[url] ?? 0
+    }
+
+    private static func take(_ url: String) -> Stubbed? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let response = responses[url] else { return nil }
+        counts[url, default: 0] += 1
+        return response
+    }
+
+    private static func has(_ url: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return responses[url] != nil
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        guard let url = request.url?.absoluteString else { return false }
+        return has(url)
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url, let stubbed = Self.take(url.absoluteString) else {
+            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+            return
+        }
+        let response = HTTPURLResponse(
+            url: url, statusCode: stubbed.status, httpVersion: "HTTP/1.1", headerFields: stubbed.headers
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: stubbed.body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private func stubbedConfiguration() -> URLSessionConfiguration {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [URLStub.self]
+    return config
+}
+
+@Suite("ChapterService.fetchChapters")
+struct ChapterFetchTests {
+
+    private static let chaptersJSON = Data(#"""
+    {"version":"1.2.0","chapters":[{"startTime":0,"title":"Intro"},{"startTime":90,"title":"Tema"}]}
+    """#.utf8)
+
+    private func makeService() -> ChapterService {
+        ChapterService(configuration: stubbedConfiguration())
+    }
+
+    /// Nothing is fetched over plain http, so a downgraded chapter URL can
+    /// never pull content into the app.
+    @Test("a non-https url is refused without a request")
+    func rejectsInsecureURL() async {
+        let url = "http://example.com/chapters-\(UUID().uuidString).json"
+        URLStub.register(.init(body: Self.chaptersJSON), for: url)
+        defer { URLStub.unregister(url) }
+
+        await #expect(throws: ChapterError.self) {
+            _ = try await makeService().fetchChapters(from: url)
+        }
+        #expect(URLStub.requestCount(for: url) == 0)
+    }
+
+    @Test("an empty url is refused")
+    func rejectsEmptyURL() async {
+        await #expect(throws: ChapterError.self) {
+            _ = try await makeService().fetchChapters(from: "")
+        }
+    }
+
+    @Test("a 404 is a failure, not an episode without chapters")
+    func mapsNotFoundToFailure() async {
+        let url = "https://example.com/chapters-\(UUID().uuidString).json"
+        URLStub.register(.init(status: 404), for: url)
+        defer { URLStub.unregister(url) }
+
+        await #expect(throws: ChapterError.self) {
+            _ = try await makeService().fetchChapters(from: url)
+        }
+    }
+
+    /// The cap is there so a wrong URL cannot pull an arbitrary payload into
+    /// memory on a phone.
+    @Test("a payload past the size cap is dropped")
+    func rejectsOversizedPayload() async {
+        let url = "https://example.com/chapters-\(UUID().uuidString).json"
+        let oversized = Data(repeating: UInt8(ascii: " "), count: AppConstants.maxChaptersSize + 1)
+        URLStub.register(.init(body: oversized), for: url)
+        defer { URLStub.unregister(url) }
+
+        await #expect(throws: ChapterError.self) {
+            _ = try await makeService().fetchChapters(from: url)
+        }
+    }
+
+    /// An error page served with a 200 is the common shape of a dead chapter
+    /// URL, and it must not come back as "this episode has no chapters".
+    @Test("a 200 that is not a chapters file still fails")
+    func rejectsNonChapterBody() async {
+        let url = "https://example.com/chapters-\(UUID().uuidString).json"
+        URLStub.register(.init(body: Data("<html>Not found</html>".utf8)), for: url)
+        defer { URLStub.unregister(url) }
+
+        await #expect(throws: ChapterError.self) {
+            _ = try await makeService().fetchChapters(from: url)
+        }
+    }
+
+    @Test("a good response is parsed and then served from cache")
+    func parsesAndCaches() async throws {
+        let url = "https://example.com/chapters-\(UUID().uuidString).json"
+        URLStub.register(.init(body: Self.chaptersJSON), for: url)
+        defer { URLStub.unregister(url) }
+
+        let service = makeService()
+        let first = try await service.fetchChapters(from: url)
+        let second = try await service.fetchChapters(from: url)
+
+        #expect(first.map(\.title) == ["Intro", "Tema"])
+        #expect(second.count == first.count)
+        #expect(URLStub.requestCount(for: url) == 1)
+    }
+}
+
+@Suite("TranscriptService.fetchTranscript")
+struct TranscriptFetchTests {
+
+    private static let vtt = Data("""
+    WEBVTT
+
+    00:00:00.000 --> 00:00:04.000
+    Hei og velkommen.
+
+    00:00:04.000 --> 00:00:08.000
+    I dag snakker vi om testing.
+    """.utf8)
+
+    private func makeService() -> TranscriptService {
+        TranscriptService(configuration: stubbedConfiguration())
+    }
+
+    @Test("a non-https url is refused without a request")
+    func rejectsInsecureURL() async {
+        let url = "http://example.com/transcript-\(UUID().uuidString).vtt"
+        URLStub.register(.init(body: Self.vtt), for: url)
+        defer { URLStub.unregister(url) }
+
+        await #expect(throws: TranscriptError.self) {
+            _ = try await makeService().fetchTranscript(from: url)
+        }
+        #expect(URLStub.requestCount(for: url) == 0)
+    }
+
+    @Test("a server error is a failure the panel can retry")
+    func mapsServerErrorToFailure() async {
+        let url = "https://example.com/transcript-\(UUID().uuidString).vtt"
+        URLStub.register(.init(status: 500), for: url)
+        defer { URLStub.unregister(url) }
+
+        await #expect(throws: TranscriptError.self) {
+            _ = try await makeService().fetchTranscript(from: url)
+        }
+    }
+
+    @Test("a payload past the size cap is dropped")
+    func rejectsOversizedPayload() async {
+        let url = "https://example.com/transcript-\(UUID().uuidString).vtt"
+        let oversized = Data(repeating: UInt8(ascii: " "), count: AppConstants.maxTranscriptSize + 1)
+        URLStub.register(.init(body: oversized), for: url)
+        defer { URLStub.unregister(url) }
+
+        await #expect(throws: TranscriptError.self) {
+            _ = try await makeService().fetchTranscript(from: url)
+        }
+    }
+
+    /// Fetched, read, and nothing usable in it: that is "no transcript", which
+    /// the panel states plainly instead of offering a retry that cannot help.
+    @Test("a body that is not a transcript comes back empty, not as an error")
+    func unreadableBodyIsNoTranscript() async throws {
+        let url = "https://example.com/transcript-\(UUID().uuidString).vtt"
+        URLStub.register(
+            .init(headers: ["Content-Type": "text/html"], body: Data("<html><body>404</body></html>".utf8)),
+            for: url
+        )
+        defer { URLStub.unregister(url) }
+
+        let transcript = try await makeService().fetchTranscript(from: url)
+        #expect(transcript == nil)
+    }
+
+    @Test("a good response is parsed and then served from cache")
+    func parsesAndCaches() async throws {
+        let url = "https://example.com/transcript-\(UUID().uuidString).vtt"
+        URLStub.register(.init(headers: ["Content-Type": "text/vtt"], body: Self.vtt), for: url)
+        defer { URLStub.unregister(url) }
+
+        let service = makeService()
+        let first = try await service.fetchTranscript(from: url)
+        _ = try await service.fetchTranscript(from: url)
+
+        let transcript = try #require(first)
+        #expect(transcript.segments.count == 2)
+        #expect(transcript.segments[0].text == "Hei og velkommen.")
+        #expect(transcript.isSynced)
+        #expect(URLStub.requestCount(for: url) == 1)
+    }
+}
+
+// MARK: - RSSFeedService
+
+/// Covers the path OPML import depends on: a subscription that Podcast Index
+/// does not know keeps only its feed URL, so episodes have to come straight
+/// from the feed. Before this existed such a subscription showed no episodes
+/// at all, which made import look like it worked while producing dead ends.
+@Suite("RSSFeedService")
+struct RSSFeedServiceTests {
+
+    private static let feedXML = Data("""
+    <?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0">
+      <channel>
+        <title>En importert podkast</title>
+        <description>Beskrivelse fra feeden</description>
+        <item>
+          <title>Episode 1</title>
+          <description>Om noe</description>
+          <guid>ep-1</guid>
+          <pubDate>Mon, 06 Jan 2025 08:00:00 +0000</pubDate>
+          <enclosure url="https://example.com/ep1.mp3" type="audio/mpeg" length="1000"/>
+          <itunes:duration xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">25:00</itunes:duration>
+        </item>
+      </channel>
+    </rss>
+    """.utf8)
+
+    private func makeService() -> RSSFeedService {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [URLStub.self]
+        return RSSFeedService(configuration: config)
+    }
+
+    @Test("reads episodes and channel metadata from an arbitrary feed")
+    func readsFeed() async throws {
+        let url = "https://example.com/importert.xml"
+        URLStub.register(.init(body: Self.feedXML), for: url)
+        defer { URLStub.unregister(url) }
+
+        let result = try await makeService().fetchEpisodes(feedUrl: url, podcastId: "feed:\(url)")
+
+        #expect(result.podcastTitle == "En importert podkast")
+        #expect(result.episodes.count == 1)
+        #expect(result.episodes.first?.title == "Episode 1")
+        #expect(result.episodes.first?.podcastId == "feed:\(url)")
+    }
+
+    @Test("rejects a non-https feed URL without making a request")
+    func rejectsPlainHTTP() async {
+        // The URL comes from an imported file, so it is untrusted input and
+        // gets the same https-only rule as every other fetch in the app.
+        let service = makeService()
+
+        await #expect(throws: RSSFeedService.RSSFeedError.self) {
+            try await service.fetchEpisodes(feedUrl: "http://example.com/feed.xml", podcastId: "feed:x")
+        }
+    }
+
+    @Test("maps a failed fetch to an error instead of an empty feed")
+    func mapsFailureToError() async {
+        let url = "https://example.com/borte.xml"
+        URLStub.register(.init(status: 404), for: url)
+        defer { URLStub.unregister(url) }
+
+        await #expect(throws: RSSFeedService.RSSFeedError.self) {
+            try await makeService().fetchEpisodes(feedUrl: url, podcastId: "feed:x")
+        }
+    }
+
+    @Test("serves the second read from cache")
+    func cachesFeed() async throws {
+        let url = "https://example.com/cachet.xml"
+        URLStub.register(.init(body: Self.feedXML), for: url)
+        defer { URLStub.unregister(url) }
+
+        let service = makeService()
+        _ = try await service.fetchEpisodes(feedUrl: url, podcastId: "feed:x")
+        _ = try await service.fetchEpisodes(feedUrl: url, podcastId: "feed:x")
+
+        #expect(URLStub.requestCount(for: url) == 1)
+    }
+}
+
+// MARK: - Direct-feed podcast ids
+
+@Suite("Podcast.isDirectFeed")
+struct DirectFeedPodcastTests {
+
+    private func podcast(id: String) -> Podcast {
+        Podcast(
+            id: id, title: "T", author: "", description: "", imageUrl: "",
+            feedUrl: "", categories: [], language: "Norsk", episodeCount: 0,
+            lastUpdated: "", explicit: false
+        )
+    }
+
+    @Test("recognises a feed: id and returns the URL it carries")
+    func recognisesDirectFeed() {
+        let p = podcast(id: "feed:https://example.com/a.xml")
+        #expect(p.isDirectFeed)
+        #expect(p.directFeedUrl == "https://example.com/a.xml")
+    }
+
+    @Test("leaves Podcast Index and NRK ids alone")
+    func ignoresOtherIdKinds() {
+        #expect(!podcast(id: "12345").isDirectFeed)
+        #expect(podcast(id: "12345").directFeedUrl == nil)
+        #expect(!podcast(id: "nrk:abels_taarn").isDirectFeed)
+        #expect(podcast(id: "nrk:abels_taarn").directFeedUrl == nil)
+    }
+}
+
+// MARK: - OPML import
+
+/// LYT-17: importOPML had no coverage at all, even though it is the path a
+/// user migrating from another podcast app takes.
+@Suite("DataTransferService.importOPML")
+@MainActor
+struct ImportOPMLTests {
+
+    private func makeContext() throws -> ModelContext {
+        let schema = Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        return ModelContext(try ModelContainer(for: schema, configurations: [config]))
+    }
+
+    private func opml(_ outlines: String) -> Data {
+        Data("<opml version=\"2.0\"><body>\(outlines)</body></opml>".utf8)
+    }
+
+    private func run(
+        _ data: Data,
+        context: ModelContext,
+        api: MockPodcastSearching = MockPodcastSearching()
+    ) async throws -> ImportSummary {
+        try await DataTransferService.importOPML(data, into: context, api: api) { _, _ in }
+    }
+
+    @Test("resolves a feed the index knows and keeps its metadata")
+    func resolvesKnownFeed() async throws {
+        let context = try makeContext()
+        var api = MockPodcastSearching()
+        api.feedsByUrl["https://example.com/42.xml"] = makeFeed(id: 42, title: "Ekte tittel")
+
+        let summary = try await run(
+            opml(#"<outline type="rss" text="Fra fila" xmlUrl="https://example.com/42.xml"/>"#),
+            context: context, api: api
+        )
+
+        #expect(summary.addedSubscriptions == 1)
+        let sub = try context.fetch(FetchDescriptor<Subscription>()).first
+        #expect(sub?.podcastId == "42")
+        #expect(sub?.title == "Ekte tittel")
+    }
+
+    @Test("keeps a feed the index does not know, as a direct feed")
+    func keepsUnknownFeed() async throws {
+        // Dropping it would lose a podcast during a migration. The id carries
+        // the feed URL so the episodes can be read straight from the feed.
+        let context = try makeContext()
+
+        let summary = try await run(
+            opml(#"<outline type="rss" text="Ukjent" xmlUrl="https://example.com/ukjent.xml"/>"#),
+            context: context
+        )
+
+        #expect(summary.addedSubscriptions == 1)
+        let sub = try #require(try context.fetch(FetchDescriptor<Subscription>()).first)
+        #expect(sub.podcastId == "feed:https://example.com/ukjent.xml")
+        #expect(Podcast(subscription: sub).directFeedUrl == "https://example.com/ukjent.xml")
+    }
+
+    @Test("recognises an NRK feed without asking the index")
+    func recognisesNRKFeed() async throws {
+        let context = try makeContext()
+
+        _ = try await run(
+            opml(#"<outline type="rss" text="Abels tårn" xmlUrl="https://sindrel.github.io/nrk-pod-feeds/rss/abels_taarn.xml"/>"#),
+            context: context
+        )
+
+        let sub = try #require(try context.fetch(FetchDescriptor<Subscription>()).first)
+        #expect(sub.podcastId == "nrk:abels_taarn")
+        #expect(sub.author == "NRK")
+    }
+
+    @Test("skips a feed already followed instead of duplicating it")
+    func skipsExisting() async throws {
+        let context = try makeContext()
+        context.insert(Subscription(
+            podcastId: "nrk:abels_taarn", title: "Abels tårn", author: "NRK",
+            imageUrl: "", feedUrl: "https://sindrel.github.io/nrk-pod-feeds/rss/abels_taarn.xml"
+        ))
+        try context.save()
+
+        let summary = try await run(
+            opml(#"<outline type="rss" text="Abels tårn" xmlUrl="https://sindrel.github.io/nrk-pod-feeds/rss/abels_taarn.xml"/>"#),
+            context: context
+        )
+
+        #expect(summary.addedSubscriptions == 0)
+        #expect(summary.skippedSubscriptions == 1)
+        #expect(try context.fetch(FetchDescriptor<Subscription>()).count == 1)
+    }
+
+    @Test("importing the same file twice adds nothing the second time")
+    func isIdempotent() async throws {
+        let context = try makeContext()
+        let file = opml(#"<outline type="rss" text="Ukjent" xmlUrl="https://example.com/a.xml"/>"#)
+
+        _ = try await run(file, context: context)
+        let second = try await run(file, context: context)
+
+        #expect(second.addedSubscriptions == 0)
+        #expect(try context.fetch(FetchDescriptor<Subscription>()).count == 1)
+    }
+
+    @Test("rejects a file with no subscriptions in it")
+    func rejectsEmptyFile() async throws {
+        let context = try makeContext()
+
+        await #expect(throws: ImportError.self) {
+            _ = try await DataTransferService.importOPML(
+                self.opml("<outline text='bare en mappe'/>"),
+                into: context, api: MockPodcastSearching()
+            ) { _, _ in }
+        }
+    }
+
+    @Test("reports how far it has come, so a long import is not silent")
+    func reportsProgress() async throws {
+        let context = try makeContext()
+        var seen: [Int] = []
+
+        _ = try await DataTransferService.importOPML(
+            opml("""
+            <outline type="rss" text="A" xmlUrl="https://example.com/a.xml"/>
+            <outline type="rss" text="B" xmlUrl="https://example.com/b.xml"/>
+            """),
+            into: context, api: MockPodcastSearching()
+        ) { done, total in
+            seen.append(done)
+            #expect(total == 2)
+        }
+
+        #expect(seen == [1, 2])
     }
 }

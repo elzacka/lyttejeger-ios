@@ -50,6 +50,14 @@ struct LyttejegerApp: App {
         }
     }()
 
+    init() {
+        // Runs before the first view reads the store, and only when the UI
+        // test suite asked for a known starting point.
+        #if DEBUG
+        UITestSupport.prepareIfNeeded(modelContainer)
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             ZStack {

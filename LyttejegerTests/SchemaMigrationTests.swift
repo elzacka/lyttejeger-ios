@@ -4,13 +4,13 @@ import SwiftData
 @testable import Lyttejeger
 
 /// Guards the retrofit of VersionedSchema onto a store that shipped without one.
-/// Each test writes a store on disk the way v1.0.8 (build 14) did — a bare
-/// `Schema([...])` with no migration plan — then reopens that same file with
+/// Each test writes a store on disk the way the pre-versioning builds did — a
+/// bare `Schema([...])` with no migration plan — then reopens that same file with
 /// `LyttejegerStore.makeContainer()` and checks the rows survived.
 @Suite("SwiftData schema migration")
 struct SchemaMigrationTests {
 
-    /// The pre-versioning schema, exactly as build 14 constructed it.
+    /// The pre-versioning schema, exactly as the released builds constructed it.
     private static var legacySchema: Schema {
         Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
     }
@@ -68,10 +68,11 @@ struct SchemaMigrationTests {
         }
 
         // 2. Reopen the same file through the versioned schema + migration plan.
-        let migrated = try ModelContainer(
-            for: LyttejegerStore.schema,
-            migrationPlan: LyttejegerMigrationPlan.self,
-            configurations: ModelConfiguration(url: url)
+        // Through `makeContainer`, not a hand-rolled copy of it: the point of
+        // the test is that the path the app actually launches on opens a
+        // build-14 store.
+        let migrated = try LyttejegerStore.makeContainer(
+            configurations: [ModelConfiguration(url: url)]
         )
         let context = ModelContext(migrated)
 
@@ -116,10 +117,11 @@ struct SchemaMigrationTests {
             try context.save()
         }
 
-        let migrated = try ModelContainer(
-            for: LyttejegerStore.schema,
-            migrationPlan: LyttejegerMigrationPlan.self,
-            configurations: ModelConfiguration(url: url)
+        // Through `makeContainer`, not a hand-rolled copy of it: the point of
+        // the test is that the path the app actually launches on opens a
+        // build-14 store.
+        let migrated = try LyttejegerStore.makeContainer(
+            configurations: [ModelConfiguration(url: url)]
         )
         let context = ModelContext(migrated)
 

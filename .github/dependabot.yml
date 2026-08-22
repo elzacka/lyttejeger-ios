@@ -1,0 +1,8 @@
+# The app itself has no third-party dependencies. GitHub Actions still age,
+# and a stale action is the one supply-chain surface this repo has.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

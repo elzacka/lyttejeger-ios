@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import SwiftData
+import UIKit
 @testable import Lyttejeger
 
 // MARK: - TimeFormatting Tests
@@ -159,11 +160,13 @@ struct HTMLToTextTests {
         #expect(PodcastTransform.htmlToText(html) == "Click here")
     }
 
+    /// Asserting only that both paragraphs survive passes even when the break
+    /// between them is gone — which is the regression this test is named for.
+    /// Two paragraphs running into one line is what a stripped `</p>` looks
+    /// like in an episode description.
     @Test func blockElementsAsNewlines() {
-        let html = "<p>Paragraph 1</p><p>Paragraph 2</p>"
-        let result = PodcastTransform.htmlToText(html)
-        #expect(result.contains("Paragraph 1"))
-        #expect(result.contains("Paragraph 2"))
+        let result = PodcastTransform.htmlToText("<p>Paragraph 1</p><p>Paragraph 2</p>")
+        #expect(result == "Paragraph 1\nParagraph 2")
     }
 
     @Test func decodesHTMLEntities() {
@@ -182,24 +185,24 @@ struct HTMLToTextTests {
     }
 }
 
-// MARK: - NRKRSSParser Tests
+// MARK: - PodcastRSSParser Tests
 
-@Suite("NRKRSSParser.parseDuration")
+@Suite("PodcastRSSParser.parseDuration")
 struct NRKDurationTests {
     @Test func hoursMinutesSeconds() {
-        #expect(NRKRSSParser.parseDuration("01:23:45") == 5025)
+        #expect(PodcastRSSParser.parseDuration("01:23:45") == 5025)
     }
 
     @Test func minutesSeconds() {
-        #expect(NRKRSSParser.parseDuration("23:45") == 1425)
+        #expect(PodcastRSSParser.parseDuration("23:45") == 1425)
     }
 
     @Test func secondsOnly() {
-        #expect(NRKRSSParser.parseDuration("120") == 120)
+        #expect(PodcastRSSParser.parseDuration("120") == 120)
     }
 
     @Test func empty() {
-        #expect(NRKRSSParser.parseDuration("") == 0)
+        #expect(PodcastRSSParser.parseDuration("") == 0)
     }
 }
 
@@ -361,17 +364,17 @@ struct GetCurrentSegmentTests {
     }
 }
 
-// MARK: - NRKRSSParser.parseDate Tests
+// MARK: - PodcastRSSParser.parseDate Tests
 
-@Suite("NRKRSSParser.parseDate")
+@Suite("PodcastRSSParser.parseDate")
 struct NRKParseDateTests {
     @Test func validRFC2822() {
-        let result = NRKRSSParser.parseDate("Mon, 15 Jan 2025 12:00:00 +0000")
+        let result = PodcastRSSParser.parseDate("Mon, 15 Jan 2025 12:00:00 +0000")
         #expect(result.contains("2025-01-15"))
     }
 
     @Test func invalidDate() {
-        let result = NRKRSSParser.parseDate("not a date")
+        let result = PodcastRSSParser.parseDate("not a date")
         #expect(result == "not a date")
     }
 }
@@ -577,6 +580,49 @@ struct QueueViewModelTests {
         #expect(popped?.episode.id == "ep-1")
         #expect(vm.items.count == 1)
         #expect(vm.items.first?.episodeId == "ep-2")
+    }
+
+    @Test("itemAfter advances past the finished episode without removing it")
+    func itemAfterAdvancesWithoutRemoving() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = QueueViewModel()
+        vm.setup(context)
+
+        vm.addToQueue(episode: makeEpisode(id: "ep-1", title: "First"), podcastTitle: "Pod", podcastImage: nil)
+        vm.addToQueue(episode: makeEpisode(id: "ep-2", title: "Second"), podcastTitle: "Pod", podcastImage: nil)
+
+        // The episode that just finished is still first while episodes are
+        // kept in the queue, so auto-advance must not hand it back.
+        let next = vm.itemAfter(episodeId: "ep-1")
+
+        #expect(next?.episode.id == "ep-2")
+        #expect(vm.items.count == 2)
+    }
+
+    @Test("itemAfter stops at the end of the queue")
+    func itemAfterStopsAtEnd() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = QueueViewModel()
+        vm.setup(context)
+
+        vm.addToQueue(episode: makeEpisode(id: "ep-1", title: "Only"), podcastTitle: "Pod", podcastImage: nil)
+
+        #expect(vm.itemAfter(episodeId: "ep-1") == nil)
+    }
+
+    @Test("itemAfter starts the queue for an episode played from elsewhere")
+    func itemAfterFallsBackToFirst() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = QueueViewModel()
+        vm.setup(context)
+
+        vm.addToQueue(episode: makeEpisode(id: "ep-1", title: "First"), podcastTitle: "Pod", podcastImage: nil)
+
+        #expect(vm.itemAfter(episodeId: "not-in-queue")?.episode.id == "ep-1")
+        #expect(vm.itemAfter(episodeId: nil)?.episode.id == "ep-1")
     }
 }
 
@@ -1233,6 +1279,66 @@ struct ImportJSONTests {
         #expect(summary.addedQueueItems == 0)
     }
 
+    @Test("restores the settings a backup carries")
+    func restoresSettings() throws {
+        // LYT-24: settings were exported but never read back, so the documented
+        // round-trip did not exist.
+        let context = try makeContext()
+        UserDefaults.standard.set(true, forKey: AppConstants.showLastPlayedKey)
+        UserDefaults.standard.set(false, forKey: AppConstants.keepEpisodesInQueueKey)
+        defer {
+            UserDefaults.standard.removeObject(forKey: AppConstants.showLastPlayedKey)
+            UserDefaults.standard.removeObject(forKey: AppConstants.keepEpisodesInQueueKey)
+        }
+
+        let data = try! JSONSerialization.data(withJSONObject: [
+            "abonnementer": [],
+            "innstillinger": [
+                "visFortsettÅLytte": false,
+                "beholdEpisoderIKoen": true,
+            ],
+        ])
+        _ = try DataTransferService.importJSON(data, into: context)
+
+        #expect(UserDefaults.standard.bool(forKey: AppConstants.showLastPlayedKey) == false)
+        #expect(UserDefaults.standard.bool(forKey: AppConstants.keepEpisodesInQueueKey) == true)
+    }
+
+    @Test("leaves a setting the backup does not mention alone")
+    func leavesUnknownSettingAlone() throws {
+        // An older export predates a setting; that must not reset it.
+        let context = try makeContext()
+        UserDefaults.standard.set(true, forKey: AppConstants.keepEpisodesInQueueKey)
+        defer { UserDefaults.standard.removeObject(forKey: AppConstants.keepEpisodesInQueueKey) }
+
+        let data = try! JSONSerialization.data(withJSONObject: [
+            "abonnementer": [],
+            "innstillinger": ["visFortsettÅLytte": true],
+        ])
+        _ = try DataTransferService.importJSON(data, into: context)
+
+        #expect(UserDefaults.standard.bool(forKey: AppConstants.keepEpisodesInQueueKey) == true)
+    }
+
+    @Test("counts a podcast listed twice in one file only once")
+    func dedupesWithinFile() throws {
+        // LYT-25: the unique constraint stored one row while the summary
+        // claimed two additions, so the user was told the wrong thing.
+        let context = try makeContext()
+
+        let summary = try DataTransferService.importJSON(
+            backup(subscriptions: [
+                ["podcastId": "1", "tittel": "En podkast", "feedUrl": "https://a.xml"],
+                ["podcastId": "1", "tittel": "Samme podkast", "feedUrl": "https://a.xml"],
+            ]),
+            into: context
+        )
+
+        #expect(summary.addedSubscriptions == 1)
+        #expect(summary.skippedSubscriptions == 1)
+        #expect(try context.fetch(FetchDescriptor<Subscription>()).count == 1)
+    }
+
     @Test("rejects a JSON file that is not a Lyttejeger backup")
     func rejectsForeignJSON() throws {
         let context = try makeContext()
@@ -1516,6 +1622,7 @@ struct TransformEpisodeTests {
             feedDead: nil,
             chaptersUrl: nil,
             transcriptUrl: nil,
+            transcripts: nil,
             soundbite: nil,
             soundbites: nil,
             feedTitle: nil,
@@ -1557,6 +1664,7 @@ struct TransformEpisodeTests {
             feedDead: nil,
             chaptersUrl: nil,
             transcriptUrl: nil,
+            transcripts: nil,
             soundbite: nil,
             soundbites: nil,
             feedTitle: nil,
@@ -1710,5 +1818,1292 @@ struct ClearFiltersTests {
         #expect(vm.filters.languages.isEmpty)
         #expect(vm.filters.sortBy == .relevance)
         #expect(vm.hasActiveFilters == false)
+    }
+}
+
+// MARK: - Transcript Parsing Tests
+
+@Suite("TranscriptService HTML parsing")
+struct TranscriptHTMLParsingTests {
+    /// The exact shape Captivate.fm serves for a `text/html` transcript.
+    private let html = """
+    <cite>Speaker A</cite>
+    <time>00:00:00</time>
+    <p>Denne episoden passer for niva B1.</p>
+    <cite>Speaker B</cite>
+    <time>00:01:25</time>
+    <p>Litt om Norges historie.</p>
+    <cite>Speaker A</cite>
+    <time>00:07:24</time>
+    <p>Takk for naa.</p>
+    """
+
+    @Test func parsesCuesWithoutMarkup() throws {
+        let transcript = try #require(
+            TranscriptService.makeTranscript(
+                from: Data(html.utf8),
+                contentType: "text/html; charset=utf-8",
+                url: "https://example.com/index.html"
+            )
+        )
+        #expect(transcript.segments.count == 3)
+        // The reported bug: tags rendered verbatim in the panel.
+        #expect(transcript.segments.allSatisfy { !$0.text.contains("<") })
+        #expect(transcript.segments[0].text == "Denne episoden passer for niva B1.")
+    }
+
+    @Test func readsTimestampsAndSpeakers() throws {
+        let transcript = try #require(
+            TranscriptService.makeTranscript(
+                from: Data(html.utf8),
+                contentType: "text/html",
+                url: "https://example.com/index.html"
+            )
+        )
+        #expect(transcript.segments[1].startTime == 85)
+        #expect(transcript.segments[2].startTime == 444)
+        #expect(transcript.segments[1].speaker == "Speaker B")
+    }
+
+    /// Every cue needs an end after its start, or lookup can never select it.
+    @Test func fillsEndTimesFromNextCue() throws {
+        let transcript = try #require(
+            TranscriptService.makeTranscript(
+                from: Data(html.utf8),
+                contentType: "text/html",
+                url: "https://example.com/index.html"
+            )
+        )
+        #expect(transcript.segments[0].endTime == 85)
+        #expect(transcript.segments.allSatisfy { $0.endTime > $0.startTime })
+
+        let current = TranscriptService.getCurrentSegment(transcript, at: 90)
+        #expect(current?.text == "Litt om Norges historie.")
+    }
+
+    /// HTML with paragraphs but no timings is kept and flagged unsynced, so
+    /// the panel can show it as reading text without offering tap-to-seek or
+    /// highlighting that it cannot honour.
+    @Test func marksHTMLWithoutTimestampsAsUnsynced() throws {
+        let page = "<p>Bare en vanlig side.</p><p>Ingen tidsstempler her.</p>"
+        let transcript = try #require(
+            TranscriptService.makeTranscript(
+                from: Data(page.utf8),
+                contentType: "text/html",
+                url: "https://example.com/page.html"
+            )
+        )
+        #expect(transcript.isSynced == false)
+        #expect(transcript.segments.count == 2)
+    }
+}
+
+// MARK: - Playback position saving
+
+/// Minimal AudioPlaying stand-in: the position save path only reads episode,
+/// time and duration, and never drives real playback.
+@MainActor
+final class StubAudioPlayer: AudioPlaying {
+    var isPlaying = false
+    var currentTime: TimeInterval = 0
+    var duration: TimeInterval = 0
+    var isLoading = false
+    var hasError = false
+    var playbackSpeed: Float = 1.0
+    var currentEpisode: Episode?
+    var currentPodcastTitle: String?
+    var currentPodcastImage: String?
+    var onRemotePlay: (() -> Void)?
+    var pausedAt: Date?
+
+    func play(episode: Episode, podcastTitle: String?, podcastImage: String?) {}
+    func togglePlayPause() {}
+    func pause() {}
+    private(set) var seekedTo: TimeInterval?
+    func seek(to time: TimeInterval) { seekedTo = time }
+    func skipBackward() {}
+    func skipForward() {}
+    func setSpeed(_ speed: Float) {}
+    func setVolume(_ volume: Float) {}
+    func stop() {}
+}
+
+@Suite("Playback position saving")
+@MainActor
+struct PlaybackPositionSaveTests {
+
+    private func makeContext() throws -> ModelContext {
+        let schema = Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        return ModelContext(try ModelContainer(for: schema, configurations: [config]))
+    }
+
+    private func makeEpisode() -> Episode {
+        Episode(
+            id: "ep-1",
+            podcastId: "pod-1",
+            title: "Test",
+            description: "",
+            audioUrl: "https://example.com/ep.mp3",
+            duration: 1800,
+            publishedAt: "2025-01-01T12:00:00Z",
+            imageUrl: nil,
+            transcriptUrl: nil,
+            chaptersUrl: nil,
+            season: nil,
+            episode: nil,
+            episodeType: nil,
+            soundbites: nil
+        )
+    }
+
+    private func storedPosition(in context: ModelContext) throws -> PlaybackPosition {
+        let all = try context.fetch(FetchDescriptor<PlaybackPosition>())
+        return try #require(all.first)
+    }
+
+    /// The save timer keeps running while playback is paused. Rewriting the row
+    /// on every tick refreshed `updatedAt`, which is what smart resume measures
+    /// the pause from — so a long pause looked seconds old and never rewound.
+    @Test func pausedPlaybackDoesNotRefreshTheTimestamp() throws {
+        let context = try makeContext()
+        let audio = StubAudioPlayer()
+        let vm = AudioPlayerViewModel(audioService: audio)
+        vm.setup(context)
+
+        audio.currentEpisode = makeEpisode()
+        audio.duration = 1800
+        audio.currentTime = 600
+        vm.savePosition()
+
+        let firstSave = try storedPosition(in: context).updatedAt
+
+        // Paused: the timer fires again with the position standing still.
+        vm.savePosition()
+
+        #expect(try storedPosition(in: context).updatedAt == firstSave)
+    }
+
+    @Test func advancingPlaybackRefreshesTheTimestamp() throws {
+        let context = try makeContext()
+        let audio = StubAudioPlayer()
+        let vm = AudioPlayerViewModel(audioService: audio)
+        vm.setup(context)
+
+        audio.currentEpisode = makeEpisode()
+        audio.duration = 1800
+        audio.currentTime = 600
+        vm.savePosition()
+
+        let firstSave = try storedPosition(in: context).updatedAt
+
+        audio.currentTime = 605
+        vm.savePosition()
+
+        let stored = try storedPosition(in: context)
+        #expect(stored.position == 605)
+        #expect(stored.updatedAt > firstSave)
+    }
+
+    /// Reaching the end still has to be written even though the position has
+    /// stopped moving, or the episode never counts as finished.
+    @Test func completionIsStillWrittenWhenPositionStops() throws {
+        let context = try makeContext()
+        let audio = StubAudioPlayer()
+        let vm = AudioPlayerViewModel(audioService: audio)
+        vm.setup(context)
+
+        audio.currentEpisode = makeEpisode()
+        audio.duration = 1000
+        audio.currentTime = 500
+        vm.savePosition()
+        #expect(try storedPosition(in: context).completed == false)
+
+        audio.currentTime = 990
+        vm.savePosition()
+
+        #expect(try storedPosition(in: context).completed)
+    }
+}
+
+@Suite("Smart resume")
+@MainActor
+struct SmartResumeTests {
+
+    private let threshold = AppConstants.smartResumeThreshold
+    private let rewind = AppConstants.smartResumeRewind
+
+    private func makeContext() throws -> ModelContext {
+        let schema = Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        return ModelContext(try ModelContainer(for: schema, configurations: [config]))
+    }
+
+    private func makeEpisode() -> Episode {
+        Episode(
+            id: "ep-1",
+            podcastId: "pod-1",
+            title: "Test",
+            description: "",
+            audioUrl: "https://example.com/ep.mp3",
+            duration: 1800,
+            publishedAt: "2025-01-01T12:00:00Z",
+            imageUrl: nil,
+            transcriptUrl: nil,
+            chaptersUrl: nil,
+            season: nil,
+            episode: nil,
+            episodeType: nil,
+            soundbites: nil
+        )
+    }
+
+    @Test func shortPauseResumesExactlyWhereItStopped() {
+        let justNow = Date().addingTimeInterval(-(threshold - 60))
+        #expect(AudioPlayerViewModel.smartResumePosition(600, pausedSince: justNow) == 600)
+    }
+
+    @Test func longPauseRewinds() {
+        let longAgo = Date().addingTimeInterval(-(threshold + 60))
+        #expect(AudioPlayerViewModel.smartResumePosition(600, pausedSince: longAgo) == 600 - rewind)
+    }
+
+    /// Rewinding past the opening seconds must land on the start, not a
+    /// negative time the player cannot seek to.
+    @Test func rewindNeverGoesBeforeTheStart() {
+        let longAgo = Date().addingTimeInterval(-(threshold + 60))
+        #expect(AudioPlayerViewModel.smartResumePosition(4, pausedSince: longAgo) == 0)
+    }
+
+    /// Remote play (lock screen, headphones) can restart an episode from the
+    /// top; the position is restored, and after a long pause it earns the same
+    /// rewind as every other resume path.
+    @Test func remotePlayRestoreRewindsAfterALongPause() throws {
+        let context = try makeContext()
+        let audio = StubAudioPlayer()
+        let vm = AudioPlayerViewModel(audioService: audio)
+        vm.setup(context)
+
+        context.insert(PlaybackPosition(
+            episodeId: "ep-1",
+            position: 600,
+            duration: 1800,
+            updatedAt: Date().addingTimeInterval(-(threshold + 60)),
+            completed: false
+        ))
+        try context.save()
+
+        audio.currentEpisode = makeEpisode()
+        audio.duration = 1800
+        audio.currentTime = 0
+
+        audio.onRemotePlay?()
+
+        #expect(audio.seekedTo == 600 - rewind)
+    }
+
+    @Test func remotePlayRestoreKeepsThePositionAfterAShortPause() throws {
+        let context = try makeContext()
+        let audio = StubAudioPlayer()
+        let vm = AudioPlayerViewModel(audioService: audio)
+        vm.setup(context)
+
+        context.insert(PlaybackPosition(
+            episodeId: "ep-1",
+            position: 600,
+            duration: 1800,
+            updatedAt: Date().addingTimeInterval(-(threshold - 60)),
+            completed: false
+        ))
+        try context.save()
+
+        audio.currentEpisode = makeEpisode()
+        audio.duration = 1800
+        audio.currentTime = 0
+
+        audio.onRemotePlay?()
+
+        #expect(audio.seekedTo == 600)
+    }
+}
+
+@Suite("TranscriptService regressions")
+struct TranscriptRegressionTests {
+
+    /// A speaker turn spanning several paragraphs used to keep the timestamp
+    /// on the first paragraph only. The rest fell to 0:00 and then sorted to
+    /// the top, so the transcript read out of order and tapping those lines
+    /// seeked to the start of the episode.
+    @Test func multiParagraphTurnKeepsItsTimestamp() throws {
+        let html = """
+        <cite>Pia</cite><time>00:01:00</time>
+        <p>Foerste setning.</p>
+        <p>Andre setning.</p>
+        <cite>Julie</cite><time>00:02:00</time>
+        <p>Svar.</p>
+        """
+        let transcript = try #require(
+            TranscriptService.makeTranscript(
+                from: Data(html.utf8),
+                contentType: "text/html",
+                url: "https://example.com/t.html"
+            )
+        )
+
+        #expect(transcript.isSynced)
+        #expect(transcript.segments.map(\.text) == ["Foerste setning.", "Andre setning.", "Svar."])
+        #expect(transcript.segments.map(\.startTime) == [60, 60, 120])
+    }
+
+    /// Publishers put ordinary `<time>` elements in the page chrome. Reading a
+    /// year as a seconds count marked the transcript synced with timings that
+    /// were pure noise, instead of falling back to plain reading order.
+    @Test func bareNumberIsNotATimestamp() throws {
+        let html = "<time>2024</time><p>Publisert i fjor.</p><p>Selve samtalen.</p>"
+        let transcript = try #require(
+            TranscriptService.makeTranscript(
+                from: Data(html.utf8),
+                contentType: "text/html",
+                url: "https://example.com/t.html"
+            )
+        )
+
+        #expect(transcript.isSynced == false)
+        #expect(transcript.segments.allSatisfy { $0.startTime == 0 })
+    }
+
+    @Test func clockNeedsAColon() {
+        #expect(TranscriptService.parseClock("2024") == nil)
+        #expect(TranscriptService.parseClock("01:30") == 90)
+        #expect(TranscriptService.parseClock("01:00:00") == 3600)
+    }
+
+    /// Cues sharing a timestamp kept a zero-length window, so they could never
+    /// be highlighted or scrolled to no matter where playback stood.
+    @Test func cuesSharingAStartStillGetAWindow() {
+        let segments = [
+            TranscriptSegment(startTime: 10, endTime: 10, text: "Foerste", speaker: nil),
+            TranscriptSegment(startTime: 10, endTime: 10, text: "Andre", speaker: nil)
+        ]
+
+        let normalized = TranscriptService.normalize(segments)
+
+        #expect(normalized.allSatisfy { $0.endTime > $0.startTime })
+    }
+
+    /// `JSONSegment` has every field optional, so any JSON array of objects
+    /// decoded successfully. Accepting that empty result stopped the VTT, SRT
+    /// and HTML parsers from ever being tried.
+    @Test func unknownJSONShapeFallsThroughToTheRealFormat() throws {
+        let body = """
+        [{"s": 0, "e": 2, "t": "ukjent form"}]
+        """
+        #expect(
+            TranscriptService.makeTranscript(
+                from: Data(body.utf8),
+                contentType: "application/json",
+                url: "https://example.com/t.json"
+            ) == nil
+        )
+
+        let vtt = """
+        WEBVTT
+
+        00:00:01.000 --> 00:00:04.000
+        Dette er ekte.
+        """
+        let transcript = try #require(
+            TranscriptService.makeTranscript(
+                from: Data(vtt.utf8),
+                contentType: "application/json",
+                url: "https://example.com/mislabelled.json"
+            )
+        )
+        #expect(transcript.segments.first?.text == "Dette er ekte.")
+    }
+
+    /// `transcriptRank` still prefers text/plain over an unknown type, so one
+    /// can be the best transcript on offer. Every other parser needs evidence
+    /// of its own format, so these were selected and then reported missing.
+    @Test func plainTextTranscriptIsReadable() throws {
+        let body = Array(repeating: "Dette er en helt vanlig setning fra samtalen.", count: 20)
+            .joined(separator: "\n\n")
+        let transcript = try #require(
+            TranscriptService.makeTranscript(
+                from: Data(body.utf8),
+                contentType: "text/plain",
+                url: "https://example.com/t.txt"
+            )
+        )
+
+        #expect(transcript.isSynced == false)
+        #expect(transcript.segments.count == 20)
+    }
+}
+
+@Suite("TranscriptService format fallbacks")
+struct TranscriptFallbackTests {
+    /// The regression that produced raw markup on screen: an unrecognised file
+    /// fell through to the VTT parser, which accepted every line as one cue.
+    @Test func doesNotSwallowNonTranscriptText() {
+        let noise = "404 Not Found\nThe requested URL was not found on this server."
+        let result = TranscriptService.makeTranscript(
+            from: Data(noise.utf8),
+            contentType: "text/plain",
+            url: "https://example.com/missing.txt"
+        )
+        #expect(result == nil)
+    }
+
+    @Test func parsesVTT() throws {
+        let vtt = """
+        WEBVTT
+
+        1
+        00:00:01.000 --> 00:00:04.000
+        <v Kari>God morgen, alle sammen.
+
+        2
+        00:00:04.000 --> 00:00:08.000
+        I dag skal vi snakke om vaeret.
+        """
+        let transcript = try #require(
+            TranscriptService.makeTranscript(
+                from: Data(vtt.utf8),
+                contentType: "text/vtt",
+                url: "https://example.com/t.vtt"
+            )
+        )
+        #expect(transcript.segments.count == 2)
+        #expect(transcript.segments[0].speaker == "Kari")
+        // The voice span must not reach the screen as text.
+        #expect(transcript.segments[0].text == "God morgen, alle sammen.")
+        #expect(transcript.segments[1].startTime == 4)
+    }
+
+    @Test func parsesSRT() throws {
+        let srt = """
+        1
+        00:00:02,000 --> 00:00:05,500
+        Velkommen til podkasten.
+
+        2
+        00:00:05,500 --> 00:00:09,000
+        Vi starter med nyhetene.
+        """
+        let transcript = try #require(
+            TranscriptService.makeTranscript(
+                from: Data(srt.utf8),
+                contentType: "application/srt",
+                url: "https://example.com/t.srt"
+            )
+        )
+        #expect(transcript.segments.count == 2)
+        #expect(transcript.segments[0].startTime == 2)
+        #expect(transcript.segments[1].text == "Vi starter med nyhetene.")
+    }
+
+    /// Norwegian transcripts are regularly served as latin-1 without saying so.
+    /// Decoding as UTF-8 alone yields nil, which surfaced as "no transcript".
+    @Test func decodesLatin1WhenNotUTF8() throws {
+        let srt = """
+        1
+        00:00:01,000 --> 00:00:04,000
+        Været på Vestlandet i dag.
+        """
+        let latin1 = try #require(srt.data(using: .isoLatin1))
+        #expect(String(data: latin1, encoding: .utf8) == nil)
+
+        let transcript = try #require(
+            TranscriptService.makeTranscript(
+                from: latin1,
+                contentType: "application/srt",
+                url: "https://example.com/t.srt"
+            )
+        )
+        #expect(transcript.segments[0].text.contains("Været"))
+    }
+}
+
+@Suite("TranscriptService word-level merging")
+struct TranscriptMergingTests {
+    /// Captivate's JSON transcripts carry one segment per spoken word.
+    /// Rendered as-is that is hundreds of one-word rows in the panel.
+    private func wordSegments() -> [TranscriptSegment] {
+        let words = "Denne episoden handler om Norges historie og hvorfor vi feirer syttende mai hvert eneste aar."
+            .split(separator: " ")
+        return words.enumerated().map { index, word in
+            TranscriptSegment(
+                startTime: Double(index) * 0.4,
+                endTime: Double(index) * 0.4 + 0.35,
+                text: String(word)
+            )
+        }
+    }
+
+    @Test func detectsWordLevelInput() {
+        #expect(TranscriptService.isWordLevel(wordSegments()))
+    }
+
+    @Test func mergesIntoReadableCues() {
+        let merged = TranscriptService.normalize(wordSegments())
+        #expect(merged.count < 5)
+        #expect(merged[0].text.contains(" "))
+        #expect(merged[0].startTime == 0)
+    }
+
+    /// Publisher-authored cues carry deliberate boundaries and seek points.
+    @Test func leavesSentenceLevelCuesAlone() {
+        let sentences = (0..<12).map { index in
+            TranscriptSegment(
+                startTime: Double(index) * 5,
+                endTime: Double(index) * 5 + 5,
+                text: "Dette er setning nummer \(index) i transkripsjonen."
+            )
+        }
+        #expect(TranscriptService.isWordLevel(sentences) == false)
+        #expect(TranscriptService.normalize(sentences).count == 12)
+    }
+
+    @Test func splitsOnSilenceGaps() {
+        var segments = wordSegments()
+        // A long pause mid-transcript must end the cue, not be glued over.
+        for index in 8..<segments.count {
+            segments[index].startTime += 60
+            segments[index].endTime += 60
+        }
+        let merged = TranscriptService.normalize(segments)
+        #expect(merged.count >= 2)
+        #expect(merged.contains { $0.startTime >= 60 })
+    }
+
+    @Test func dropsEmptySegments() {
+        let segments = [
+            TranscriptSegment(startTime: 0, endTime: 2, text: "Hei"),
+            TranscriptSegment(startTime: 2, endTime: 4, text: "   "),
+            TranscriptSegment(startTime: 4, endTime: 6, text: "Hade"),
+        ]
+        #expect(TranscriptService.normalize(segments).count == 2)
+    }
+}
+
+// MARK: - Chapter Parsing Tests
+
+@Suite("ChapterService parsing")
+struct ChapterParsingTests {
+    @Test func parsesSpecShape() throws {
+        let json = """
+        {"version":"1.2.0","chapters":[
+          {"startTime":0,"endTime":17.1},
+          {"startTime":17.1,"endTime":153.2,"title":"Modalverb"},
+          {"startTime":153.2,"title":"Skal"}
+        ]}
+        """
+        let chapters = try #require(ChapterService.makeChapters(from: Data(json.utf8)))
+        #expect(chapters.count == 3)
+        // A chapter with no title still needs a label in the list.
+        #expect(chapters[0].title == "Kapittel")
+        #expect(chapters[1].title == "Modalverb")
+    }
+
+    /// Some generators emit a bare array instead of the wrapper object.
+    @Test func parsesTopLevelArray() throws {
+        let json = """
+        [{"startTime":0,"title":"Intro"},{"startTime":90,"title":"Tema"}]
+        """
+        let chapters = try #require(ChapterService.makeChapters(from: Data(json.utf8)))
+        #expect(chapters.count == 2)
+        #expect(chapters[1].startTime == 90)
+    }
+
+    /// A strict Double decode threw on these and took the whole list with it,
+    /// surfacing as "could not load the chapters".
+    @Test func acceptsStringTimes() throws {
+        let json = """
+        {"chapters":[{"startTime":"0","title":"Intro"},{"startTime":"120.5","title":"Tema"}]}
+        """
+        let chapters = try #require(ChapterService.makeChapters(from: Data(json.utf8)))
+        #expect(chapters.count == 2)
+        #expect(chapters[1].startTime == 120.5)
+    }
+
+    /// `toc: false` marks artwork or link changes the publisher does not want
+    /// listed as segments.
+    @Test func hidesChaptersExcludedFromTableOfContents() throws {
+        let json = """
+        {"chapters":[
+          {"startTime":0,"title":"Intro"},
+          {"startTime":30,"title":"Bilde","toc":false},
+          {"startTime":60,"title":"Tema","toc":true}
+        ]}
+        """
+        let chapters = try #require(ChapterService.makeChapters(from: Data(json.utf8)))
+        #expect(chapters.map(\.title) == ["Intro", "Tema"])
+    }
+
+    @Test func sortsAndDropsEntriesWithoutStartTime() throws {
+        let json = """
+        {"chapters":[{"startTime":300,"title":"Sist"},{"title":"Ugyldig"},{"startTime":10,"title":"Forst"}]}
+        """
+        let chapters = try #require(ChapterService.makeChapters(from: Data(json.utf8)))
+        #expect(chapters.map(\.title) == ["Forst", "Sist"])
+    }
+
+    @Test func rejectsNonChapterPayload() {
+        #expect(ChapterService.makeChapters(from: Data("not json at all".utf8)) == nil)
+    }
+}
+
+// MARK: - Transcript Source Selection Tests
+
+@Suite("PodcastTransform.bestTranscriptUrl")
+struct BestTranscriptUrlTests {
+    private func episode(
+        transcriptUrl: String?,
+        transcripts: [PodcastIndexTranscript]?
+    ) -> PodcastIndexEpisode {
+        PodcastIndexEpisode(
+            id: 1, title: "T", link: nil, description: nil, guid: nil,
+            datePublished: nil, datePublishedPretty: nil, enclosureUrl: nil,
+            enclosureType: nil, enclosureLength: nil, duration: nil, explicit: nil,
+            episode: nil, episodeType: nil, season: nil, image: nil,
+            feedItunesId: nil, feedImage: nil, feedId: 1, feedLanguage: nil,
+            feedDead: nil, chaptersUrl: nil, transcriptUrl: transcriptUrl,
+            transcripts: transcripts, soundbite: nil, soundbites: nil,
+            feedTitle: nil, feedAuthor: nil
+        )
+    }
+
+    /// The reported bug in one assertion: the legacy field pointed at the HTML
+    /// rendering even though the publisher also shipped JSON.
+    @Test func prefersJSONOverHTML() {
+        let result = PodcastTransform.bestTranscriptUrl(episode(
+            transcriptUrl: "https://example.com/index.html",
+            transcripts: [
+                PodcastIndexTranscript(url: "https://example.com/index.html", type: "text/html"),
+                PodcastIndexTranscript(url: "https://example.com/t.json", type: "application/json"),
+                PodcastIndexTranscript(url: "https://example.com/t.srt", type: "application/srt"),
+            ]
+        ))
+        #expect(result == "https://example.com/t.json")
+    }
+
+    @Test func prefersTimedFormatsOverPlainText() {
+        let result = PodcastTransform.bestTranscriptUrl(episode(
+            transcriptUrl: nil,
+            transcripts: [
+                PodcastIndexTranscript(url: "https://example.com/t.txt", type: "text/plain"),
+                PodcastIndexTranscript(url: "https://example.com/t.srt", type: "application/srt"),
+            ]
+        ))
+        #expect(result == "https://example.com/t.srt")
+    }
+
+    /// A few publishers report an empty or wrong mime type on a usable file.
+    @Test func fallsBackToFileExtension() {
+        let result = PodcastTransform.bestTranscriptUrl(episode(
+            transcriptUrl: nil,
+            transcripts: [
+                PodcastIndexTranscript(url: "https://example.com/a.html", type: nil),
+                PodcastIndexTranscript(url: "https://example.com/b.vtt", type: nil),
+            ]
+        ))
+        #expect(result == "https://example.com/b.vtt")
+    }
+
+    @Test func fallsBackToLegacyFieldWhenArrayMissing() {
+        let result = PodcastTransform.bestTranscriptUrl(episode(
+            transcriptUrl: "https://example.com/legacy.srt",
+            transcripts: nil
+        ))
+        #expect(result == "https://example.com/legacy.srt")
+    }
+
+    @Test func returnsNilWhenNothingUsable() {
+        #expect(PodcastTransform.bestTranscriptUrl(episode(transcriptUrl: "  ", transcripts: [])) == nil)
+    }
+}
+
+@Suite("TranscriptService unsynced transcripts")
+struct TranscriptUnsyncedTests {
+    /// Real shape from a hand-written Captivate transcript: good prose,
+    /// no timing at all. Discarding it loses the best content some episodes
+    /// have; faking 0:00 on every line would break tap-to-seek.
+    private let html = """
+    <p>Transkripsjon:</p>
+    <p></p>
+    <p>Pia: Hei, og velkommen til Norskpodden!</p>
+    <p></p>
+    <p>I dag skal vi snakke om den muntlige norskproven.</p>
+    <p></p>
+    <p>Julie: Jeg er litt nervos, men det gaar greit.</p>
+    """
+
+    private func parse() -> Transcript? {
+        TranscriptService.makeTranscript(
+            from: Data(html.utf8),
+            contentType: "text/html",
+            url: "https://example.com/index.html"
+        )
+    }
+
+    @Test func keepsUntimedTranscript() throws {
+        let transcript = try #require(parse())
+        #expect(transcript.isSynced == false)
+        #expect(transcript.segments.count == 4)
+    }
+
+    @Test func dropsEmptyParagraphs() throws {
+        let transcript = try #require(parse())
+        #expect(transcript.segments.allSatisfy { !$0.text.isEmpty })
+    }
+
+    /// Every start time is 0 here, and `sorted` is not stable — ordering an
+    /// unsynced transcript would scramble it into an unreadable sequence.
+    @Test func preservesDocumentOrder() throws {
+        let transcript = try #require(parse())
+        #expect(transcript.segments[0].text == "Transkripsjon:")
+        #expect(transcript.segments[1].text == "Pia: Hei, og velkommen til Norskpodden!")
+        #expect(transcript.segments[3].text.hasPrefix("Julie:"))
+    }
+
+    @Test func timedHTMLStaysSynced() throws {
+        let timed = """
+        <time>00:00:10</time><p>Forste del.</p>
+        <time>00:00:40</time><p>Andre del.</p>
+        """
+        let transcript = try #require(
+            TranscriptService.makeTranscript(
+                from: Data(timed.utf8),
+                contentType: "text/html",
+                url: "https://example.com/t.html"
+            )
+        )
+        #expect(transcript.isSynced)
+        #expect(transcript.segments[0].startTime == 10)
+    }
+}
+
+// MARK: - Player Layout Tests
+
+@Suite("AudioPlayerSheet.artworkSide")
+@MainActor
+struct PlayerArtworkSizeTests {
+    // Safe-area heights, not screen heights: that is what GeometryReader
+    // reports inside the player.
+    private let pro = CGSize(width: 402, height: 781)
+    private let proMax = CGSize(width: 440, height: 863)
+
+    /// The artwork used to be a hard 280pt, which left the surplus height as
+    /// dead air above the image and wasted width on both current devices.
+    @Test func growsBeyondTheOldFixedSize() {
+        #expect(AudioPlayerSheet.artworkSide(in: pro, hasFeatureRow: false) > 280)
+        #expect(AudioPlayerSheet.artworkSide(in: proMax, hasFeatureRow: false) > 280)
+    }
+
+    /// On the Pro Max the content width is what limits it, so the artwork
+    /// spans the full column.
+    @Test func fillsTheContentWidthWhenHeightAllows() {
+        // Expressed rather than hardcoded: the number is the content width,
+        // and AppSpacing has moved before.
+        #expect(
+            AudioPlayerSheet.artworkSide(in: proMax, hasFeatureRow: false)
+                == proMax.width - AppSpacing.lg * 2
+        )
+    }
+
+    @Test func growsWithTheLargerDevice() {
+        let small = AudioPlayerSheet.artworkSide(in: pro, hasFeatureRow: false)
+        let large = AudioPlayerSheet.artworkSide(in: proMax, hasFeatureRow: false)
+        #expect(large > small)
+    }
+
+    /// The chapter and transcript row has to be paid for out of the artwork,
+    /// or it would be pushed off the bottom of the screen.
+    @Test func yieldsHeightToTheFeatureRow() {
+        for size in [pro, proMax] {
+            #expect(
+                AudioPlayerSheet.artworkSide(in: size, hasFeatureRow: true)
+                    < AudioPlayerSheet.artworkSide(in: size, hasFeatureRow: false)
+            )
+        }
+    }
+
+    /// Everything must still fit inside the space the player was given.
+    @Test func neverOverflowsTheAvailableHeight() {
+        for size in [pro, proMax, CGSize(width: 402, height: 600)] {
+            for hasFeatureRow in [true, false] {
+                let side = AudioPlayerSheet.artworkSide(in: size, hasFeatureRow: hasFeatureRow)
+                let total = side + AudioPlayerSheet.reservedContentHeight(hasFeatureRow: hasFeatureRow)
+                #expect(total <= size.height || side == AppSize.artworkMedium)
+            }
+        }
+    }
+
+    @Test func neverCollapsesBelowTheFloor() {
+        let tiny = CGSize(width: 320, height: 400)
+        #expect(AudioPlayerSheet.artworkSide(in: tiny, hasFeatureRow: true) == AppSize.artworkMedium)
+    }
+}
+
+// MARK: - Last played record
+
+@Suite("LastPlayedInfo")
+struct LastPlayedInfoTests {
+
+    /// Exactly what 1.0.7 wrote into UserDefaults: no `transcriptUrl`, no
+    /// `chaptersUrl`. Everyone upgrading has one of these on disk, and a
+    /// decode failure would empty the "Fortsett"-card without a word.
+    private let legacyJSON = Data("""
+    {
+      "episodeId": "ep-1",
+      "podcastId": "pod-1",
+      "title": "Gammel episode",
+      "audioUrl": "https://example.com/ep.mp3",
+      "duration": 1800,
+      "imageUrl": "https://example.com/ep.jpg",
+      "podcastTitle": "Podden",
+      "podcastImage": "https://example.com/pod.jpg"
+    }
+    """.utf8)
+
+    @Test func decodesRecordsWrittenBeforeTheNewFields() throws {
+        let info = try JSONDecoder().decode(LastPlayedInfo.self, from: legacyJSON)
+        #expect(info.episodeId == "ep-1")
+        #expect(info.podcastTitle == "Podden")
+        #expect(info.transcriptUrl == nil)
+        #expect(info.chaptersUrl == nil)
+    }
+
+    /// The rebuilt episode is what "Fortsett" hands to the player, so the two
+    /// new fields have to survive the trip — that was the bug they fixed.
+    @Test func rebuiltEpisodeCarriesChaptersAndTranscript() throws {
+        let info = LastPlayedInfo(
+            episodeId: "ep-2",
+            podcastId: "pod-1",
+            title: "Ny episode",
+            audioUrl: "https://example.com/ep2.mp3",
+            duration: 900,
+            imageUrl: nil,
+            podcastTitle: "Podden",
+            podcastImage: "https://example.com/pod.jpg",
+            transcriptUrl: "https://example.com/ep2.json",
+            chaptersUrl: "https://example.com/ep2-chapters.json"
+        )
+
+        let decoded = try JSONDecoder().decode(
+            LastPlayedInfo.self,
+            from: try JSONEncoder().encode(info)
+        )
+        let episode = decoded.toEpisode()
+        #expect(episode.transcriptUrl == "https://example.com/ep2.json")
+        #expect(episode.chaptersUrl == "https://example.com/ep2-chapters.json")
+    }
+
+    /// A legacy record has neither, and must not invent them.
+    @Test func rebuiltLegacyEpisodeHasNeither() throws {
+        let episode = try JSONDecoder().decode(LastPlayedInfo.self, from: legacyJSON).toEpisode()
+        #expect(episode.transcriptUrl == nil)
+        #expect(episode.chaptersUrl == nil)
+        #expect(episode.audioUrl == "https://example.com/ep.mp3")
+    }
+}
+
+// MARK: - Behold episoder i køen
+
+@Suite("QueueViewModel keep-in-queue rule")
+@MainActor
+struct QueueKeepRuleTests {
+
+    private func makeContext() throws -> ModelContext {
+        let schema = Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        return ModelContext(try ModelContainer(for: schema, configurations: [config]))
+    }
+
+    private func makeEpisode(_ id: String) -> Episode {
+        Episode(
+            id: id, podcastId: "pod-1", title: "Episode \(id)", description: "",
+            audioUrl: "https://example.com/\(id).mp3", duration: 600,
+            publishedAt: "2025-01-01T12:00:00Z", imageUrl: nil
+        )
+    }
+
+    /// A throwaway suite, so flipping the setting never touches the defaults
+    /// the simulator or another test is using.
+    private func makeVM(in context: ModelContext, keepsEpisodes: Bool) -> (QueueViewModel, UserDefaults, String) {
+        let suiteName = "queue-rule-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.set(keepsEpisodes, forKey: AppConstants.keepEpisodesInQueueKey)
+        let vm = QueueViewModel(defaults: defaults)
+        vm.setup(context)
+        for id in ["a", "b", "c"] {
+            vm.addToQueue(episode: makeEpisode(id), podcastTitle: "Podden", podcastImage: nil)
+        }
+        return (vm, defaults, suiteName)
+    }
+
+    @Test("playing a queue row removes it by default")
+    func removesByDefault() throws {
+        let context = try makeContext()
+        let (vm, _, suite) = makeVM(in: context, keepsEpisodes: false)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        vm.removeAfterPlay(vm.items[0])
+        #expect(vm.items.map(\.episodeId) == ["b", "c"])
+    }
+
+    @Test("the setting keeps the row where it is")
+    func keepsWhenAsked() throws {
+        let context = try makeContext()
+        let (vm, _, suite) = makeVM(in: context, keepsEpisodes: true)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        vm.removeAfterPlay(vm.items[0])
+        #expect(vm.items.count == 3)
+    }
+
+    /// Without the setting the finished episode is already gone, so the next
+    /// one to play is simply the new head of the queue.
+    @Test("auto-advance pops the head when episodes are consumed")
+    func autoAdvancePops() throws {
+        let context = try makeContext()
+        let (vm, _, suite) = makeVM(in: context, keepsEpisodes: false)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let next = try #require(vm.nextAfterPlaying(episodeId: "a"))
+        #expect(next.episode.id == "a")
+        #expect(vm.items.count == 2)
+    }
+
+    /// With the setting on, the episode that just finished is still sitting in
+    /// the queue. Popping would replay it forever — and remove it, which is the
+    /// one thing the setting promises not to do.
+    @Test("auto-advance steps past the finished episode when it stays")
+    func autoAdvanceStepsPast() throws {
+        let context = try makeContext()
+        let (vm, _, suite) = makeVM(in: context, keepsEpisodes: true)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let next = try #require(vm.nextAfterPlaying(episodeId: "a"))
+        #expect(next.episode.id == "b")
+        #expect(vm.items.count == 3)
+    }
+
+    @Test("auto-advance stops at the end of a kept queue")
+    func autoAdvanceStopsAtTheEnd() throws {
+        let context = try makeContext()
+        let (vm, _, suite) = makeVM(in: context, keepsEpisodes: true)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        #expect(vm.nextAfterPlaying(episodeId: "c") == nil)
+    }
+
+    /// An episode started from the podcast page is not in the queue at all.
+    /// Auto-advance should then start the queue from the top rather than stop.
+    @Test("an episode played from elsewhere starts the queue")
+    func startsQueueFromOutside() throws {
+        let context = try makeContext()
+        let (vm, _, suite) = makeVM(in: context, keepsEpisodes: true)
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let next = try #require(vm.nextAfterPlaying(episodeId: "ukjent"))
+        #expect(next.episode.id == "a")
+    }
+}
+
+// MARK: - Playback position retention
+
+@Suite("PlaybackProgressViewModel cleanup")
+@MainActor
+struct PlaybackProgressCleanupTests {
+
+    private func makeContext() throws -> ModelContext {
+        let schema = Schema([QueueItem.self, Subscription.self, PlaybackPosition.self])
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        return ModelContext(try ModelContainer(for: schema, configurations: [config]))
+    }
+
+    private func daysAgo(_ days: Int) -> Date {
+        Date().addingTimeInterval(TimeInterval(-days * 24 * 3600))
+    }
+
+    private func insert(_ context: ModelContext, id: String, completed: Bool, ageInDays: Int) {
+        context.insert(
+            PlaybackPosition(
+                episodeId: id, position: 120, duration: 1800,
+                updatedAt: daysAgo(ageInDays), completed: completed
+            )
+        )
+    }
+
+    private func storedIds(_ context: ModelContext) throws -> Set<String> {
+        Set(try context.fetch(FetchDescriptor<PlaybackPosition>()).map(\.episodeId))
+    }
+
+    /// The purge runs on every launch and deletes listening history, which is
+    /// the one thing in the app nobody can get back.
+    @Test("a finished episode is kept for the full retention period")
+    func keepsRecentlyCompleted() throws {
+        let context = try makeContext()
+        insert(context, id: "fresh", completed: true, ageInDays: AppConstants.completedPositionRetentionDays - 5)
+        insert(context, id: "stale", completed: true, ageInDays: AppConstants.completedPositionRetentionDays + 5)
+
+        PlaybackProgressViewModel().setup(context)
+
+        #expect(try storedIds(context) == ["fresh"])
+    }
+
+    /// Unfinished episodes get the longer grace: someone may well pick a
+    /// half-listened episode back up months later.
+    @Test("an unfinished episode gets the longer grace period")
+    func unfinishedOutlivesTheCompletedCutoff() throws {
+        let context = try makeContext()
+        insert(context, id: "unfinished", completed: false, ageInDays: AppConstants.completedPositionRetentionDays + 5)
+        insert(context, id: "ancient", completed: false, ageInDays: AppConstants.incompletePositionRetentionDays + 5)
+
+        PlaybackProgressViewModel().setup(context)
+
+        #expect(try storedIds(context) == ["unfinished"])
+    }
+
+    @Test("an empty store survives the purge untouched")
+    func emptyStoreIsFine() throws {
+        let context = try makeContext()
+        PlaybackProgressViewModel().setup(context)
+        #expect(try storedIds(context).isEmpty)
+    }
+
+    /// "Fjern fra Fortsett å lytte" leans on this: it must take out the one
+    /// episode and nothing else.
+    @Test("clearProgress removes only the episode it was given")
+    func clearProgressIsTargeted() throws {
+        let context = try makeContext()
+        insert(context, id: "keep", completed: false, ageInDays: 1)
+        insert(context, id: "drop", completed: false, ageInDays: 1)
+
+        let vm = PlaybackProgressViewModel()
+        vm.setup(context)
+        vm.clearProgress(for: "drop")
+
+        #expect(try storedIds(context) == ["keep"])
+        #expect(vm.getProgress(for: "drop") == nil)
+    }
+}
+
+// MARK: - Delete everything
+
+@Suite("DataTransferService.deleteAllUserDefaults")
+struct DeleteUserDefaultsTests {
+
+    private func makeDefaults() -> (UserDefaults, String) {
+        let suiteName = "delete-defaults-\(UUID().uuidString)"
+        return (UserDefaults(suiteName: suiteName)!, suiteName)
+    }
+
+    /// The list is the contract: a key that is not on it is a key "Slett alle
+    /// data" quietly leaves behind, which is what happened to the queue
+    /// setting when it was added.
+    @Test("every key the app owns is gone afterwards")
+    func clearsEveryKey() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
+
+        for key in AppConstants.userDataDefaultsKeys {
+            defaults.set("noe", forKey: key)
+        }
+
+        DataTransferService.deleteAllUserDefaults(in: defaults)
+
+        for key in AppConstants.userDataDefaultsKeys {
+            #expect(defaults.object(forKey: key) == nil, "\(key) ble ikke slettet")
+        }
+    }
+
+    @Test("keys the app does not own are left alone")
+    func leavesForeignKeysAlone() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(true, forKey: "AppleLanguages-ish")
+        DataTransferService.deleteAllUserDefaults(in: defaults)
+        #expect(defaults.object(forKey: "AppleLanguages-ish") != nil)
+    }
+
+    /// Guards the list against a key silently dropping out of it.
+    @Test("the list still names every settings key the app writes")
+    func listIsComplete() {
+        let keys = Set(AppConstants.userDataDefaultsKeys)
+        #expect(keys.contains(AppConstants.lastPlayedInfoKey))
+        #expect(keys.contains(AppConstants.showLastPlayedKey))
+        #expect(keys.contains(AppConstants.showNewFromSubscriptionsKey))
+        #expect(keys.contains(AppConstants.podcastSpeedPrefsKey))
+        #expect(keys.contains(AppConstants.keepEpisodesInQueueKey))
+        #expect(keys.count == AppConstants.userDataDefaultsKeys.count, "duplikater i lista")
+    }
+}
+
+// MARK: - Chapter highlighting
+
+@Suite("AudioPlayerViewModel.currentChapter")
+@MainActor
+struct CurrentChapterTests {
+
+    private let chapters = [
+        Chapter(startTime: 0, title: "Intro"),
+        Chapter(startTime: 120, title: "Hoveddel"),
+        Chapter(startTime: 600, title: "Avslutning")
+    ]
+
+    private func makeEpisode(chaptersUrl: String?) -> Episode {
+        Episode(
+            id: "ep-1", podcastId: "pod-1", title: "Test", description: "",
+            audioUrl: "https://example.com/ep.mp3", duration: 1800,
+            publishedAt: "2025-01-01T12:00:00Z", imageUrl: nil,
+            transcriptUrl: nil, chaptersUrl: chaptersUrl
+        )
+    }
+
+    /// It used to be a stored property refreshed from the position-save timer,
+    /// so the highlight lagged up to `playbackSaveInterval` seconds behind —
+    /// most visibly right after tapping a chapter to seek to it.
+    @Test func followsTheClockWithoutATimerTick() {
+        let audio = StubAudioPlayer()
+        let vm = AudioPlayerViewModel(audioService: audio)
+        vm.chapters = chapters
+
+        audio.currentTime = 5
+        #expect(vm.currentChapter?.title == "Intro")
+
+        audio.currentTime = 599
+        #expect(vm.currentChapter?.title == "Hoveddel")
+
+        audio.currentTime = 600
+        #expect(vm.currentChapter?.title == "Avslutning")
+    }
+
+    @Test func isNilWhenTheEpisodeHasNoChapters() {
+        let audio = StubAudioPlayer()
+        let vm = AudioPlayerViewModel(audioService: audio)
+        audio.currentTime = 300
+        #expect(vm.currentChapter == nil)
+    }
+
+    /// Loading an episode without chapters has to clear the previous one's,
+    /// or the old list stays on screen under a new episode.
+    @Test func loadingAnEpisodeWithoutChaptersClearsThePreviousOnes() {
+        let audio = StubAudioPlayer()
+        let vm = AudioPlayerViewModel(audioService: audio)
+        vm.chapters = chapters
+        vm.chaptersFailed = true
+
+        vm.loadChapters(for: makeEpisode(chaptersUrl: nil))
+
+        #expect(vm.chapters.isEmpty)
+        #expect(vm.chaptersFailed == false)
+        #expect(vm.currentChapter == nil)
+    }
+}
+
+// MARK: - Episode row artwork
+
+/// `@MainActor` for the same reason as the player layout suite: these are
+/// statics on a SwiftUI `View`, and reaching them off the main actor takes the
+/// test process down rather than failing an expectation.
+@Suite("EpisodeCard.artworkURL")
+@MainActor
+struct EpisodeCardArtworkTests {
+
+    private let episodeArt = "https://example.com/episode.jpg"
+    private let podcastArt = "https://example.com/podcast.jpg"
+
+    /// Home and the queue mix shows, and per-episode artwork made it hard to
+    /// see which podcast a row belonged to.
+    @Test func prefersThePodcastArtworkWhenAsked() {
+        #expect(
+            EpisodeCard.artworkURL(episodeImage: episodeArt, podcastImage: podcastArt, usePodcastArtwork: true)
+                == podcastArt
+        )
+    }
+
+    @Test func usesTheEpisodeArtworkOtherwise() {
+        #expect(
+            EpisodeCard.artworkURL(episodeImage: episodeArt, podcastImage: podcastArt, usePodcastArtwork: false)
+                == episodeArt
+        )
+    }
+
+    /// A row must never end up with an empty image just because it asked for
+    /// the show's and the show has none.
+    @Test func fallsBackToTheEpisodeWhenThePodcastHasNoArtwork() {
+        #expect(
+            EpisodeCard.artworkURL(episodeImage: episodeArt, podcastImage: "", usePodcastArtwork: true)
+                == episodeArt
+        )
+    }
+
+    @Test func fallsBackToThePodcastWhenTheEpisodeHasNone() {
+        #expect(
+            EpisodeCard.artworkURL(episodeImage: nil, podcastImage: podcastArt, usePodcastArtwork: false)
+                == podcastArt
+        )
+        #expect(
+            EpisodeCard.artworkURL(episodeImage: "", podcastImage: podcastArt, usePodcastArtwork: false)
+                == podcastArt
+        )
+    }
+}
+
+// MARK: - Artwork downsampling
+
+@Suite("CachedAsyncImage.downsample")
+@MainActor
+struct ArtworkDownsampleTests {
+
+    /// `scale = 1` so `side` is pixels, not points: the downsampler works in
+    /// pixels, and a renderer left at the device scale produced a 240px source
+    /// for an "80pt" image — which made the first version of these assertions
+    /// compare a point size against a pixel target.
+    private func jpeg(side: CGFloat) throws -> Data {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(
+            size: CGSize(width: side, height: side),
+            format: format
+        ).image { context in
+            UIColor.systemTeal.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+        }
+        return try #require(image.jpegData(compressionQuality: 0.9))
+    }
+
+    private func pixelSide(_ image: UIImage) throws -> Int {
+        let cgImage = try #require(image.cgImage)
+        return max(cgImage.width, cgImage.height)
+    }
+
+    /// Podcast covers arrive at around 1400x1400 and are shown at 56pt. The
+    /// old path decoded the full bitmap and redrew it; this one decodes to the
+    /// size actually needed, and - the part that matters for scrolling - does
+    /// it off the main actor.
+    @Test func capsTheLongestSideAtTheTarget() throws {
+        let data = try jpeg(side: 1400)
+        let image = try #require(CachedAsyncImage.downsample(data, to: 168))
+        #expect(try pixelSide(image) <= 168)
+    }
+
+    /// Artwork smaller than the target must not be blown up - that would cost
+    /// memory and look worse than the original.
+    @Test func leavesSmallArtworkAlone() throws {
+        let data = try jpeg(side: 80)
+        let image = try #require(CachedAsyncImage.downsample(data, to: 168))
+        #expect(try pixelSide(image) == 80)
+    }
+
+    /// A 200 that is not an image at all - an error page, say - has to come
+    /// back as a failure so the row shows its placeholder.
+    @Test func rejectsDataThatIsNotAnImage() {
+        #expect(CachedAsyncImage.downsample(Data("<html>nope</html>".utf8), to: 168) == nil)
+        #expect(CachedAsyncImage.downsample(Data(), to: 168) == nil)
     }
 }
