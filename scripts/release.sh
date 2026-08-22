@@ -57,6 +57,11 @@ step "Dokumentasjon"
 NOTES=$(awk "/^## ${VERSION}\$/{flag=1; next} /^## /{flag=0} flag" CHANGELOG.md)
 [[ -n "$NOTES" ]] || abort "CHANGELOG.md har ingen seksjon for $VERSION. Den teksten er både utgivelsesnotatet og det du limer inn i App Store Connect."
 
+# Entries parked under "Ikke sluppet ennå" are invisible to the extraction
+# above, so a release with that section non-empty ships stale release notes.
+UNRELEASED=$(awk '/^## Ikke sluppet ennå$/{flag=1; next} /^## /{flag=0} flag' CHANGELOG.md | grep -v '^[[:space:]]*$' || true)
+[[ -z "$UNRELEASED" ]] || abort "CHANGELOG.md har innhold under «Ikke sluppet ennå». Flytt det inn i seksjonen for $VERSION før utgivelse."
+
 LAST_TAG=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
 RANGE=${LAST_TAG:+$LAST_TAG..HEAD}
 echo "Endringer siden ${LAST_TAG:-første commit}:"
