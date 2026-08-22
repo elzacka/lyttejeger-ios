@@ -9,6 +9,10 @@ struct EpisodeCard: View {
     /// between episodes of a show they already chose, and it is the only screen
     /// that renders the description at all — the player does not.
     var showDescription: Bool = false
+    /// Shows the podcast artwork instead of the episode's own. On the lists
+    /// that mix shows — home and the queue — per-episode artwork made it hard
+    /// to tell which podcast a row belonged to.
+    var usePodcastArtwork: Bool = false
     var onPlay: (() -> Void)? = nil
     var useDefaultContextMenu: Bool = true
     /// Replaces the standard menu content. Queue rows pass their own actions
@@ -48,6 +52,24 @@ struct EpisodeCard: View {
             parts.append(formatDuration(episode.duration))
         }
         return parts.joined(separator: " · ")
+    }
+
+    private var artworkURL: String {
+        Self.artworkURL(
+            episodeImage: episode.imageUrl,
+            podcastImage: podcastImage,
+            usePodcastArtwork: usePodcastArtwork
+        )
+    }
+
+    /// Falls back to the episode artwork when the podcast has none, so a row
+    /// never ends up with an empty image just because it asked for the show's.
+    static func artworkURL(episodeImage: String?, podcastImage: String, usePodcastArtwork: Bool) -> String {
+        let episodeArtwork = episodeImage.flatMap { $0.isEmpty ? nil : $0 }
+        if usePodcastArtwork, !podcastImage.isEmpty {
+            return podcastImage
+        }
+        return episodeArtwork ?? podcastImage
     }
 
     private var podcastRoute: PodcastRoute {
@@ -179,7 +201,7 @@ struct EpisodeCard: View {
             }
         } label: {
             CachedAsyncImage(
-                url: episode.imageUrl.flatMap { $0.isEmpty ? nil : $0 } ?? podcastImage,
+                url: artworkURL,
                 size: AppSize.artworkSmall
             )
             .overlay {

@@ -4,6 +4,7 @@ struct HomeView: View {
     @Environment(SearchViewModel.self) private var searchVM
     @Environment(SubscriptionViewModel.self) private var subscriptionVM
     @Environment(AudioPlayerViewModel.self) private var playerVM
+    @Environment(QueueViewModel.self) private var queueVM
     @Environment(PlaybackProgressViewModel.self) private var progressVM
     @State private var showFilters = false
     @FocusState private var isSearchFocused: Bool
@@ -201,22 +202,28 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.xl) {
                     if showLastPlayed, let last = lastPlayedEpisode {
-                        homeSection("Fortsett å lytte", icon: "play.circle") {
+                        homeSection("Fortsett", icon: "play.circle") {
                             EpisodeCard(
                                 episode: last.episode,
                                 podcastTitle: last.podcastTitle,
-                                podcastImage: last.podcastImage
+                                podcastImage: last.podcastImage,
+                                usePodcastArtwork: true,
+                                useDefaultContextMenu: false
                             )
+                            .contextMenu {
+                                lastPlayedContextMenu(episode: last.episode, podcastTitle: last.podcastTitle, podcastImage: last.podcastImage)
+                            }
                         }
                     }
 
                     if showNewFromSubscriptions && !recentEpisodes.isEmpty {
-                        homeSection("Nytt fra Mine podder", icon: "heart.fill") {
+                        homeSection("Nyeste", icon: "heart.fill") {
                             ForEach(recentEpisodes) { item in
                                 EpisodeCard(
                                     episode: item.episode,
                                     podcastTitle: item.podcastTitle,
-                                    podcastImage: item.podcastImage
+                                    podcastImage: item.podcastImage,
+                                    usePodcastArtwork: true
                                 )
                             }
                         }
@@ -383,6 +390,47 @@ struct HomeView: View {
 
             content()
         }
+    }
+
+    // MARK: - Fortsett å lytte
+
+    /// Long-press menu for the "Fortsett å lytte" card. Built by hand instead
+    /// of the shared `episodeContextMenu` so it can add "Fjern", which does
+    /// not apply to any other episode row.
+    @ViewBuilder
+    private func lastPlayedContextMenu(episode: Episode, podcastTitle: String, podcastImage: String) -> some View {
+        Button {
+            playerVM.play(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
+        } label: {
+            Label("Spill", systemImage: "play.fill")
+        }
+        Button {
+            queueVM.playNext(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
+        } label: {
+            Label("Spill neste", systemImage: "text.insert")
+        }
+        Button {
+            queueVM.addToQueue(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
+        } label: {
+            Label("Legg i kø", systemImage: "text.append")
+        }
+        Button(role: .destructive) {
+            removeLastPlayed(episodeId: episode.id)
+        } label: {
+            Label("Fjern fra Fortsett å lytte", systemImage: "xmark.circle")
+        }
+    }
+
+    /// Clears both data sources `lastPlayedEpisode` can read from, and stops
+    /// playback if the episode being removed is the one currently loaded —
+    /// otherwise `playerVM.currentEpisode` would put the row straight back.
+    private func removeLastPlayed(episodeId: String) {
+        if playerVM.currentEpisode?.id == episodeId {
+            playerVM.stop()
+        }
+        progressVM.clearProgress(for: episodeId)
+        UserDefaults.standard.removeObject(forKey: AppConstants.lastPlayedInfoKey)
+        lastPlayedInfo = nil
     }
 
     // MARK: - Data Loading

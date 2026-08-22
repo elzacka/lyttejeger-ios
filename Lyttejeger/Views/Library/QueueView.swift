@@ -41,7 +41,7 @@ struct QueueView: View {
                         if let first = queueVM.items.first {
                             let episode = first.toEpisode()
                             playerVM.play(episode: episode, podcastTitle: first.podcastTitle, podcastImage: first.podcastImage)
-                            queueVM.remove(first)
+                            queueVM.removeAfterPlay(first)
                         }
                     } label: {
                         HStack(spacing: AppSpacing.sm) {
@@ -89,6 +89,11 @@ struct QueueView: View {
                     LazyVStack(spacing: AppSpacing.sm) {
                         ForEach(queueVM.items, id: \.episodeId) { item in
                             QueueItemCard(item: item)
+                                // Without an explicit preview shape the lift
+                                // gets a square system platter behind the
+                                // rounded card, which reads as a grey shadow
+                                // box around the row being dragged.
+                                .contentShape(.dragPreview, RoundedRectangle(cornerRadius: AppRadius.md))
                                 .onDrag {
                                     draggingItemId = item.episodeId
                                     return NSItemProvider(object: item.episodeId as NSString)
@@ -101,7 +106,6 @@ struct QueueView: View {
                                         queueVM.move(from: IndexSet(integer: from), to: to)
                                     }
                                 ))
-                                .opacity(draggingItemId == item.episodeId ? 0.4 : 1)
                         }
                     }
                     .padding(.horizontal, AppSpacing.lg)
@@ -173,9 +177,10 @@ private struct QueueItemCard: View {
             episode: episode,
             podcastTitle: item.podcastTitle,
             podcastImage: item.podcastImage ?? "",
+            usePodcastArtwork: true,
             onPlay: {
                 playerVM.play(episode: episode, podcastTitle: item.podcastTitle, podcastImage: item.podcastImage)
-                queueVM.remove(item)
+                queueVM.removeAfterPlay(item)
             },
             useDefaultContextMenu: false,
             // Queue actions live in the row's own menu button. A contextMenu
@@ -188,7 +193,7 @@ private struct QueueItemCard: View {
     private var queueMenu: some View {
         Button {
             playerVM.play(episode: episode, podcastTitle: item.podcastTitle, podcastImage: item.podcastImage)
-            queueVM.remove(item)
+            queueVM.removeAfterPlay(item)
         } label: {
             Label("Spill", systemImage: "play.fill")
         }

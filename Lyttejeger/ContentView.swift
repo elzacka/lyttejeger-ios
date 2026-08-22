@@ -1,6 +1,16 @@
 import SwiftUI
 import SwiftData
 
+extension EnvironmentValues {
+    /// False while a view lives in a tab the user is not looking at.
+    ///
+    /// All four tab hierarchies stay alive, so the inactive ones have to hide
+    /// themselves from VoiceOver. ContentView hides the tab roots directly,
+    /// but views pushed onto a stack are presented by the NavigationStack and
+    /// are out of its reach — they read this instead.
+    @Entry var isTabActive: Bool = true
+}
+
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var searchVM = SearchViewModel()
@@ -10,63 +20,84 @@ struct ContentView: View {
     @State private var progressVM = PlaybackProgressViewModel()
     @State private var selectedTab = Tab.home
     @State private var homePath = NavigationPath()
-    @State private var myPodsPath = NavigationPath()
+    @State private var followingPath = NavigationPath()
     @State private var queuePath = NavigationPath()
-    @State private var showMenu = false
+    @State private var menuPath = NavigationPath()
+    @State private var pendingImportURL: URL?
     /// Guards the delayed cross-hierarchy push against double taps: two taps
     /// inside the delay used to stack two copies of the same detail screen.
     @State private var routeNavigationTask: Task<Void, Never>?
     @State private var lastPushedRoute: PodcastRoute?
 
     enum Tab: Int, CaseIterable {
-        case home, myPods, queue
+        case home, following, queue, menu
 
         var icon: String {
             switch self {
             case .home: "house"
-            case .myPods: "heart"
+            case .following: "heart"
             case .queue: "list.number"
+            case .menu: "line.3.horizontal"
             }
         }
 
         var iconFilled: String {
             switch self {
             case .home: "house.fill"
-            case .myPods: "heart.fill"
+            case .following: "heart.fill"
             case .queue: "list.number"
+            case .menu: "line.3.horizontal"
             }
         }
 
         var label: String {
             switch self {
             case .home: "Hjem"
-            case .myPods: "Mine podder"
+            case .following: "Følgeliste"
             case .queue: "Kø"
+            case .menu: "Meny"
             }
         }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Tab content
+            // Tab content. All four hierarchies stay alive so each tab keeps
+            // its scroll position and navigation stack; the inactive ones are
+            // hidden from VoiceOver so it cannot reach controls the user
+            // cannot see.
             ZStack {
                 NavigationStack(path: $homePath) {
                     HomeView()
+                        .accessibilityHidden(selectedTab != .home)
                 }
+                .environment(\.isTabActive, selectedTab == .home)
                 .opacity(selectedTab == .home ? 1 : 0)
                 .zIndex(selectedTab == .home ? 1 : 0)
 
-                NavigationStack(path: $myPodsPath) {
-                    MyPodsView()
+                NavigationStack(path: $followingPath) {
+                    FollowingView()
+                        .accessibilityHidden(selectedTab != .following)
                 }
-                .opacity(selectedTab == .myPods ? 1 : 0)
-                .zIndex(selectedTab == .myPods ? 1 : 0)
+                .environment(\.isTabActive, selectedTab == .following)
+                .opacity(selectedTab == .following ? 1 : 0)
+                .zIndex(selectedTab == .following ? 1 : 0)
 
                 NavigationStack(path: $queuePath) {
                     QueueView()
+                        .accessibilityHidden(selectedTab != .queue)
                 }
+                .environment(\.isTabActive, selectedTab == .queue)
                 .opacity(selectedTab == .queue ? 1 : 0)
                 .zIndex(selectedTab == .queue ? 1 : 0)
+
+                NavigationStack(path: $menuPath) {
+                    MenuView(pendingImportURL: $pendingImportURL)
+                        .accessibilityHidden(selectedTab != .menu)
+                }
+                .environment(\.isTabActive, selectedTab == .menu)
+                .opacity(selectedTab == .menu ? 1 : 0)
+                .zIndex(selectedTab == .menu ? 1 : 0)
             }
             .animation(
                 UIAccessibility.isReduceMotionEnabled ? nil : .easeInOut(duration: 0.15),
@@ -82,13 +113,22 @@ struct ContentView: View {
             // Custom tab bar
             HStack(spacing: 0) {
                 ForEach(Tab.allCases, id: \.self) { tab in
+                    // Keeps the menu visually apart from the content tabs even
+                    // though it now behaves exactly like them.
+                    if tab == .menu {
+                        Rectangle()
+                            .fill(Color.appBorder.opacity(0.4))
+                            .frame(width: 1, height: 24)
+                    }
+
                     Button {
                         if selectedTab == tab {
                             // Pop to root on re-tap
                             switch tab {
                             case .home: homePath = NavigationPath()
-                            case .myPods: myPodsPath = NavigationPath()
+                            case .following: followingPath = NavigationPath()
                             case .queue: queuePath = NavigationPath()
+                            case .menu: menuPath = NavigationPath()
                             }
                         } else {
                             selectedTab = tab
@@ -104,24 +144,6 @@ struct ContentView: View {
                     .accessibilityLabel(tab.label)
                     .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
                 }
-
-                // Menu divider
-                Rectangle()
-                    .fill(Color.appBorder.opacity(0.4))
-                    .frame(width: 1, height: 24)
-
-                // Menu button
-                Button {
-                    showMenu = true
-                } label: {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(.title2))
-                        .foregroundStyle(Color.appMutedForeground)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: AppSize.touchTarget)
-                        .contentShape(Rectangle())
-                }
-                .accessibilityLabel("Meny")
             }
             // The full home-indicator inset (34pt) under a label-less row left
             // more empty space than the icons themselves take. The bar reaches
@@ -141,11 +163,12 @@ struct ContentView: View {
             UIAccessibility.isReduceMotionEnabled ? nil : .easeInOut(duration: 0.2),
             value: playerVM.currentEpisode?.id
         )
-        .sheet(isPresented: $showMenu) {
-            MenuView()
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(Color.appBackground)
+        // A file opened from Mail, Files or another podcast app. Import lives
+        // in the menu, so send the user there and hand the URL over.
+        .onOpenURL { url in
+            pendingImportURL = url
+            selectedTab = .menu
+            menuPath = NavigationPath()
         }
         .environment(searchVM)
         .environment(queueVM)
@@ -174,8 +197,9 @@ struct ContentView: View {
                 lastPushedRoute = route
                 switch originTab {
                 case .home: homePath.append(route)
-                case .myPods: myPodsPath.append(route)
+                case .following: followingPath.append(route)
                 case .queue: queuePath.append(route)
+                case .menu: menuPath.append(route)
                 }
 
                 // Release the guard shortly after, so the same podcast can be

@@ -111,7 +111,7 @@ struct FilterPanel: View {
                     }
                 }
                 .padding(.horizontal, AppSpacing.lg)
-                .padding(.top, AppSpacing.lg)
+                .padding(.top, AppSpacing.xxl)
                 .padding(.bottom, AppSpacing.lg)
             }
         }

@@ -28,9 +28,6 @@ enum AppSize {
     /// Podcast artwork in detail view
     static let artworkMedium: CGFloat = 120
 
-    /// Podcast artwork in player
-    static let artworkLarge: CGFloat = 280
-
     /// Mini player height
     static let miniPlayerHeight: CGFloat = 80
 

@@ -40,7 +40,10 @@ struct AudioPlayerBar: View {
                             .font(.cardTitle)
                             .foregroundStyle(Color.appForeground)
                             .lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            // A one-line title left this button about 20pt tall.
+                            // It is the only way into the full player from the
+                            // bar, so it has to clear 44pt on its own.
+                            .frame(maxWidth: .infinity, minHeight: AppSize.touchTarget, alignment: .leading)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(CardButtonStyle())

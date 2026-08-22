@@ -4,6 +4,7 @@ struct PodcastDetailView: View {
     let podcast: Podcast
     var focusEpisodeId: String? = nil
 
+    @Environment(\.isTabActive) private var isTabActive
     @Environment(SubscriptionViewModel.self) private var subscriptionVM
     @Environment(AudioPlayerViewModel.self) private var playerVM
     @Environment(QueueViewModel.self) private var queueVM
@@ -192,6 +193,8 @@ struct PodcastDetailView: View {
         }
         .navigationTitle(showNavTitle ? podcast.title : "")
         .navigationBarTitleDisplayMode(.inline)
+        // Stays alive inside its tab's stack while another tab is on screen
+        .accessibilityHidden(!isTabActive)
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
@@ -222,7 +225,7 @@ struct PodcastDetailView: View {
     }
 
     /// Fetches full podcast data from API when initial data is incomplete
-    /// (e.g. navigating from MyPodsView where Subscription only stores basic fields)
+    /// (e.g. navigating from FollowingView where Subscription only stores basic fields)
     private func enrichPodcastIfNeeded() async {
         guard podcast.description.isEmpty, !podcast.isNRKFeed,
               let feedId = Int(podcast.id) else { return }
@@ -237,7 +240,7 @@ struct PodcastDetailView: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             let wasSubscribed = subscriptionVM.isSubscribed(pod.id)
             subscriptionVM.toggleSubscription(podcast: pod)
-            let message = wasSubscribed ? "Fjernet fra Mine podder" : "Lagt til Mine podder"
+            let message = wasSubscribed ? "Fjernet fra følgelisten" : "Lagt til i følgelisten"
             if UIAccessibility.isReduceMotionEnabled {
                 toastMessage = message
             } else {
@@ -269,6 +272,10 @@ struct PodcastDetailView: View {
     private func loadEpisodes() async {
         if let slug = podcast.nrkSlug {
             await loadNRKEpisodes(slug: slug)
+        } else if let feedUrl = podcast.directFeedUrl {
+            // Imported from OPML, unknown to Podcast Index. The feed URL is
+            // all we have, so read the episodes straight from the feed.
+            await loadDirectFeedEpisodes(feedUrl: feedUrl)
         } else if let slug = await findNRKSlug() {
             // PI podcast that also exists in NRK catalog — prefer RSS (better durations)
             await loadNRKEpisodes(slug: slug)
@@ -301,6 +308,31 @@ struct PodcastDetailView: View {
             self.error = "Ingen nettverkstilkobling.\nSjekk tilkoblingen og prøv igjen."
         } catch {
             self.error = "Kunne ikke laste episoder.\nPrøv igjen senere."
+        }
+    }
+
+    private func loadDirectFeedEpisodes(feedUrl: String) async {
+        defer { isLoading = false }
+
+        do {
+            let result = try await RSSFeedService.shared.fetchEpisodes(
+                feedUrl: feedUrl,
+                podcastId: podcast.id
+            )
+            episodes = result.episodes
+
+            // The subscription only carries what the OPML file said, so fill
+            // in artwork and description from the feed itself
+            if !result.podcastImageUrl.isEmpty {
+                nrkImageUrl = result.podcastImageUrl
+            }
+            if !result.podcastDescription.isEmpty {
+                nrkDescription = result.podcastDescription
+            }
+        } catch is URLError {
+            self.error = "Ingen nettverkstilkobling.\nSjekk tilkoblingen og prøv igjen."
+        } catch {
+            self.error = "Kunne ikke laste episoder fra feeden.\nPrøv igjen senere."
         }
     }
 

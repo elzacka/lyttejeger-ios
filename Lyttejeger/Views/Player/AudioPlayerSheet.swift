@@ -9,6 +9,13 @@ struct AudioPlayerSheet: View {
     @State private var downloadError: String?
     @State private var showDownloadError = false
 
+    /// Drives both the feature row itself and the height budgeted for it, so
+    /// the artwork can never be sized for a row that is not there.
+    private var showsFeatureRow: Bool {
+        !playerVM.chapters.isEmpty || playerVM.transcript != nil
+            || playerVM.chaptersFailed || playerVM.transcriptFailed
+    }
+
     private func navigateToPodcast() {
         guard let episode = playerVM.currentEpisode else { return }
         playerVM.pendingPodcastRoute = PodcastRoute(
@@ -28,16 +35,17 @@ struct AudioPlayerSheet: View {
             // sizes competes with the progress slider's drag and swallows its
             // end-of-drag callback, which leaves the position display frozen
             // while audio keeps playing.
-            if dynamicTypeSize.isAccessibilitySize {
-                GeometryReader { geo in
+            GeometryReader { geo in
+                if dynamicTypeSize.isAccessibilitySize {
                     ScrollView {
-                        content
+                        content(artworkSide: AppSize.artworkMedium)
                             .frame(minHeight: geo.size.height)
                     }
                     .scrollBounceBehavior(.basedOnSize)
+                } else {
+                    content(artworkSide: Self.artworkSide(in: geo.size, hasFeatureRow: showsFeatureRow))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-            } else {
-                content
             }
 
             topBar
@@ -60,23 +68,61 @@ struct AudioPlayerSheet: View {
         }
     }
 
-    private var content: some View {
+    /// Vertical space the artwork has to leave for everything else in the
+    /// stack. Budgeted against a two-line title with one extra line of slack,
+    /// because reserving for the three-line worst case on every screen costs
+    /// the artwork ~80pt it almost always has room for.
+    ///
+    /// Note the size this is subtracted from is the safe-area height, not the
+    /// screen height — about 781pt on an iPhone 17 Pro rather than 874.
+    static func reservedContentHeight(hasFeatureRow: Bool) -> CGFloat {
+        // Component heights are measured from the rendered screen at the
+        // default text size, not derived from font metrics — guessing them
+        // high is what left the artwork smaller than the space allowed.
+        let topClearance = AppSize.touchTarget
+        let titleAndPodcast: CGFloat = 105
+        let transport: CGFloat = 105
+        let watermark = 14 + AppSpacing.sm
+        let featureRow = hasFeatureRow ? 38 + AppSpacing.lg : 0
+        let stackSpacing = AppSpacing.lg * 5
+        let stackPadding = AppSpacing.lg * 2
+        // Room for a third title line before anything has to truncate. Larger
+        // Dynamic Type sizes eat into this; past it the artwork gives way
+        // first, since it is the only element sized from what is left over.
+        let slack: CGFloat = 60
+        return topClearance + titleAndPodcast + transport + watermark
+            + featureRow + stackSpacing + stackPadding + slack
+    }
+
+    /// The artwork was a hard 280pt on every device. On a 440pt-wide Pro Max
+    /// that wasted ~130pt of width and pushed all the surplus height into dead
+    /// air above the image. Sizing it from the space actually available turns
+    /// that air into artwork, and still shrinks on small screens or when
+    /// Dynamic Type grows the text around it.
+    static func artworkSide(in size: CGSize, hasFeatureRow: Bool) -> CGFloat {
+        let widthCeiling = size.width - AppSpacing.lg * 2
+        let heightCeiling = size.height - reservedContentHeight(hasFeatureRow: hasFeatureRow)
+        return max(AppSize.artworkMedium, min(widthCeiling, heightCeiling))
+    }
+
+    private func content(artworkSide: CGFloat) -> some View {
         VStack(spacing: AppSpacing.lg) {
-                // Top spacing for close/download buttons
+                // Clears the overlaid top bar. Capped as well as floored: as an
+                // open-ended Spacer it soaked up most of the leftover height on
+                // tall screens, which is what put ~270pt of nothing above the
+                // artwork on a Pro Max.
                 Spacer()
-                    .frame(minHeight: AppSize.touchTarget)
+                    .frame(
+                        minHeight: AppSize.touchTarget,
+                        maxHeight: AppSize.touchTarget + AppSpacing.xxl
+                    )
 
                 // Artwork (tap to view podcast)
                 if let imageUrl = playerVM.podcastImage ?? playerVM.currentEpisode?.imageUrl {
                     Button {
                         navigateToPodcast()
                     } label: {
-                        CachedAsyncImage(
-                            url: imageUrl,
-                            size: dynamicTypeSize.isAccessibilitySize
-                                ? AppSize.artworkMedium
-                                : AppSize.artworkLarge
-                        )
+                        CachedAsyncImage(url: imageUrl, size: artworkSide)
                             .shadow(color: .black.opacity(0.15), radius: 20, y: 10)
                     }
                     .buttonStyle(CardButtonStyle())
@@ -133,8 +179,7 @@ struct AudioPlayerSheet: View {
                 PlayerControls()
 
                 // Feature buttons
-                if !playerVM.chapters.isEmpty || playerVM.transcript != nil
-                    || playerVM.chaptersFailed || playerVM.transcriptFailed {
+                if showsFeatureRow {
                     HStack(spacing: AppSpacing.xl) {
                         if !playerVM.chapters.isEmpty || playerVM.chaptersFailed {
                             Button {

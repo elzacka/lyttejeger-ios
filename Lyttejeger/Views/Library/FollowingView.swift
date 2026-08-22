@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct MyPodsView: View {
+struct FollowingView: View {
     @Environment(SubscriptionViewModel.self) private var subscriptionVM
 
     private let columns = [
@@ -78,7 +78,7 @@ struct MyPodsView: View {
 #Preview("Med abonnementer") {
     PreviewWrapper(seeded: true) {
         NavigationStack {
-            MyPodsView()
+            FollowingView()
         }
     }
 }
@@ -86,7 +86,7 @@ struct MyPodsView: View {
 #Preview("Tom liste") {
     PreviewWrapper {
         NavigationStack {
-            MyPodsView()
+            FollowingView()
         }
     }
 }
