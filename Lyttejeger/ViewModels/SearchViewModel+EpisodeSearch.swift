@@ -36,7 +36,7 @@ extension SearchViewModel {
             var seenFeedIds = Set<String>()
             for apiQuery in apiQueries {
                 if let termRes = try? await api.searchByTerm(apiQuery, options: sourceOptions) {
-                    var branch = PodcastTransform.transformFeeds(termRes.feeds ?? [])
+                    var branch = await PodcastTransform.transformFeeds(offMain: termRes.feeds ?? [])
                     branch = filterByCategory(branch)
                     branch = filterByLanguage(branch)
                     for podcast in branch where seenFeedIds.insert(podcast.id).inserted {
@@ -60,7 +60,7 @@ extension SearchViewModel {
             // zip keeps each transformed episode paired with its API item even
             // if the transform ever starts filtering
             let personRes = try await api.searchByPerson(primaryQuery, max: 50)
-            let personEps = PodcastTransform.transformEpisodes(personRes.items ?? [])
+            let personEps = await PodcastTransform.transformEpisodes(offMain: personRes.items ?? [])
             for (ep, apiEp) in zip(personEps, personRes.items ?? []) {
                 guard !existingIds.contains(episodeDedupeKey(ep)) else { continue }
 
@@ -98,7 +98,7 @@ extension SearchViewModel {
                 let podcastMap = Dictionary(uniqueKeysWithValues: topPodcasts.map { ($0.id, $0) })
 
                 if let epsRes = try? await api.episodesByFeedIds(feedIds, max: 200, since: nil) {
-                    let eps = PodcastTransform.transformEpisodes(epsRes.items ?? [])
+                    let eps = await PodcastTransform.transformEpisodes(offMain: epsRes.items ?? [])
                     for (ep, apiEp) in zip(eps, epsRes.items ?? []) {
                         guard !existingIds.contains(episodeDedupeKey(ep)) else { continue }
                         let podcast = podcastMap[String(apiEp.feedId ?? 0)]
@@ -151,7 +151,7 @@ extension SearchViewModel {
 
                 if !targets.isEmpty {
                     let nrkService = self.nrkService
-                    let fetched = await withTaskGroup(of: (Podcast, NRKFeedResult)?.self) { group in
+                    let fetched = await withTaskGroup(of: (Podcast, PodcastFeedResult)?.self) { group in
                         for target in targets {
                             group.addTask {
                                 guard let feed = try? await nrkService.fetchEpisodes(nrkSlug: target.slug) else {
@@ -160,7 +160,7 @@ extension SearchViewModel {
                                 return (target.podcast, feed)
                             }
                         }
-                        var collected: [(Podcast, NRKFeedResult)] = []
+                        var collected: [(Podcast, PodcastFeedResult)] = []
                         for await result in group {
                             if let result { collected.append(result) }
                         }

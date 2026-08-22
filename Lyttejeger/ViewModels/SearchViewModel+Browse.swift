@@ -59,7 +59,7 @@ extension SearchViewModel {
             )
         }
 
-        var results = PodcastTransform.transformFeeds(res.feeds ?? [])
+        var results = await PodcastTransform.transformFeeds(offMain: res.feeds ?? [])
         results = filterByLanguage(results)
         results = filterByCategory(results)
         return results
@@ -82,7 +82,7 @@ extension SearchViewModel {
                     max: AppConstants.browseResultsDefault,
                     lang: getApiLanguageCodes(filters.languages)
                 )
-                results = episodesWithFeedMetadata(res.items ?? [], podcastsById: [:])
+                results = await episodesWithFeedMetadata(res.items ?? [], podcastsById: [:])
             } else {
                 // A category lives on the feed, never on the episode, so the
                 // matching feeds have to be resolved before their episodes can
@@ -108,7 +108,7 @@ extension SearchViewModel {
                     max: AppConstants.browseResultsDefault,
                     since: nil
                 )
-                results = episodesWithFeedMetadata(res.items ?? [], podcastsById: podcastsById)
+                results = await episodesWithFeedMetadata(res.items ?? [], podcastsById: podcastsById)
             }
 
             results = filterEpisodesByLanguage(results)
@@ -127,11 +127,12 @@ extension SearchViewModel {
     func episodesWithFeedMetadata(
         _ items: [PodcastIndexEpisode],
         podcastsById: [String: Podcast]
-    ) -> [EpisodeWithPodcast] {
+    ) async -> [EpisodeWithPodcast] {
         var seen = Set<String>()
         var results: [EpisodeWithPodcast] = []
 
-        for (episode, item) in zip(PodcastTransform.transformEpisodes(items), items) {
+        let transformed = await PodcastTransform.transformEpisodes(offMain: items)
+        for (episode, item) in zip(transformed, items) {
             guard seen.insert(episodeDedupeKey(episode)).inserted else { continue }
             let podcast = item.feedId.flatMap { podcastsById[String($0)] }
             results.append(EpisodeWithPodcast(

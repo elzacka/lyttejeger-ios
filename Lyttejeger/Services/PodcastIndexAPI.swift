@@ -34,6 +34,14 @@ struct PodcastIndexSoundbite: Decodable, Sendable {
     let title: String?
 }
 
+/// One entry of the episode's `transcripts` array. Publishers commonly offer
+/// the same transcript in several formats, and the mime type is the only way
+/// to tell which one the app can actually parse into timed cues.
+struct PodcastIndexTranscript: Decodable, Sendable {
+    let url: String?
+    let type: String?
+}
+
 struct PodcastIndexEpisode: Decodable, Sendable {
     let id: Int
     let title: String?
@@ -58,6 +66,10 @@ struct PodcastIndexEpisode: Decodable, Sendable {
     let feedDead: Int?
     let chaptersUrl: String?
     let transcriptUrl: String?
+    /// Preferred over `transcriptUrl`, on Podcast Index's own advice: the
+    /// legacy single field can point at the HTML rendering of a transcript
+    /// even when the publisher also ships JSON or SRT.
+    let transcripts: [PodcastIndexTranscript]?
     let soundbite: PodcastIndexSoundbite?
     let soundbites: [PodcastIndexSoundbite]?
     let feedTitle: String?

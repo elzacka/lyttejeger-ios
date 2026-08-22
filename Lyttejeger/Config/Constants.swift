@@ -126,6 +126,10 @@ enum AppConstants {
     /// Max transcript cache entries
     static let transcriptCacheMaxSize = 30
 
+    /// Max chapters download size (bytes). Chapter files are small JSON; the
+    /// cap is here so a wrong URL cannot pull an arbitrary payload into memory.
+    static let maxChaptersSize = 1 * 1024 * 1024
+
     // MARK: - Layout
 
     /// Bottom padding for scroll content (accounts for mini player)
@@ -142,8 +146,8 @@ enum AppConstants {
     /// Max concurrent NRK feed fetches during background refresh
     static let nrkConcurrencyLimit = 4
 
-    /// Max episodes to parse from an NRK RSS feed
-    static let nrkMaxEpisodes = 500
+    /// Max episodes to parse from a podcast RSS feed
+    static let maxFeedEpisodes = 500
 
     /// Valid pattern for NRK slugs (alphanumeric, underscores, hyphens)
     static let nrkSlugPattern = "^[a-zA-Z0-9_-]+$"
@@ -179,6 +183,19 @@ enum AppConstants {
     static let showLastPlayedKey = "showLastPlayed"
     static let showNewFromSubscriptionsKey = "showNewFromSubscriptions"
     static let podcastSpeedPrefsKey = "podcastSpeedPrefs"
+    static let keepEpisodesInQueueKey = "keepEpisodesInQueue"
+
+    /// Every key above that holds something the user put there, in one place.
+    /// "Slett alle data" walks this list, so a new key is cleared by being
+    /// added here rather than by remembering to touch a second file — which is
+    /// exactly what was forgotten when `keepEpisodesInQueue` was introduced.
+    static let userDataDefaultsKeys = [
+        lastPlayedInfoKey,
+        showLastPlayedKey,
+        showNewFromSubscriptionsKey,
+        podcastSpeedPrefsKey,
+        keepEpisodesInQueueKey
+    ]
 
     // MARK: - API
 

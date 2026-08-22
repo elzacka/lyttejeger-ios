@@ -1,8 +1,8 @@
 import Foundation
 import SwiftData
 
-/// V1 is the schema shipped in v1.0.8 (build 14): QueueItem, Subscription and
-/// PlaybackPosition exactly as they were deployed. The models stay at file scope
+/// V1 is the schema as it stood before versioning was introduced: QueueItem,
+/// Subscription and PlaybackPosition exactly as they were already deployed. The models stay at file scope
 /// rather than nested inside this enum so their entity identity in existing
 /// stores is unchanged.
 ///
@@ -29,7 +29,10 @@ enum LyttejegerMigrationPlan: SchemaMigrationPlan {
 enum LyttejegerStore {
     static let schema = Schema(versionedSchema: LyttejegerSchemaV1.self)
 
-    static func makeContainer() throws -> ModelContainer {
+    /// `configurations` exists for tests, which need to point the same
+    /// migration plan at a throwaway store on disk. Empty means the default
+    /// store, which is what the app itself always passes.
+    static func makeContainer(configurations: [ModelConfiguration] = []) throws -> ModelContainer {
         // SwiftData's default store lives in Application Support, which does
         // not exist in a fresh app container. CoreData does recover by creating
         // it, but only after logging several hundred lines of stat failures at
@@ -42,6 +45,10 @@ enum LyttejegerStore {
             appropriateFor: nil,
             create: true
         )
-        return try ModelContainer(for: schema, migrationPlan: LyttejegerMigrationPlan.self)
+        return try ModelContainer(
+            for: schema,
+            migrationPlan: LyttejegerMigrationPlan.self,
+            configurations: configurations
+        )
     }
 }

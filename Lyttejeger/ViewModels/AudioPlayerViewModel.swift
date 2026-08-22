@@ -13,6 +13,12 @@ struct LastPlayedInfo: Codable, Sendable {
     let imageUrl: String?
     let podcastTitle: String
     let podcastImage: String
+    /// Carried so resuming from the home screen keeps the episode's chapters
+    /// and transcript. Without these the rebuilt episode had neither, and
+    /// "Fortsett å lytte" silently dropped both. Optional so records written
+    /// by earlier versions still decode.
+    var transcriptUrl: String?
+    var chaptersUrl: String?
 
     func toEpisode() -> Episode {
         Episode(
@@ -23,7 +29,9 @@ struct LastPlayedInfo: Codable, Sendable {
             audioUrl: audioUrl,
             duration: duration,
             publishedAt: "",
-            imageUrl: imageUrl
+            imageUrl: imageUrl,
+            transcriptUrl: transcriptUrl,
+            chaptersUrl: chaptersUrl
         )
     }
 
@@ -91,7 +99,14 @@ final class AudioPlayerViewModel {
     /// True when the episode declares chapters but they could not be fetched,
     /// so the UI can say so instead of pretending there are none.
     var chaptersFailed = false
-    var currentChapter: Chapter?
+
+    /// Derived rather than stored. It used to be refreshed from the position
+    /// save timer, which left the highlight and the player's chapter label up
+    /// to `playbackSaveInterval` seconds behind — most visibly right after
+    /// tapping a chapter to seek to it.
+    var currentChapter: Chapter? {
+        ChapterService.getCurrentChapter(chapters, at: currentTime)
+    }
 
     // Transcript
     var transcript: Transcript?
@@ -104,6 +119,22 @@ final class AudioPlayerViewModel {
         audioService.onRemotePlay = { [weak self] in
             self?.restorePositionIfNeeded()
         }
+    }
+
+    // MARK: - Smart resume
+
+    /// Where playback should pick up, given where it stopped and when.
+    ///
+    /// After a long pause the listener has lost the thread, so playback starts
+    /// a little earlier and hands back the last few seconds of context instead
+    /// of dropping them mid-sentence. Shared by all three resume paths — the
+    /// rule used to be written out at each of them, and they had already
+    /// drifted apart.
+    static func smartResumePosition(_ position: TimeInterval, pausedSince: Date) -> TimeInterval {
+        guard Date().timeIntervalSince(pausedSince) > AppConstants.smartResumeThreshold else {
+            return position
+        }
+        return max(0, position - AppConstants.smartResumeRewind)
     }
 
     // MARK: - Playback
@@ -135,12 +166,8 @@ final class AudioPlayerViewModel {
             }
         }
 
-        // Smart resume: rewind 10s if paused for 5+ minutes
         if let position = savedPosition, let updatedAt = positionUpdatedAt {
-            let pauseDuration = Date().timeIntervalSince(updatedAt)
-            if pauseDuration > AppConstants.smartResumeThreshold {
-                savedPosition = max(0, position - AppConstants.smartResumeRewind)
-            }
+            savedPosition = Self.smartResumePosition(position, pausedSince: updatedAt)
         }
 
         audioService.play(episode: episode, podcastTitle: podcastTitle, podcastImage: podcastImage)
@@ -154,7 +181,9 @@ final class AudioPlayerViewModel {
             duration: episode.duration,
             imageUrl: episode.imageUrl,
             podcastTitle: podcastTitle ?? "",
-            podcastImage: podcastImage ?? ""
+            podcastImage: podcastImage ?? "",
+            transcriptUrl: episode.transcriptUrl,
+            chaptersUrl: episode.chaptersUrl
         ).save()
 
         // Cancel any in-flight Tasks from a previous episode
@@ -186,17 +215,22 @@ final class AudioPlayerViewModel {
 
     // MARK: - Chapters & Transcript
 
+    /// Clearing before the fetch matters: without it the previous episode's
+    /// chapters stayed on screen for the whole round trip. The cancellation
+    /// check on the success path matters for the same reason — a fetch that
+    /// completes after its episode was switched away from would otherwise
+    /// publish the old episode's chapters onto the new one.
     func loadChapters(for episode: Episode) {
         chapterTask?.cancel()
-        guard let chaptersUrl = episode.chaptersUrl else {
-            chapters = []
-            chaptersFailed = false
-            return
-        }
+        chapters = []
         chaptersFailed = false
+        guard let chaptersUrl = episode.chaptersUrl else { return }
+
         chapterTask = Task { @MainActor in
             do {
-                chapters = try await chapterService.fetchChapters(from: chaptersUrl)
+                let fetched = try await chapterService.fetchChapters(from: chaptersUrl)
+                guard !Task.isCancelled else { return }
+                chapters = fetched
             } catch {
                 guard !Task.isCancelled else { return }
                 chapters = []
@@ -207,15 +241,15 @@ final class AudioPlayerViewModel {
 
     func loadTranscript(for episode: Episode) {
         transcriptTask?.cancel()
-        guard let transcriptUrl = episode.transcriptUrl else {
-            transcript = nil
-            transcriptFailed = false
-            return
-        }
+        transcript = nil
         transcriptFailed = false
+        guard let transcriptUrl = episode.transcriptUrl else { return }
+
         transcriptTask = Task { @MainActor in
             do {
-                transcript = try await transcriptService.fetchTranscript(from: transcriptUrl)
+                let fetched = try await transcriptService.fetchTranscript(from: transcriptUrl)
+                guard !Task.isCancelled else { return }
+                transcript = fetched
             } catch {
                 guard !Task.isCancelled else { return }
                 transcript = nil
@@ -257,7 +291,6 @@ final class AudioPlayerViewModel {
         isExpanded = false
         chapters = []
         chaptersFailed = false
-        currentChapter = nil
         transcript = nil
         transcriptFailed = false
         sleepTimerMinutes = 0
@@ -267,11 +300,10 @@ final class AudioPlayerViewModel {
     }
 
     func togglePlayPause() {
-        // Smart resume: rewind 10s if paused for 5+ minutes
         if !isPlaying, let pausedAt = audioService.pausedAt {
-            let pauseDuration = Date().timeIntervalSince(pausedAt)
-            if pauseDuration > AppConstants.smartResumeThreshold && currentTime > AppConstants.smartResumeRewind {
-                audioService.seek(to: currentTime - AppConstants.smartResumeRewind)
+            let target = Self.smartResumePosition(currentTime, pausedSince: pausedAt)
+            if target < currentTime {
+                audioService.seek(to: target)
             }
         }
         audioService.togglePlayPause()
@@ -302,16 +334,6 @@ final class AudioPlayerViewModel {
 
     func seekToChapter(_ chapter: Chapter) {
         audioService.seek(to: chapter.startTime)
-    }
-
-    // MARK: - Chapter tracking
-
-    func updateCurrentChapter() {
-        guard !chapters.isEmpty else {
-            currentChapter = nil
-            return
-        }
-        currentChapter = ChapterService.getCurrentChapter(chapters, at: currentTime)
     }
 
     // MARK: - Sleep Timer
@@ -389,8 +411,9 @@ final class AudioPlayerViewModel {
               !saved.completed,
               saved.position > 30.0 else { return }
 
-        let position = saved.position
-        audioService.seek(to: position)
+        // Remote play restarted the episode from the top, so this is a resume
+        // like any other and earns the same rewind.
+        audioService.seek(to: Self.smartResumePosition(saved.position, pausedSince: saved.updatedAt))
     }
 
     // MARK: - Position Saving
@@ -402,7 +425,6 @@ final class AudioPlayerViewModel {
                 try? await Task.sleep(for: .seconds(AppConstants.playbackSaveInterval))
                 guard !Task.isCancelled else { break }
                 savePosition()
-                updateCurrentChapter()
                 checkSleepTimer()
                 checkAutoAdvance()
             }
@@ -421,6 +443,15 @@ final class AudioPlayerViewModel {
         let descriptor = FetchDescriptor<PlaybackPosition>(predicate: #Predicate { $0.episodeId == episodeId })
 
         if let existing = try? modelContext.fetch(descriptor).first {
+            // The save timer keeps ticking while playback is paused, so this
+            // runs every few seconds with a position that has not moved.
+            // Writing anyway refreshed `updatedAt`, which is exactly what smart
+            // resume measures the pause from — so resuming a long-paused
+            // episode never rewound. It also kept the store churning for as
+            // long as anything stayed paused.
+            guard existing.position != time
+                || existing.duration != dur
+                || existing.completed != completed else { return }
             existing.position = time
             existing.duration = dur
             existing.updatedAt = Date()
@@ -456,7 +487,7 @@ final class AudioPlayerViewModel {
         autoAdvanceTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(AppConstants.autoAdvanceDelay))
             guard !Task.isCancelled else { return }
-            guard let next = queueVM.popFirst() else { return }
+            guard let next = queueVM.nextAfterPlaying(episodeId: self.currentEpisode?.id) else { return }
             self.play(episode: next.episode, podcastTitle: next.podcastTitle, podcastImage: next.podcastImage)
             Self.logger.info("Auto-advanced to: \(next.episode.title, privacy: .private)")
         }

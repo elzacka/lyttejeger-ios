@@ -59,7 +59,7 @@ extension SearchViewModel {
                 guard !Task.isCancelled else { return }
             }
 
-            var results = PodcastTransform.transformFeeds(allFeeds)
+            var results = await PodcastTransform.transformFeeds(offMain: allFeeds)
             results = filterByLanguage(results)
             results = filterByCategory(results)
 
