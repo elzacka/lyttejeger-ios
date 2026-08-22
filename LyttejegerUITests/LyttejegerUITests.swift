@@ -23,16 +23,24 @@ final class LyttejegerUITests: XCTestCase {
     /// only "Hit area is too small", which is not enough to find it in a screen
     /// full of controls.
     ///
-    /// Three audit types are held back rather than run and ignored, so the gate
-    /// stays green and honest instead of red and routinely overridden. Each has
-    /// an open item in REVIEW-FINDINGS.md; turn them back on as they are closed.
-    ///   - `.dynamicType` fires on every `.caption2Text` and `.smallText`, but
-    ///     not on `.bodyText`, so it needs a real check before it is trusted.
-    ///   - `.textClipped` fires on the search placeholder.
-    ///   - `.contrast` fires on the Podkaster/Episoder switcher, possibly only
-    ///     while its 0.2 s selection animation is mid-flight.
+    /// Two audit types are held back, both because the audit is wrong about
+    /// this app rather than because the app is wrong. Verified 22 August 2026.
+    ///
+    /// `.dynamicType` reports "user will not be able to change the font size"
+    /// for every `.caption2Text` and `.smallText` element while passing
+    /// `.bodyText`. All three are `Font.custom(_:size:relativeTo:)`, and all
+    /// three were checked on screen from the default size to accessibility
+    /// XXXL: they scale. See LYT-85.
+    ///
+    /// `.contrast` reports only elements belonging to *inactive* tabs — the
+    /// Kø empty state while Hjem is showing, and so on. `ContentView` keeps
+    /// every tab alive in a ZStack at opacity 0 to preserve NavigationStack
+    /// state, and the audit samples those invisible pixels. Moving
+    /// `.accessibilityHidden` out to the NavigationStack does not stop it; the
+    /// audit does not walk the VoiceOver tree. The colours themselves compute
+    /// to 7.9:1 and 6.3:1 on `appBackground`. See LYT-87.
     private static let auditTypes: XCUIAccessibilityAuditType =
-        .all.subtracting([.dynamicType, .textClipped, .contrast])
+        .all.subtracting([.dynamicType, .contrast])
 
     override func tearDown() async throws {
         if let app, app.state == .runningForeground {
@@ -61,6 +69,13 @@ final class LyttejegerUITests: XCTestCase {
     func testAppLaunches() throws {
         launchApp()
         XCTAssertTrue(app.state == .runningForeground, "Appen skal kjøre i forgrunnen")
+        // Wait the splash overlay out. While it is up nothing behind it is
+        // hittable, and the teardown audit reported every control on the screen
+        // as too small to touch.
+        XCTAssertTrue(
+            app.staticTexts["Finn din neste favoritt"].waitForExistence(timeout: 10),
+            "Hjem skal vises når splash-skjermen er borte"
+        )
     }
 
     func testTabBarNavigation() throws {

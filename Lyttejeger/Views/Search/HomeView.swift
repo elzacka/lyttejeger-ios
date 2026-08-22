@@ -8,6 +8,7 @@ struct HomeView: View {
     @Environment(PlaybackProgressViewModel.self) private var progressVM
     @State private var showFilters = false
     @FocusState private var isSearchFocused: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     // Home sections
     @AppStorage(AppConstants.showLastPlayedKey) private var showLastPlayed = true
@@ -97,9 +98,15 @@ struct HomeView: View {
         VStack(spacing: 0) {
             // Search field
             HStack(spacing: AppSpacing.md) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(Color.appAccent.opacity(0.7))
-                    .font(.system(.callout))
+                // Decorative only — the field carries its own label. At
+                // accessibility sizes it and the filter button left the
+                // placeholder about three characters per line, so it broke
+                // mid-word and truncated anyway.
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(Color.appAccent.opacity(0.7))
+                        .font(.system(.callout))
+                }
 
                 // The system placeholder colour composites to about 1.7:1 on
                 // the muted field, so the placeholder is drawn separately.
@@ -157,8 +164,16 @@ struct HomeView: View {
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
             .padding(.bottom, AppSpacing.md)
 
-            // Tab switcher
-            HStack(spacing: 0) {
+            // Tab switcher. Side by side each label gets half the width, which
+            // at accessibility sizes broke "Podkaster" across two lines
+            // mid-word and left the sliding indicator pointing at nothing.
+            // Stacked, each label gets the full width and marks itself.
+            let stacked = dynamicTypeSize.isAccessibilitySize
+            let layout = stacked
+                ? AnyLayout(VStackLayout(spacing: 0))
+                : AnyLayout(HStackLayout(spacing: 0))
+
+            layout {
                 ForEach(SearchViewModel.SearchTab.allCases, id: \.self) { tab in
                     Button {
                         if UIAccessibility.isReduceMotionEnabled {
@@ -172,22 +187,32 @@ struct HomeView: View {
                         Text(tab == .podcasts ? "Podkaster" : "Episoder")
                             .font(.buttonText)
                             .foregroundStyle(searchVM.activeTab == tab ? Color.appAccent : Color.appMutedForeground)
+                            .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: AppSize.touchTarget)
                             .contentShape(Rectangle())
+                            .overlay(alignment: .bottom) {
+                                if stacked && searchVM.activeTab == tab {
+                                    Rectangle()
+                                        .fill(Color.appAccent)
+                                        .frame(height: 2)
+                                }
+                            }
                     }
                     .accessibilityAddTraits(searchVM.activeTab == tab ? .isSelected : [])
                 }
             }
             .overlay(alignment: .bottom) {
-                GeometryReader { geo in
-                    Rectangle()
-                        .fill(Color.appAccent)
-                        .frame(width: geo.size.width / 2, height: 2)
-                        .offset(x: searchVM.activeTab == .podcasts ? 0 : geo.size.width / 2)
-                        .animation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.2), value: searchVM.activeTab)
+                if !stacked {
+                    GeometryReader { geo in
+                        Rectangle()
+                            .fill(Color.appAccent)
+                            .frame(width: geo.size.width / 2, height: 2)
+                            .offset(x: searchVM.activeTab == .podcasts ? 0 : geo.size.width / 2)
+                            .animation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.2), value: searchVM.activeTab)
+                    }
+                    .frame(height: 2)
                 }
-                .frame(height: 2)
             }
         }
         .padding(.horizontal, AppSpacing.lg)
@@ -291,6 +316,7 @@ struct HomeView: View {
                     .foregroundStyle(Color.appMutedForeground)
                     .multilineTextAlignment(.center)
             }
+            .padding(.horizontal, AppSpacing.lg)
 
             Spacer()
         }
