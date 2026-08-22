@@ -28,6 +28,23 @@ DESTINATION='platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5'
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 abort() { printf '\n\033[31mAvbrutt: %s\033[0m\n' "$1" >&2; exit 1; }
 
+# Signing credentials for -allowProvisioningUpdates. There is no Apple Account
+# signed into Xcode on this machine, so xcodebuild cannot create the
+# distribution certificate and profile on its own — it fails at export with
+# "No signing certificate iOS Distribution found". It gets the same App Store
+# Connect API key the version check above already uses, which keeps the whole
+# release free of interactive sign-in.
+ASC_KEY=$(ls "$HOME"/.appstoreconnect/private_keys/AuthKey_*.p8 2>/dev/null | head -1)
+[[ -n "$ASC_KEY" ]] || abort "fant ingen AuthKey_*.p8 i ~/.appstoreconnect/private_keys."
+ASC_KEY_ID=$(basename "$ASC_KEY" .p8)
+ASC_KEY_ID=${ASC_KEY_ID#AuthKey_}
+ASC_ISSUER=${ASC_ISSUER_ID:-$(tr -d '[:space:]' < "$HOME/.appstoreconnect/issuer_id" 2>/dev/null)}
+[[ -n "$ASC_ISSUER" ]] || abort "mangler Issuer ID. Lagre den i ~/.appstoreconnect/issuer_id."
+AUTH=(-allowProvisioningUpdates
+      -authenticationKeyPath "$ASC_KEY"
+      -authenticationKeyID "$ASC_KEY_ID"
+      -authenticationKeyIssuerID "$ASC_ISSUER")
+
 # 1. What does App Store Connect actually hold?
 step "Versjonsstatus"
 if ! swift scripts/asc-status.swift; then
@@ -112,7 +129,7 @@ xcodebuild archive \
     -project Lyttejeger.xcodeproj -scheme Lyttejeger \
     -configuration Release -destination 'generic/platform=iOS' \
     -archivePath "$ARCHIVE" \
-    -allowProvisioningUpdates | tail -5
+    "${AUTH[@]}" | tail -5
 
 # 7. Export. The dry run stops here so the identity can be inspected.
 OPTIONS="$ARCHIVE/ExportOptions.plist"
@@ -126,7 +143,7 @@ xcodebuild -exportArchive \
     -archivePath "$ARCHIVE" \
     -exportOptionsPlist "$OPTIONS" \
     -exportPath "$EXPORT_DIR" \
-    -allowProvisioningUpdates | tail -5
+    "${AUTH[@]}" | tail -5
 
 if $DRY_RUN; then
     step "Kontrollerer signering"
