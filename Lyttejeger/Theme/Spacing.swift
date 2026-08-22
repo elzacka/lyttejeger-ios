@@ -28,6 +28,15 @@ enum AppSize {
     /// Podcast artwork in detail view
     static let artworkMedium: CGFloat = 120
 
+    /// Podcast artwork in the følgeliste grid. Three of these plus their
+    /// spacing and the page padding fill an iPhone width, so the cover and its
+    /// title share one column edge to edge.
+    static let artworkGrid: CGFloat = 106
+
+    /// The same grid at accessibility text sizes, where it drops to a single
+    /// column so long podcast names fit without breaking mid-word.
+    static let artworkGridWide: CGFloat = 165
+
     /// Mini player height
     static let miniPlayerHeight: CGFloat = 80
 

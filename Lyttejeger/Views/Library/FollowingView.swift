@@ -2,10 +2,58 @@ import SwiftUI
 
 struct FollowingView: View {
     @Environment(SubscriptionViewModel.self) private var subscriptionVM
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 100, maximum: 150), spacing: AppSpacing.md)
-    ]
+    /// Same allowance as `EpisodeCard`.
+    private var titleLineLimit: Int {
+        dynamicTypeSize.isAccessibilitySize ? 4 : 2
+    }
+
+    /// One up at accessibility sizes. Three 106pt columns cannot hold a name
+    /// like "Gråsoner - den nye kalde krigen" once the text grows, and two
+    /// were still narrow enough to break words mid-word ("Crimina/l"). More
+    /// lines does not help; only width does.
+    private var columnCount: Int {
+        dynamicTypeSize.isAccessibilitySize ? 1 : 3
+    }
+
+    private var isSingleColumn: Bool { columnCount == 1 }
+
+    /// Cover and title share a column width so they line up exactly. In a
+    /// single column there is no neighbour to line up against, so the title
+    /// takes the full row and the cover stays a sensible size.
+    private var artworkWidth: CGFloat {
+        isSingleColumn ? AppSize.artworkGridWide : AppSize.artworkGrid
+    }
+
+    /// Fixed columns rather than adaptive. Adaptive gave each cell more width
+    /// than the artwork used, so the title spread wider than the cover above it
+    /// and the column read as ragged.
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: AppSpacing.md, alignment: .top),
+            count: columnCount
+        )
+    }
+
+    /// Multi-column cells reserve their lines so every cover in a row starts
+    /// at the same height. A single column has no row to align with, and
+    /// capping it there is what truncated the longer names.
+    @ViewBuilder
+    private func title(_ text: String) -> some View {
+        let base = Text(text)
+            .font(.smallText)
+            .foregroundStyle(Color.appForeground)
+            .multilineTextAlignment(.center)
+
+        if isSingleColumn {
+            base.frame(maxWidth: .infinity)
+        } else {
+            base
+                .lineLimit(titleLineLimit, reservesSpace: true)
+                .frame(width: artworkWidth)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,18 +80,18 @@ struct FollowingView: View {
                 Spacer()
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: AppSpacing.lg) {
+                    LazyVGrid(columns: columns, alignment: .center, spacing: AppSpacing.lg) {
                         ForEach(subscriptionVM.subscriptions, id: \.podcastId) { sub in
                             NavigationLink(value: Podcast(subscription: sub)) {
                                 VStack(spacing: AppSpacing.sm) {
-                                    CachedAsyncImage(url: sub.imageUrl, size: 100)
+                                    CachedAsyncImage(url: sub.imageUrl, size: artworkWidth)
 
-                                    Text(sub.title)
-                                        .font(.smallText)
-                                        .foregroundStyle(Color.appForeground)
-                                        .lineLimit(2)
-                                        .multilineTextAlignment(.center)
-                                        .frame(maxWidth: .infinity)
+                                    // Two lines are reserved whether or not the
+                                    // title needs them. Without that a one-line
+                                    // title made its cell shorter, and the grid
+                                    // centred it, so covers in the same row sat
+                                    // at different heights.
+                                    title(sub.title)
                                 }
                             }
                             .buttonStyle(CardButtonStyle())
