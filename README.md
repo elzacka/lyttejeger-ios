@@ -29,7 +29,7 @@ Se [brukerveiledningen](Brukerveiledning.md) for hvordan appen brukes.
 | **Rammeverk**     | SwiftUI, SwiftData, AVFoundation, MediaPlayer |
 | **Minstekrav**    | iOS 26, iPhone                                |
 | **Avhengigheter** | Ingen tredjepartsbiblioteker                  |
-| **Tester**        | Swift Testing (162 tester, 37 suiter) og XCUITest (8) |
+| **Tester**        | Swift Testing (enhetstester) og XCUITest (grensesnitt) |
 | **Byggverktøy**   | Xcode 26.6, xcodegen                          |
 | **Typografi**     | DM Mono (inkludert)                           |
 | **Design**        | Lys modus, beige/blågrønn retro               |
@@ -77,7 +77,7 @@ Lyttejeger/
   ViewModels/      Søk, kø, abonnementer, spiller, fremdrift
   Views/
     Common/        Gjenbrukbare komponenter (bildecache, meny, kort, menyrader)
-    Library/       Mine podder, kø
+    Library/       Følgeliste, kø
     Player/        Spiller, kontroller, kapitler, transkripsjoner
     Podcast/       Podkastdetaljer
     Search/        Hjem, søk, episodekort, filtre

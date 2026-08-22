@@ -1,6 +1,6 @@
 # Brukerveiledning
 
-*Sist oppdatert: 18. august 2026*
+*Sist oppdatert: 21. august 2026*
 
 ## Kom i gang
 
@@ -14,23 +14,26 @@ Det er alt du trenger. Resten av veiledningen er for deg som vil utforske mer.
 
 ## Oversikt
 
-Lyttejeger har tre faner nederst på skjermen. De vises som ikoner, og aktiv fane
+Lyttejeger har fire faner nederst på skjermen. De vises som ikoner, og aktiv fane
 er markert i teal:
 
 - **Hjem** (hus) – søk og oppdagelse av podkaster
-- **Mine podder** (hjerte) – podkaster du følger
+- **Følgeliste** (hjerte) – podkaster du følger
 - **Kø** (nummerert liste) – episoder du har lagt til for senere lytting
+- **Meny** (tre streker) – innstillinger, dine data og informasjon om appen
 
-Menyknappen til høyre for fanene åpner menyen, der du finner innstillinger, dine data og informasjon om appen.
+Menyen er en fane på linje med de tre andre. Du bytter til den og fra den på samme måte.
 
 ## Hjem
 
 Når du ikke søker, viser Hjem-skjermen to valgfrie seksjoner:
 
-- **Fortsett å lytte** – siste episode du ikke har hørt ferdig
-- **Nytt fra Mine podder** – nye episoder fra podkaster du følger (siste 7 dager)
+- **Fortsett** – siste episode du ikke har hørt ferdig
+- **Nyeste** – nye episoder fra podkaster du følger (siste 7 dager)
 
 Begge kan slås av i menyen.
+
+Hold inne kortet under **Fortsett** og velg **Fjern fra Fortsett å lytte** for å ta det bort.
 
 ## Søk
 
@@ -105,11 +108,11 @@ Hvis NRK-katalogen ikke lar seg hente, sier appen fra øverst i resultatlisten, 
 
 ## Podkastside
 
-Trykk på et podkastbilde i søkeresultatene eller i Mine podder for å åpne podkastsiden med beskrivelse, kategorier og episodeliste. Trykk på beskrivelsen for å utvide den.
+Trykk på et podkastbilde i søkeresultatene eller i følgelisten for å åpne podkastsiden med beskrivelse, kategorier og episodeliste. Trykk på beskrivelsen for å utvide den.
 
 ### Følge podkaster
 
-Trykk **Følg** for å legge podkasten til i Mine podder. Trykk **Slutt å følge** for å fjerne den.
+Trykk **Følg** for å legge podkasten til i følgelisten. Trykk **Slutt å følge** for å fjerne den.
 
 ### Episodekort
 
@@ -236,38 +239,53 @@ I køen er hold inne forbeholdt flytting. Alle andre valg ligger i menyknappen.
 - Menyknappen (**…**) på køelementet: **Fjern fra kø**
 - Trykk **Tøm** øverst for å fjerne alle (krever bekreftelse)
 
-Når du spiller en episode fra køen, fjernes den automatisk.
+Når du spiller en episode fra køen, fjernes den automatisk. Vil du beholde den, slå på **Behold episoder i køen** i menyen. Da fjerner du episodene selv med **Fjern fra kø**.
 
-## Mine podder
+## Følgeliste
 
-Fanen **Mine podder** viser podkaster du følger med bilde og tittel. Trykk på en podkast for å se episodene.
+Fanen **Følgeliste** viser podkaster du følger med bilde og tittel. Trykk på en podkast for å se episodene.
 
 Hold inne en podkast og velg **Slutt å følge** for å fjerne den. Du kan også trykke **Slutt å følge** inne på podkastsiden.
 
 ## Menyen
 
-Menyknappen nederst til høyre åpner menyen. Der ligger alt som ikke hører hjemme i de tre fanene. Dra menyen ned for å lukke den.
+Menyfanen nederst til høyre åpner menyen. Der ligger alt som ikke hører hjemme i de tre andre fanene. Trykk en annen fane for å gå videre.
 
-### Hjem-skjerm
+### Hjem
 
-- **Fortsett å lytte** – vis eller skjul siste uferdige episode
-- **Nytt fra Mine podder** – vis eller skjul nye episoder fra podkaster du følger
+- **Fortsett** – vis eller skjul siste uferdige episode
+- **Nyeste** – vis eller skjul nye episoder fra podkaster du følger
 
-### Dine data
+### Kø
 
-- **Importer** – henter inn abonnementer fra en OPML-fil, eller alt fra en JSON-fil du har eksportert fra Lyttejeger
-- **Eksporter abonnementer** – lager en OPML-fil med podkastene du følger
-- **Eksporter alle data** – lager en JSON-fil med abonnementer, spillekø og avspillingsposisjoner
+- **Behold episoder i køen** – lar episoder bli liggende i køen når du spiller dem, slik at du fjerner dem selv
+
+### Dataene dine
+
+- **Importer** – henter inn følgelisten fra en OPML-fil, eller alt fra en JSON-fil du har eksportert fra Lyttejeger
+- **Eksporter følgelisten din** – lager en OPML-fil med podkastene du følger
+- **Eksporter alle data** – lager en JSON-fil med følgeliste, spillekø og avspillingsposisjoner
 - **Slett alle data** – fjerner alle lokalt lagrede data. Krever bekreftelse, og kan ikke angres.
 
-**Flytte podkaster fra en annen app:** OPML er formatet podkastapper bruker for å utveksle abonnementer. Eksporter abonnementene dine fra den andre appen, og importer filen her. Det virker begge veier, så du kan også ta abonnementene dine med videre til en annen app.
+**Flytte podkaster fra en annen app:** OPML er formatet podkastapper bruker for å utveksle følgelister. Eksporter listen din fra den andre appen, og importer filen her. Det virker begge veier, så du kan også ta abonnementene dine med videre til en annen app.
+
+**To måter å importere på:** Du kan trykke **Importer** og finne filen selv, eller du kan gå den andre veien. Får du en OPML-fil på e-post, eller har du lagret en i Filer, kan du trykke Del og velge **Lyttejeger**. Da åpner appen seg på Meny-fanen og importerer filen med én gang.
+
+**Podkaster appen ikke kjenner fra før:** Noen feeder finnes ikke i Podcast Index. De blir importert likevel, og episodene hentes rett fra feeden. Da mangler bildet, men du kan lytte som vanlig.
 
 **Import legger til, den erstatter aldri.** Podkaster du allerede følger blir stående, og de som finnes fra før hoppes over. Importerer du den samme filen to ganger, skjer det ingenting andre gangen. Etterpå får du vite hvor mange som ble lagt til.
 
 Spillekø og avspillingsposisjoner er ikke med i OPML. Skal du flytte alt, bruk JSON.
 
+JSON-filen inneholder også innstillingene dine. Importerer du en slik sikkerhetskopi, settes bryterne tilbake slik de var da filen ble laget.
+
 Se [personvernerklæringen](Personvern.md) for hva appen lagrer og hvor lenge.
 
 ### Datakilder og om appen
 
-Nederst i menyen finner du hvilke datakilder appen bruker, hvilken versjon du har, og lenker til denne veiledningen og personvernerklæringen.
+Nederst i menyen finner du hvilken versjon du har, og lenker til denne veiledningen og personvernerklæringen. Der står også de to kildene appen henter podkaster fra:
+
+- **Podcast Index API** – åpen podkastdatabase med over 4 millioner podkaster
+- **github.com/sindrel/nrk-pod-feeds** – NRK-podkaster via åpne RSS-feeder
+
+Menyen viser bare hva hvert valg gjør. Hva det betyr står her i veiledningen, som har plass til å forklare det ordentlig.
