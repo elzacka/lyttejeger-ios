@@ -33,3 +33,8 @@ xcode_simulator_log.txt
 .obsidian/
 .claude/
 dev_only/
+
+# One line importing dev_only/CLAUDE.md, which is not published. Committing it
+# would give a clone a dangling import, and leaving it untracked makes
+# release.sh refuse to run on a tree that is in fact clean.
+CLAUDE.md
