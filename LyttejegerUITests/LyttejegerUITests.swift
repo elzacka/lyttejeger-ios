@@ -32,6 +32,12 @@ final class LyttejegerUITests: XCTestCase {
     /// three were checked on screen from the default size to accessibility
     /// XXXL: they scale. See LYT-85.
     ///
+    /// `.textClipped` is a static prediction, not a measurement: it fires on
+    /// any text with a line limit inside a fixed width, which is every cell of
+    /// the følgeliste grid. Truncating a long podcast name to two lines in a
+    /// grid is the intended design, and at accessibility sizes the grid drops
+    /// to a single column where nothing is capped at all. See LYT-88.
+    ///
     /// `.contrast` reports only elements belonging to *inactive* tabs — the
     /// Kø empty state while Hjem is showing, and so on. `ContentView` keeps
     /// every tab alive in a ZStack at opacity 0 to preserve NavigationStack
@@ -40,7 +46,7 @@ final class LyttejegerUITests: XCTestCase {
     /// audit does not walk the VoiceOver tree. The colours themselves compute
     /// to 7.9:1 and 6.3:1 on `appBackground`. See LYT-87.
     private static let auditTypes: XCUIAccessibilityAuditType =
-        .all.subtracting([.dynamicType, .contrast])
+        .all.subtracting([.dynamicType, .contrast, .textClipped])
 
     override func tearDown() async throws {
         if let app, app.state == .runningForeground {
@@ -153,6 +159,40 @@ final class LyttejegerUITests: XCTestCase {
         XCTAssertTrue(emptyState.waitForExistence(timeout: 5), "En tom følgeliste skal vise tom-tilstanden")
     }
 
+    /// One tap has to be enough to learn what an episode is about. Before the
+    /// disclosure the answer was three steps away: open the podcast, scroll to
+    /// the episode, tap the row.
+    func testQueueRowExpandsToShowTheDescription() throws {
+        launchApp(["-uitest-seed-queue"])
+        app.buttons["Kø"].tap()
+
+        let description = app.staticTexts.containing(
+            NSPredicate(format: "label BEGINSWITH 'Beskrivelse av testepisode 1'")
+        ).firstMatch
+        XCTAssertFalse(description.exists, "Beskrivelsen skal være skjult i utgangspunktet")
+
+        let disclosure = app.buttons["Vis beskrivelsen"].firstMatch
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 5), "Utvid-knappen skal vises på kørader")
+        disclosure.tap()
+
+        XCTAssertTrue(description.waitForExistence(timeout: 3), "Beskrivelsen skal vises når raden utvides")
+        // The queue moves date and duration into the expansion, so they appear
+        // with it rather than crowding the collapsed row.
+        XCTAssertTrue(app.staticTexts["10 min"].exists, "Metadataene skal ligge i den utvidede delen")
+    }
+
+    func testFollowingGridRendersEverySubscription() throws {
+        launchApp(["-uitest-seed-following"])
+        app.buttons["Følgeliste"].tap()
+
+        for title in ["Ekko", "Criminal", "Gråsoner - den nye kalde krigen"] {
+            XCTAssertTrue(
+                app.buttons[title].waitForExistence(timeout: 5),
+                "\(title) skal vises i følgelisten"
+            )
+        }
+    }
+
     // MARK: - Behold episoder i køen
 
     /// Default behaviour: playing a queued episode takes it out of the queue.
@@ -160,13 +200,13 @@ final class LyttejegerUITests: XCTestCase {
         launchApp(["-uitest-seed-queue"])
         app.buttons["Kø"].tap()
 
-        let firstRow = app.staticTexts["Testepisode 1"]
+        let firstRow = app.buttons["Testepisode 1"]
         XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "Den seedede køen skal vises")
 
         app.buttons["Spill Testepisode 1"].tap()
 
         XCTAssertTrue(firstRow.waitForNonExistence(timeout: 5), "Episoden skal forsvinne fra køen når den spilles")
-        XCTAssertTrue(app.staticTexts["Testepisode 2"].exists, "Resten av køen skal ligge igjen")
+        XCTAssertTrue(app.buttons["Testepisode 2"].exists, "Resten av køen skal ligge igjen")
     }
 
     /// With the setting on, the same tap must leave the row where it is —
@@ -180,7 +220,7 @@ final class LyttejegerUITests: XCTestCase {
         keepToggle.tap()
 
         app.buttons["Kø"].tap()
-        let firstRow = app.staticTexts["Testepisode 1"]
+        let firstRow = app.buttons["Testepisode 1"]
         XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "Den seedede køen skal vises")
 
         app.buttons["Spill Testepisode 1"].tap()

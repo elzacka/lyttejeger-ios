@@ -17,20 +17,56 @@ enum UITestSupport {
     static let resetArgument = "-uitest-reset"
     /// Puts two known episodes in the queue. Implies a reset.
     static let seedQueueArgument = "-uitest-seed-queue"
+    /// Fills the følgeliste. Implies a reset.
+    static let seedFollowingArgument = "-uitest-seed-following"
 
     /// Titles the UI tests address the seeded rows by.
     static let seededEpisodeTitles = ["Testepisode 1", "Testepisode 2"]
 
+    /// Deliberately mixed lengths: the grid's alignment only breaks when one
+    /// cell's title wraps to two lines and its neighbour's does not.
+    static let seededPodcastTitles = [
+        "Ekko",
+        "Brønsj og Håndverk",
+        "Criminal",
+        "Historier Som Endret Norge",
+        "Forklart",
+        "Gråsoner - den nye kalde krigen",
+    ]
+
     static func prepareIfNeeded(_ container: ModelContainer) {
         let arguments = ProcessInfo.processInfo.arguments
-        guard arguments.contains(resetArgument) || arguments.contains(seedQueueArgument) else { return }
+        guard arguments.contains(resetArgument)
+            || arguments.contains(seedQueueArgument)
+            || arguments.contains(seedFollowingArgument) else { return }
 
         let context = ModelContext(container)
         try? DataTransferService.deleteAllUserData(in: context)
         DataTransferService.deleteAllUserDefaults()
 
-        guard arguments.contains(seedQueueArgument) else { return }
-        seedQueue(in: context)
+        if arguments.contains(seedQueueArgument) {
+            seedQueue(in: context)
+        }
+        if arguments.contains(seedFollowingArgument) {
+            seedFollowing(in: context)
+        }
+    }
+
+    /// No image URLs: artwork would need the network, and the grid's alignment
+    /// is decided by the title lines and the frame, not by what loads into it.
+    private static func seedFollowing(in context: ModelContext) {
+        for (index, title) in seededPodcastTitles.enumerated() {
+            context.insert(
+                Subscription(
+                    podcastId: "uitest-following-\(index + 1)",
+                    title: title,
+                    author: "Testforfatter",
+                    imageUrl: "",
+                    feedUrl: "https://example.invalid/uitest-\(index + 1).xml"
+                )
+            )
+        }
+        try? context.save()
     }
 
     /// The audio URL is deliberately unreachable. These tests are about what
@@ -43,6 +79,7 @@ enum UITestSupport {
                     episodeId: "uitest-episode-\(index + 1)",
                     podcastId: "uitest-podcast",
                     title: title,
+                    episodeDescription: "Beskrivelse av testepisode \(index + 1). Denne teksten finnes bare for at det utvidbare kortet skal ha noe å vise, og den er lang nok til å gå over flere linjer i visningen.",
                     podcastTitle: "Testpodkast",
                     audioUrl: "https://example.invalid/uitest-\(index + 1).mp3",
                     duration: 600,

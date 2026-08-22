@@ -5,6 +5,19 @@ den som limes inn i «What's New in This Version» i App Store Connect.
 
 Oppdater denne fila sammen med endringen, ikke når du skal slippe.
 
+## Ikke sluppet ennå
+
+**Se hva en episode handler om med ett trykk.** Kortene under Nyeste på
+hjemskjermen og i køen har fått en pil. Trykk den, så står beskrivelsen der.
+Før måtte du innom podkastsiden og lete opp episoden.
+
+**Roligere kø.** Lengde og dato har flyttet inn i den utvidede delen, så
+listen viser bare det du trenger for å finne fram.
+
+**Jevn følgeliste.** Omslagene står nå i rette rader uansett hvor lange
+podkastnavnene er. Ved store tekststørrelser vises de i én kolonne, så hele
+navnet får plass.
+
 ## 1.0.8
 
 **Ny meny.** Alt som før lå spredt over tre skjermer ligger nå på ett sted:

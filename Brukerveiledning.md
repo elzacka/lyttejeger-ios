@@ -33,6 +33,9 @@ Når du ikke søker, viser Hjem-skjermen to valgfrie seksjoner:
 
 Begge kan slås av i menyen.
 
+Under **Nyeste** kan du trykke pilen til høyre på et kort for å lese hva
+episoden handler om, uten å åpne podkasten. Trykk pilen igjen for å lukke.
+
 Hold inne kortet under **Fortsett** og velg **Fjern fra Fortsett å lytte** for å ta det bort.
 
 ## Søk
@@ -215,6 +218,9 @@ Appen markerer en episode som ferdig når du har hørt over 90 %.
 ## Kø
 
 Køen holder episoder du vil høre senere. Øverst ser du antall episoder og total spilletid.
+
+Radene viser bare tittelen, så listen er lett å lese. Trykk pilen til høyre for
+å se lengde, dato og hva episoden handler om.
 
 ### Spill alle
 
